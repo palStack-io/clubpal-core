@@ -1,0 +1,339 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================================
+   Design tokens — automatically switch on .dark class
+   ============================================================ */
+:root {
+  --rose:        #f43f5e;
+  --rose-soft:   #fb7185;
+  --rose-dim:    #fda4af;
+  --rose-glow:   rgba(244, 63, 94, 0.10);
+  --rose-border: rgba(244, 63, 94, 0.22);
+
+  /* Shorthand surface tokens (light) */
+  --bg:  #f9fafb;
+  --s1:  #ffffff;      /* sidebar bg */
+  --s2:  #ffffff;      /* card bg */
+  --s3:  #f3f4f6;      /* secondary surface / inputs */
+  --s4:  #f1f5f9;      /* hover state */
+  --glass: #e5e7eb;    /* border color */
+
+  /* Text tokens (light) */
+  --t1: #0f172a;
+  --t2: #64748b;
+  --t3: #94a3b8;
+  --t4: #cbd5e1;
+
+  /* Semantic colour tokens */
+  --green:  #10b981;
+  --amber:  #f59e0b;
+  --blue:   #6366f1;
+  --purple: #a855f7;
+  --teal:   #14b8a6;
+
+  --s5: #2a2a36;
+  --glass-hover: rgba(255,255,255,0.05);
+  --rose-glow2: rgba(244,63,94,0.08);
+
+  --r-sm: 10px;
+  --r-md: 14px;
+  --r-lg: 18px;
+  --r-xl: 24px;
+
+  /* Component-scoped variables */
+  --nav-active-bg:   #fff1f2;
+  --nav-active-text: #f43f5e;
+  --nav-hover-bg:    rgba(244,63,94,0.05);
+  --nav-label-color: #94a3b8;
+  --topbar-bg:       rgba(255,255,255,0.92);
+  --topbar-border:   #f1f5f9;
+  --sidebar-bg:      #fff6f8;
+  --sidebar-border:  rgba(244,63,94,0.13);
+  --card-border:     #e5e7eb;
+  --card-shadow:     0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --item-hover-bg:   #f8fafc;
+  --item-border:     #f1f5f9;
+
+  /* Legacy surface tokens kept for older pages */
+  --surface-bg:      #f9fafb;
+  --surface-sidebar: #ffffff;
+  --surface-card:    #ffffff;
+  --surface-input:   #ffffff;
+  --surface-hover:   #f3f4f6;
+  --surface-active:  #fef2f2;
+  --border-default:  #e5e7eb;
+  --border-input:    #d1d5db;
+  --border-strong:   #9ca3af;
+  --text-1:          #111827;
+  --text-2:          #4b5563;
+  --text-3:          #6b7280;
+  --text-4:          #9ca3af;
+  --text-active:     #be123c;
+}
+
+.dark {
+  /* Shorthand surface tokens (dark) */
+  --bg:  #08080a;
+  --s1:  #0e0e12;
+  --s2:  #131318;
+  --s3:  #1a1a22;
+  --s4:  #22222c;
+  --glass: rgba(255,255,255,0.08);
+
+  /* Text tokens (dark) */
+  --t1: #ffffff;
+  --t2: #9898b0;
+  --t3: #55556a;
+  --t4: #38383f;
+
+  /* Semantic colour tokens (dark unchanged) */
+  --green:  #22d3a0;
+  --amber:  #f59e0b;
+  --blue:   #6366f1;
+  --purple: #a855f7;
+
+  /* Component-scoped variables (dark) */
+  --nav-active-bg:   rgba(244,63,94,0.15);
+  --nav-active-text: #fb7185;
+  --nav-hover-bg:    rgba(244,63,94,0.07);
+  --nav-label-color: #38383f;
+  --topbar-bg:       rgba(8,8,10,0.85);
+  --topbar-border:   rgba(255,255,255,0.08);
+  --sidebar-bg:      #0e0b0c;
+  --sidebar-border:  rgba(244,63,94,0.16);
+  --card-border:     rgba(255,255,255,0.08);
+  --card-shadow:     none;
+  --item-hover-bg:   rgba(255,255,255,0.04);
+  --item-border:     rgba(255,255,255,0.06);
+
+  /* Rose overrides for dark */
+  --rose-glow:   rgba(244,63,94,0.12);
+
+  /* Legacy surface tokens (dark) */
+  --surface-bg:      #08080a;
+  --surface-sidebar: #0e0e12;
+  --surface-card:    #131318;
+  --surface-input:   #1a1a22;
+  --surface-hover:   #22222c;
+  --surface-active:  rgba(244,63,94,0.12);
+  --border-default:  rgba(255,255,255,0.08);
+  --border-input:    rgba(255,255,255,0.12);
+  --border-strong:   rgba(255,255,255,0.18);
+  --text-1:          #ffffff;
+  --text-2:          #c4c4d4;
+  --text-3:          #9898b0;
+  --text-4:          #55556a;
+  --text-active:     #fb7185;
+}
+
+@layer base {
+  html {
+    transition: background-color 0.15s ease, color 0.15s ease;
+  }
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    background-color: var(--bg);
+    color: var(--t1);
+  }
+}
+
+/* ============================================================
+   Reusable component classes
+   ============================================================ */
+@layer components {
+  .input {
+    @apply w-full px-3 py-2 rounded-lg text-sm
+           transition-colors focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent;
+    background-color: var(--s3);
+    border: 1px solid var(--glass);
+    color: var(--t1);
+  }
+  .input::placeholder { color: var(--t3); }
+  .input:disabled { opacity: 0.6; cursor: not-allowed; }
+
+  .card {
+    border-radius: 0.75rem;
+    border: 1px solid var(--card-border);
+    background-color: var(--s2);
+    box-shadow: var(--card-shadow);
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center px-4 py-2 bg-primary-500 text-white font-medium
+           rounded-lg hover:bg-primary-600 focus:outline-none focus:ring-2 focus:ring-primary-500
+           focus:ring-offset-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  .btn-secondary {
+    @apply inline-flex items-center justify-center px-4 py-2 font-medium rounded-lg border
+           focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2
+           transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: var(--s3);
+    color: var(--t2);
+    border-color: var(--glass);
+  }
+  .btn-secondary:hover { background-color: var(--s4); }
+
+  .divider { border-top: 1px solid var(--glass); }
+}
+
+/* ============================================================
+   Global dark-mode overrides for legacy pages
+   ============================================================ */
+.dark .text-gray-900 { color: #ffffff; }
+.dark .text-gray-800 { color: #e2e2f0; }
+.dark .text-gray-700 { color: #c4c4d4; }
+.dark .text-gray-600 { color: #9898b0; }
+.dark .text-gray-500 { color: #9898b0; }
+.dark .text-gray-400 { color: #55556a; }
+.dark .text-gray-300 { color: #3a3a50; }
+
+.dark .bg-white    { background-color: #131318; }
+.dark .bg-gray-50  { background-color: #0e0e12; }
+.dark .bg-gray-100 { background-color: #1a1a22; }
+.dark .bg-gray-200 { background-color: #22222c; }
+
+.dark .border-gray-100 { border-color: rgba(255,255,255,0.05); }
+.dark .border-gray-200 { border-color: rgba(255,255,255,0.08); }
+.dark .border-gray-300 { border-color: rgba(255,255,255,0.12); }
+
+.dark .shadow-sm { box-shadow: none; }
+.dark .shadow    { box-shadow: 0 1px 3px rgba(0,0,0,0.6); }
+
+.dark .hover\:bg-gray-50:hover  { background-color: #0e0e12; }
+.dark .hover\:bg-gray-100:hover { background-color: #1a1a22; }
+.dark .hover\:text-gray-900:hover { color: #ffffff; }
+.dark .bg-gray-50.cursor-not-allowed { background-color: #0e0e12; }
+
+/* Shell component base styles */
+.cp-sidebar {
+  position: fixed;
+  top: 0; left: 0;
+  width: 240px;
+  height: 100vh;
+  background: var(--sidebar-bg, var(--s1));
+  border-right: 1px solid var(--sidebar-border);
+  display: flex;
+  flex-direction: column;
+  z-index: 30;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.cp-topbar {
+  height: 56px;
+  padding: 0 24px;
+  background: var(--topbar-bg);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--topbar-border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.dark .cp-topbar {
+  background: linear-gradient(135deg, rgba(244,63,94,0.08) 0%, rgba(99,102,241,0.04) 100%), var(--topbar-bg);
+}
+
+.cp-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--t2);
+  cursor: pointer;
+  margin-bottom: 2px;
+  transition: background 0.12s, color 0.12s;
+  text-decoration: none;
+}
+
+.cp-nav-item:hover {
+  background: var(--nav-hover-bg);
+  color: var(--t1);
+}
+
+.cp-nav-item.active {
+  background: var(--nav-active-bg);
+  color: var(--nav-active-text);
+}
+
+.cp-nav-label {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--nav-label-color);
+  padding: 0 8px;
+  margin: 16px 0 6px;
+}
+
+.cp-card {
+  background: var(--s2);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  overflow: hidden;
+  box-shadow: var(--card-shadow);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.cp-card-header {
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--card-border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  transition: border-color 0.15s;
+}
+
+.cp-card-body {
+  padding: 14px 18px;
+}
+
+.cp-stat-card {
+  background: var(--s2);
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  padding: 18px 20px;
+  box-shadow: var(--card-shadow);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.cp-event-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--item-border);
+  width: 100%;
+  background: none;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.15s;
+}
+
+.cp-event-item:last-child { border-bottom: none; }
+
+.cp-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--card-border);
+  margin-bottom: 6px;
+  background: var(--s3);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.cp-queue-item.is-you {
+  background: var(--rose-glow);
+  border-color: var(--rose-border);
+}

@@ -1,0 +1,159 @@
+from pydantic import BaseModel, Field
+from typing import Optional, List
+from datetime import datetime
+from enum import Enum
+
+
+class RotationType(str, Enum):
+    ROUND_ROBIN = "round_robin"
+    RANDOM = "random"
+    NONE = "none"
+
+
+class MemberRole(str, Enum):
+    OWNER = "owner"
+    ADMIN = "admin"
+    MEMBER = "member"
+
+
+# Group models
+class GroupCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+    rotation_type: RotationType = RotationType.ROUND_ROBIN
+
+
+class GroupUpdate(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+    rotation_type: Optional[RotationType] = None
+    banner_url: Optional[str] = None
+    bg_type: Optional[str] = None
+    bg_value: Optional[str] = None
+    bg_scope: Optional[str] = None
+
+
+class GroupResponse(BaseModel):
+    id: int
+    name: str
+    description: Optional[str]
+    banner_url: Optional[str] = None
+    bg_type: Optional[str] = "default"
+    bg_value: Optional[str] = None
+    bg_scope: Optional[str] = "hero"
+    rotation_type: RotationType
+    created_by: int
+    created_at: datetime
+    updated_at: datetime
+    member_count: int
+
+
+class GroupDetailResponse(GroupResponse):
+    members: List['MemberResponse']
+
+
+# Member models
+class MemberAdd(BaseModel):
+    user_id: int
+
+
+class MemberUpdateRole(BaseModel):
+    role: MemberRole
+
+
+class MemberResponse(BaseModel):
+    user_id: int
+    group_id: int
+    role: MemberRole
+    joined_at: datetime
+
+
+# Rotation models
+class RotationTurnResponse(BaseModel):
+    group_id: int
+    user_id: int
+    turn_index: int
+    rotation_type: RotationType
+
+
+class RotationAdvanceRequest(BaseModel):
+    pass  # No body needed, just POST to advance
+
+
+class RotationResetRequest(BaseModel):
+    pass  # No body needed, just POST to reset
+
+
+class RotationSetTurnRequest(BaseModel):
+    user_id: int
+
+
+class RotationSkipRequest(BaseModel):
+    reason: Optional[str] = None
+
+
+class RotationReorderRequest(BaseModel):
+    user_ids: List[int]
+
+
+class GroupCommentCreate(BaseModel):
+    content: str = Field(..., min_length=1, max_length=1000)
+
+
+class GroupCommentResponse(BaseModel):
+    id: int
+    group_id: int
+    user_id: int
+    content: str
+    created_at: datetime
+
+
+class BannerUploadRequest(BaseModel):
+    filename: str
+    content_type: str = "image/jpeg"
+
+
+class UploadUrlResponse(BaseModel):
+    upload_url: str
+    public_url: str
+    object_name: str
+
+
+# Poll models
+class PollCreate(BaseModel):
+    activity_name: str = Field(..., min_length=1, max_length=200)
+    activity_type: Optional[str] = None
+    activity_id: Optional[int] = None
+    note: Optional[str] = Field(None, max_length=500)
+    deadline: datetime
+
+
+class PollRespond(BaseModel):
+    user_id: int
+    response: str = Field(..., pattern="^(in|done_loved|done_pass|cant_make_it)$")
+
+
+class PollConvert(BaseModel):
+    user_id: int
+    scheduled_date: Optional[datetime] = None
+    location: Optional[str] = None
+    recurring_schedule_id: Optional[int] = None  # Link event to a recurring series
+
+
+class PollResponseModel(BaseModel):
+    id: int
+    group_id: int
+    created_by: int
+    activity_name: str
+    activity_type: Optional[str]
+    activity_id: Optional[int]
+    note: Optional[str]
+    deadline: datetime
+    status: str
+    converted_event_id: Optional[int]
+    created_at: datetime
+    summary: Optional[dict] = None
+
+
+# Update forward references
+GroupDetailResponse.model_rebuild()

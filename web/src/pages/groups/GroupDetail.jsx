@@ -1,0 +1,326 @@
+import { useState, useEffect } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
+import { useAuth } from '../../contexts/AuthContext'
+import AppShell from '../../components/shell/AppShell'
+import { PageLoader } from '../../components/ui/LoadingSpinner'
+import GroupHeroCard from '../../components/groups/GroupHeroCard'
+import GroupEventsCard from '../../components/groups/GroupEventsCard'
+import RotationQueueCard from '../../components/groups/RotationQueueCard'
+import MembersCard from '../../components/groups/MembersCard'
+import CommentsCard from '../../components/events/CommentsCard'
+import AnimatedBackground from '../../components/ui/AnimatedBackground'
+import InviteMemberModal from '../../components/modals/InviteMemberModal'
+import ConfirmDeleteModal from '../../components/modals/ConfirmDeleteModal'
+import EditGroupModal from '../../components/modals/EditGroupModal'
+import CreateEventModal from '../../components/modals/CreateEventModal'
+import CreatePollModal from '../../components/modals/CreatePollModal'
+import PollCard from '../../components/groups/PollCard'
+import { groupsApi } from '../../api/groups'
+import { eventsApi } from '../../api/events'
+import { ratingsApi } from '../../api/ratings'
+import { gatewayClient } from '../../api/client'
+
+function activeSinceLabel(createdAt) {
+  if (!createdAt) return 'New'
+  const years = Math.floor((Date.now() - new Date(createdAt)) / (365.25 * 24 * 60 * 60 * 1000))
+  return years === 0 ? 'New' : `${years}yr`
+}
+
+export default function GroupDetail() {
+  const { id } = useParams()
+  const { user } = useAuth()
+  const navigate = useNavigate()
+
+  const [group, setGroup] = useState(null)
+  const [members, setMembers] = useState([])
+  const [upcoming, setUpcoming] = useState([])
+  const [past, setPast] = useState([])
+  const [rotation, setRotation] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [showInvite, setShowInvite] = useState(false)
+  const [inviteLoading, setInviteLoading] = useState(false)
+  const [removeTarget, setRemoveTarget] = useState(null)
+  const [removeLoading, setRemoveLoading] = useState(false)
+  const [showEdit, setShowEdit] = useState(false)
+  const [showCreateEvent, setShowCreateEvent] = useState(false)
+  const [showCreatePoll, setShowCreatePoll] = useState(false)
+  const [polls, setPolls] = useState([])
+  const [showAllPolls, setShowAllPolls] = useState(false)
+  const [showPastPolls, setShowPastPolls] = useState(false)
+  const [comments, setComments] = useState([])
+  const [leaderboard, setLeaderboard] = useState([])
+
+  const fetchAll = async () => {
+    try {
+      const [g, m, u, r] = await Promise.all([
+        groupsApi.getById(id),
+        groupsApi.getMembers(id),
+        eventsApi.getGroupEvents(id, 'scheduled'),
+        groupsApi.getRotation(id),
+      ])
+      setGroup(g)
+      setMembers(m || [])
+      setUpcoming(u || [])
+      setRotation(r)
+    } catch {}
+    finally { setLoading(false) }
+
+    eventsApi.getGroupEvents(id, 'completed').then(setPast).catch(() => {})
+    groupsApi.getComments(id).then(c => setComments(Array.isArray(c) ? c : [])).catch(() => {})
+    groupsApi.getGroupPolls(id, user?.id).then(p => setPolls(Array.isArray(p) ? p : [])).catch(() => {})
+    ratingsApi.getLeaderboard(id).then(d => setLeaderboard(d?.leaderboard || [])).catch(() => {})
+  }
+
+  useEffect(() => { fetchAll() }, [id])
+
+  const myRole = members.find(m => m.user_id === user?.id)?.role
+  const isAdmin = myRole === 'owner' || myRole === 'admin'
+  const isMyTurn = rotation?.current_user_id === user?.id
+
+  const handleInvite = async (email) => {
+    setInviteLoading(true)
+    try {
+      await gatewayClient.post(`/groups/${id}/invite`, { email })
+      setShowInvite(false)
+    } catch {}
+    finally { setInviteLoading(false) }
+  }
+
+  const handleRemove = async () => {
+    if (!removeTarget) return
+    setRemoveLoading(true)
+    try {
+      await groupsApi.removeMember(id, removeTarget)
+      setRemoveTarget(null)
+      fetchAll()
+    } catch {}
+    finally { setRemoveLoading(false) }
+  }
+
+  const handleRoleChange = async (uid, role) => {
+    try {
+      await groupsApi.updateMemberRole(id, uid, role)
+      fetchAll()
+    } catch {}
+  }
+
+  const handleAddComment = async (content) => {
+    try {
+      await groupsApi.addComment(id, user?.id, content)
+      groupsApi.getComments(id).then(c => setComments(Array.isArray(c) ? c : [])).catch(() => {})
+    } catch {}
+  }
+
+  const handleDeleteComment = async (commentId) => {
+    try {
+      await groupsApi.deleteComment(id, commentId)
+      setComments(prev => prev.filter(c => c.id !== commentId))
+    } catch {}
+  }
+
+  if (loading) return (
+    <AppShell activeRoute="/groups">
+      <div style={{ padding: '40px', textAlign: 'center', color: 'var(--t3)' }}>Loading group…</div>
+    </AppShell>
+  )
+
+  if (!group) return (
+    <AppShell activeRoute="/groups">
+      <div style={{ padding: '40px', textAlign: 'center', color: 'var(--t3)' }}>Group not found.</div>
+    </AppShell>
+  )
+
+  const totalRatings = leaderboard.reduce((s, e) => s + (e.total_ratings || 0), 0)
+  const weightedScore = leaderboard.reduce((s, e) => s + ((e.average_score || 0) * (e.total_ratings || 0)), 0)
+  const groupAvgRating = totalRatings > 0 ? (weightedScore / totalRatings).toFixed(1) : null
+
+  const stats = [
+    { label: 'Total Events', value: upcoming.length + past.length },
+    { label: 'Avg Rating ★', value: groupAvgRating ?? '—' },
+    { label: 'Active Since', value: activeSinceLabel(group.created_at) },
+  ]
+
+  const heroActions = [
+    { label: '✉️ Invite', onClick: () => setShowInvite(true) },
+    { label: '💬 Poll', onClick: () => setShowCreatePoll(true) },
+    ...(isAdmin ? [{ label: '⚙️ Edit', onClick: () => setShowEdit(true) }] : []),
+  ]
+
+  return (
+    <AppShell activeRoute="/groups">
+      {/* Full-width hero banner with controls embedded */}
+      <GroupHeroCard
+        group={group}
+        members={members}
+        rotation={rotation}
+        currentUserId={user?.id}
+        onBack={() => navigate('/groups')}
+        actions={heroActions}
+      />
+
+      {/* Floating stats — translateY to overlap hero bottom */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '12px',
+          padding: '0 20px',
+          transform: 'translateY(-28px)',
+          position: 'relative',
+          zIndex: 2,
+        }}
+      >
+        {stats.map(stat => (
+          <div
+            key={stat.label}
+            style={{
+              background: 'var(--s2)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: '14px',
+              padding: '14px 10px',
+              boxShadow: '0 4px 24px rgba(0,0,0,0.45)',
+              textAlign: 'center',
+            }}
+          >
+            <div style={{ fontSize: '22px', fontWeight: 900, color: 'var(--t1)', letterSpacing: '-1px', lineHeight: 1 }}>
+              {stat.value}
+            </div>
+            <div style={{ fontSize: '9px', fontWeight: 600, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: '0.8px', marginTop: '5px' }}>
+              {stat.label}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Main content */}
+      <div style={{ padding: '0 24px 24px', marginTop: '-8px', position: 'relative' }}>
+        {group.bg_scope === 'full' && group.bg_type && group.bg_type !== 'default' && (
+          <AnimatedBackground bgType={group.bg_type} bgValue={group.bg_value} style={{ borderRadius: 0 }} />
+        )}
+
+        <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: '14px', position: 'relative', zIndex: 1 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {/* Group Pulse — polls section */}
+            {(() => {
+              const openPolls = polls.filter(p => p.status === 'open')
+              const pastPolls = polls.filter(p => p.status !== 'open')
+              const handleUpdate = updated => setPolls(prev => prev.map(p => p.id === updated.id ? updated : p))
+              return (polls.length > 0 || true) ? (
+                <div style={{ background: 'var(--s2)', border: '1px solid var(--glass)', borderRadius: '16px', padding: '16px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <span style={{ fontSize: '14px', fontWeight: 800, color: 'var(--t1)' }}>
+                      💬 Group Pulse {openPolls.length > 0 && <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--rose-soft)', background: 'var(--rose-glow)', borderRadius: '99px', padding: '2px 8px', marginLeft: '6px' }}>{openPolls.length} open</span>}
+                    </span>
+                    <button
+                      onClick={() => setShowCreatePoll(true)}
+                      style={{ fontSize: '11px', fontWeight: 700, color: 'var(--rose-soft)', background: 'var(--rose-glow)', border: '1px solid var(--rose-border)', borderRadius: '8px', padding: '4px 10px', cursor: 'pointer' }}
+                    >
+                      + Poll
+                    </button>
+                  </div>
+
+                  {/* Open polls */}
+                  {openPolls.length === 0 && (
+                    <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--t3)', fontSize: '13px' }}>
+                      No active polls · <button onClick={() => setShowCreatePoll(true)} style={{ color: 'var(--rose-soft)', background: 'none', border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '13px' }}>Start one →</button>
+                    </div>
+                  )}
+                  {(showAllPolls ? openPolls : openPolls.slice(0, 3)).map(poll => (
+                    <PollCard key={poll.id} poll={poll} currentUserId={user?.id} onUpdated={handleUpdate} />
+                  ))}
+                  {openPolls.length > 3 && (
+                    <button onClick={() => setShowAllPolls(v => !v)} style={{ width: '100%', padding: '8px', fontSize: '12px', fontWeight: 700, color: 'var(--t3)', background: 'none', border: '1px solid var(--glass)', borderRadius: '10px', cursor: 'pointer', marginBottom: '8px' }}>
+                      {showAllPolls ? 'Show less' : `See ${openPolls.length - 3} more active`}
+                    </button>
+                  )}
+
+                  {/* Past polls collapsible */}
+                  {pastPolls.length > 0 && (
+                    <>
+                      <button
+                        onClick={() => setShowPastPolls(v => !v)}
+                        style={{ width: '100%', padding: '8px', fontSize: '12px', fontWeight: 700, color: 'var(--t3)', background: 'var(--s3)', border: '1px solid var(--glass)', borderRadius: '10px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px', marginTop: openPolls.length > 0 ? '8px' : 0 }}
+                      >
+                        {showPastPolls ? '▲' : '▼'} Past Polls ({pastPolls.length})
+                      </button>
+                      {showPastPolls && pastPolls.map(poll => (
+                        <PollCard key={poll.id} poll={poll} currentUserId={user?.id} onUpdated={handleUpdate} />
+                      ))}
+                    </>
+                  )}
+                </div>
+              ) : null
+            })()}
+            <GroupEventsCard
+              upcoming={upcoming}
+              past={past}
+              groupId={id}
+              isMyTurn={isMyTurn}
+              onNewEvent={() => setShowCreateEvent(true)}
+            />
+            <CommentsCard
+              groupId={id}
+              comments={comments}
+              currentUser={user}
+              onAdd={handleAddComment}
+              onDelete={handleDeleteComment}
+            />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <RotationQueueCard rotation={rotation} currentUserId={user?.id} />
+            <MembersCard
+              members={members}
+              canManage={isAdmin}
+              currentUserId={user?.id}
+              onRoleChange={handleRoleChange}
+              onRemove={uid => setRemoveTarget(uid)}
+              onInvite={() => setShowInvite(true)}
+            />
+          </div>
+        </div>
+      </div>
+
+      <InviteMemberModal
+        isOpen={showInvite}
+        onClose={() => setShowInvite(false)}
+        onInvite={handleInvite}
+        loading={inviteLoading}
+      />
+      <ConfirmDeleteModal
+        isOpen={!!removeTarget}
+        onClose={() => setRemoveTarget(null)}
+        onConfirm={handleRemove}
+        loading={removeLoading}
+        itemName="this member"
+      />
+      <EditGroupModal
+        isOpen={showEdit}
+        onClose={() => setShowEdit(false)}
+        group={group}
+        members={members}
+        currentUserId={user?.id}
+        onSaved={() => { setShowEdit(false); fetchAll() }}
+        onDeleted={() => navigate('/groups')}
+        onMembersChanged={fetchAll}
+      />
+      <CreateEventModal
+        isOpen={showCreateEvent}
+        onClose={() => setShowCreateEvent(false)}
+        groupId={id}
+        groupName={group?.name}
+        activityType={group?.activity_type}
+        onCreated={(eventId) => { setShowCreateEvent(false); navigate(`/events/${eventId}`) }}
+      />
+      <CreatePollModal
+        isOpen={showCreatePoll}
+        onClose={() => setShowCreatePoll(false)}
+        groupId={parseInt(id)}
+        onCreated={(poll) => {
+          setPolls(prev => [poll, ...prev])
+          setShowCreatePoll(false)
+        }}
+      />
+    </AppShell>
+  )
+}

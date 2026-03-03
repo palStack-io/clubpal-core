@@ -1,0 +1,47 @@
+# Git
+.git/
+.gitignore
+.github/
+
+# Claude Code workspace
+.claude/
+
+# Python caches
+**/__pycache__/
+**/*.py[cod]
+**/*.pyo
+**/.venv/
+**/venv/
+
+# Node (only exclude from web if not building)
+web/node_modules/
+web/.vite/
+
+# Environment files
+.env
+.env.local
+**/.env.local
+
+# Logs
+nginx/logs/
+**/*.log
+
+# Data directories
+backend/data/
+**/*.db
+**/*.sqlite
+
+# Test artefacts
+**/.pytest_cache/
+**/.coverage
+**/htmlcov/
+
+# IDE / OS
+.vscode/
+.idea/
+**/.DS_Store
+**/Thumbs.db
+
+# Documentation (not needed in image)
+**/*.md
+docs/

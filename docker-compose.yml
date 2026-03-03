@@ -1,0 +1,300 @@
+services:
+
+  # ===========================================
+  # PostgreSQL Database
+  # ===========================================
+  db:
+    image: postgres:15-alpine
+    container_name: clubpal-db
+    environment:
+      POSTGRES_USER: clubpal
+      POSTGRES_PASSWORD: clubpal
+      POSTGRES_DB: clubpal
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./backend/pg-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - clubpal-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clubpal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================
+  # MinIO — Object Storage (avatars, event images)
+  # API: internal via nginx /storage/
+  # Console: host port 9001
+  # ===========================================
+  minio:
+    image: minio/minio:latest
+    container_name: clubpal-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-clubpal}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-clubpalpassword}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9001:9001"
+    networks:
+      - clubpal-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Init container — creates buckets after MinIO is healthy
+  createbuckets:
+    image: minio/mc:latest
+    container_name: clubpal-createbuckets
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - clubpal-network
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-clubpal}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-clubpalpassword}
+    entrypoint: >
+      /bin/sh -c "
+      /usr/bin/mc config host add clubpal http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD;
+      /usr/bin/mc mb --ignore-existing clubpal/clubpal-avatars;
+      /usr/bin/mc mb --ignore-existing clubpal/clubpal-events;
+      /usr/bin/mc anonymous set download clubpal/clubpal-avatars;
+      /usr/bin/mc anonymous set download clubpal/clubpal-events;
+      /usr/bin/mc mb --ignore-existing clubpal/clubpal-cache;
+      /usr/bin/mc anonymous set download clubpal/clubpal-cache;
+      exit 0;"
+    restart: on-failure
+
+  # ===========================================
+  # Nginx — Web UI + API Reverse Proxy
+  # Single public port: 9000 → 80
+  # ===========================================
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    container_name: clubpal-nginx
+    ports:
+      - "9000:80"
+    volumes:
+      - ./nginx/logs:/var/log/nginx
+    networks:
+      - clubpal-network
+    depends_on:
+      - api-gateway
+      - groups-service
+      - events-service
+      - ratings-service
+      - activities-service
+      - enrichment-service
+      - minio
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ===========================================
+  # API Gateway — Auth, Users, Invites
+  # ===========================================
+  api-gateway:
+    build: ./backend/services/api-gateway
+    container_name: clubpal-api-gateway
+    expose:
+      - "8001"
+    environment:
+      - DATABASE_URL=postgresql://clubpal:clubpal@db:5432/clubpal_gateway
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - FROM_EMAIL=${FROM_EMAIL:-noreply@palstack.io}
+      - FROM_NAME=${FROM_NAME:-clubPal}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:9000}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio:9000}
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-clubpal}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-clubpalpassword}
+      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-http://localhost:9000/storage}
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-}
+    networks:
+      - clubpal-network
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ===========================================
+  # Groups Service — Groups, Members, Rotation
+  # ===========================================
+  groups-service:
+    build: ./backend/services/groups-service
+    container_name: clubpal-groups-service
+    expose:
+      - "8002"
+    environment:
+      - DATABASE_URL=postgresql://clubpal:clubpal@db:5432/clubpal_groups
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio:9000}
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-clubpal}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-clubpalpassword}
+      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-http://localhost:9000/storage}
+    networks:
+      - clubpal-network
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ===========================================
+  # Events Service — Events, Attendees, Comments
+  # ===========================================
+  events-service:
+    build: ./backend/services/events-service
+    container_name: clubpal-events-service
+    expose:
+      - "8003"
+    environment:
+      - DATABASE_URL=postgresql://clubpal:clubpal@db:5432/clubpal_events
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio:9000}
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-clubpal}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-clubpalpassword}
+      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-http://localhost:9000/storage}
+    networks:
+      - clubpal-network
+    depends_on:
+      db:
+        condition: service_healthy
+      groups-service:
+        condition: service_healthy
+      activities-service:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ===========================================
+  # Ratings Service — Ratings, Stats, Leaderboard
+  # ===========================================
+  ratings-service:
+    build: ./backend/services/ratings-service
+    container_name: clubpal-ratings-service
+    expose:
+      - "8004"
+    environment:
+      - DATABASE_URL=postgresql://clubpal:clubpal@db:5432/clubpal_ratings
+    networks:
+      - clubpal-network
+    depends_on:
+      db:
+        condition: service_healthy
+      groups-service:
+        condition: service_healthy
+      events-service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ===========================================
+  # Activities Service — Activity Types, Categories
+  # ===========================================
+  activities-service:
+    build: ./backend/services/activities-service
+    container_name: clubpal-activities-service
+    expose:
+      - "8005"
+    environment:
+      - DATABASE_URL=postgresql://clubpal:clubpal@db:5432/clubpal_activities
+    networks:
+      - clubpal-network
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8005/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ===========================================
+  # Enrichment Service — External API cache (Places, Books, TMDB, IGDB)
+  # ===========================================
+  enrichment-service:
+    build: ./backend/services/enrichment-service
+    container_name: clubpal-enrichment-service
+    expose:
+      - "8006"
+    environment:
+      - DATABASE_URL=postgresql://clubpal:clubpal@db:5432/clubpal_enrichment
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - TMDB_API_KEY=${TMDB_API_KEY:-}
+      - IGDB_CLIENT_ID=${IGDB_CLIENT_ID:-}
+      - IGDB_CLIENT_SECRET=${IGDB_CLIENT_SECRET:-}
+      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio:9000}
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-clubpal}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-clubpalpassword}
+      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-http://localhost:9000/storage}
+      - CACHE_TTL_SEARCH=${CACHE_TTL_SEARCH:-86400}
+      - CACHE_TTL_DETAIL=${CACHE_TTL_DETAIL:-604800}
+      - CACHE_TTL_GEOCODE=${CACHE_TTL_GEOCODE:-2592000}
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-}
+    networks:
+      - clubpal-network
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8006/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+networks:
+  clubpal-network:
+    driver: bridge
+
+volumes:
+  pgdata:
+  minio_data:

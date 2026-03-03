@@ -1,0 +1,105 @@
+import { useState, useEffect } from 'react'
+import AppShell from '../components/shell/AppShell'
+import StatsHero from '../components/stats/StatsHero'
+import KpiCard from '../components/stats/KpiCard'
+import ActivityDonutCard from '../components/stats/ActivityDonutCard'
+import MonthlyBarCard from '../components/stats/MonthlyBarCard'
+import AchievementsCard from '../components/stats/AchievementsCard'
+import { eventsApi } from '../api/events'
+import { groupsApi } from '../api/groups'
+import { useAuth } from '../contexts/AuthContext'
+
+export default function Stats() {
+  const { user } = useAuth()
+  const [events, setEvents] = useState([])
+  const [groups, setGroups] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  const year = new Date().getFullYear()
+
+  useEffect(() => {
+    if (!user?.id) return
+    Promise.all([
+      eventsApi.getUserEvents(user.id).catch(() => []),
+      groupsApi.getUserGroups(user.id).catch(() => []),
+    ]).then(([evs, grps]) => {
+      setEvents(Array.isArray(evs) ? evs : evs?.events || [])
+      setGroups(Array.isArray(grps) ? grps : grps?.groups || [])
+    }).finally(() => setLoading(false))
+  }, [user?.id])
+
+  const completed = events.filter(e => e.status === 'completed')
+  const thisYear = completed.filter(e => {
+    const d = e.event_date || e.scheduled_date
+    return d && new Date(d).getFullYear() === year
+  })
+
+  // Average rating
+  const rated = thisYear.filter(e => e.avg_rating)
+  const avgRating = rated.length
+    ? (rated.reduce((s, e) => s + Number(e.avg_rating), 0) / rated.length).toFixed(1)
+    : '—'
+
+  // Activity breakdown
+  const breakdown = Object.entries(
+    thisYear.reduce((acc, e) => {
+      const type = e.activity_type?.toLowerCase() || 'dining'
+      acc[type] = (acc[type] || 0) + 1
+      return acc
+    }, {})
+  ).map(([type, count]) => ({ type, count }))
+    .sort((a, b) => b.count - a.count)
+
+  // Monthly breakdown
+  const monthly = Array.from({ length: 12 }, (_, i) => {
+    const count = thisYear.filter(e => {
+      const d = e.event_date || e.scheduled_date
+      return d && new Date(d).getMonth() === i
+    }).length
+    return { month: i + 1, count }
+  })
+
+  // Picks made = events where user was host
+  const picksCount = thisYear.filter(e => e.host_user_id === user?.id).length
+
+  return (
+    <AppShell activeRoute="/stats">
+      {/* Hero — no topbar, spans full width */}
+      <StatsHero
+        user={user}
+        year={year}
+        totalEvents={thisYear.length}
+        groupCount={groups.length}
+      />
+
+      {/* KPI row — lifted */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: '12px',
+          padding: '0 24px',
+          transform: 'translateY(-20px)',
+        }}
+      >
+        <KpiCard value={thisYear.length} label="Total Events" />
+        <KpiCard value={avgRating} label="Avg Rating" />
+        <KpiCard value={picksCount} label="Picks Made" />
+        <KpiCard value={groups.length} label="Groups" />
+      </div>
+
+      <div style={{ padding: '0 24px 24px', marginTop: '-8px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+          <ActivityDonutCard breakdown={breakdown} />
+          <MonthlyBarCard monthly={monthly} />
+        </div>
+        <AchievementsCard unlockedIds={[
+          ...(thisYear.length >= 1 ? ['first_pick'] : []),
+          ...(groups.length >= 3 ? ['social_butterfly'] : []),
+          ...(completed.length >= 10 ? ['critic'] : []),
+          ...(picksCount >= 5 ? ['host_5'] : []),
+        ]} />
+      </div>
+    </AppShell>
+  )
+}

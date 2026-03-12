@@ -11,8 +11,7 @@ import { enrichApi } from '../../api/enrich'
 import { authApi } from '../../api/auth'
 import { useAuth } from '../../contexts/AuthContext'
 
-const TABS = [
-  { id: 'my-feed', label: 'My Feed' },
+const TMDB_TABS = [
   { id: 'popular', label: 'Popular' },
   { id: 'now-playing', label: 'Now Playing' },
   { id: 'upcoming', label: 'Upcoming' },
@@ -51,7 +50,8 @@ function SetupBanner({ onNavigate }) {
 export default function DiscoverMovies() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const [tab, setTab] = useState('my-feed')
+  const [config, setConfig] = useState(null)
+  const [tab, setTab] = useState(null)
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(true)
   const [setupRequired, setSetupRequired] = useState(false)
@@ -60,6 +60,26 @@ export default function DiscoverMovies() {
   const [refreshing, setRefreshing] = useState(false)
   const [radarrSet, setRadarrSet] = useState(new Set())
 
+  const hasRadarr = config?.radarr_url?.configured
+  const hasTmdb = config?.tmdb_api_key?.configured
+
+  const tabs = [
+    ...(hasRadarr ? [{ id: 'library', label: 'Library' }] : []),
+    { id: 'my-feed', label: 'My Feed' },
+    ...(hasTmdb ? TMDB_TABS : []),
+  ]
+
+  // Load config on mount; set default tab based on what's configured
+  useEffect(() => {
+    enrichApi.getConfig()
+      .then(c => {
+        setConfig(c)
+        setTab(c?.radarr_url?.configured ? 'library' : 'my-feed')
+      })
+      .catch(() => setTab('my-feed'))
+  }, [])
+
+  // Fetch Radarr ID set for badge overlay on non-library tabs
   useEffect(() => {
     enrichApi.getRadarrLibrary()
       .then(d => setRadarrSet(new Set(d?.tmdb_ids || [])))
@@ -87,7 +107,8 @@ export default function DiscoverMovies() {
     setSetupRequired(false)
     try {
       let data
-      if (t === 'popular') data = await enrichApi.moviesPopular()
+      if (t === 'library') data = await enrichApi.moviesLibrary()
+      else if (t === 'popular') data = await enrichApi.moviesPopular()
       else if (t === 'now-playing') data = await enrichApi.moviesNowPlaying()
       else data = await enrichApi.moviesUpcoming()
       setResults(data?.results || [])
@@ -117,6 +138,7 @@ export default function DiscoverMovies() {
   }
 
   useEffect(() => {
+    if (!tab) return
     if (tab === 'my-feed') loadPersonalFeed()
     else loadTab(tab)
   }, [tab, user?.id])
@@ -149,7 +171,7 @@ export default function DiscoverMovies() {
         {setupRequired && tab === 'my-feed' && <SetupBanner onNavigate={() => navigate('/settings')} />}
 
         <div style={{ display: 'flex', gap: '6px', marginBottom: '20px', flexWrap: 'wrap' }}>
-          {TABS.map(p => (
+          {tabs.map(p => (
             <ActivityPill key={p.id} label={p.label} active={tab === p.id} onClick={() => setTab(p.id)} />
           ))}
         </div>
@@ -176,7 +198,7 @@ export default function DiscoverMovies() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px' }}>
             {results.map((item, i) => (
               <div key={item.tmdb_id || i} style={{ position: 'relative' }}>
-                {radarrSet.has(item.tmdb_id) && (
+                {(item.in_library || radarrSet.has(item.tmdb_id)) && (
                   <div style={{
                     position: 'absolute', top: '8px', right: '8px', zIndex: 3,
                     background: '#22d3a0', color: '#000', fontSize: '9px', fontWeight: 800,

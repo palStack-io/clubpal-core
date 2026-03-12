@@ -75,12 +75,12 @@ export default function DiscoverArts() {
     finally { setLoading(false) }
   }
 
-  const doSearch = async (q, t = type) => {
+  const doSearch = async (q, location, t = type) => {
     if (!q && t === 'my-feed') return loadPersonalFeed()
     setLoading(true)
     setSetupRequired(false)
     try {
-      const data = await enrichApi.searchArts({ query: q || 'museum gallery theater', type: t === 'my-feed' ? 'museum' : t })
+      const data = await enrichApi.searchArts({ query: q || 'museum gallery theater', type: t === 'my-feed' ? 'museum' : t, location: location || undefined })
       setResults(data?.results || [])
     } catch { setResults([]) }
     finally { setLoading(false) }
@@ -98,7 +98,7 @@ export default function DiscoverArts() {
 
   useEffect(() => {
     if (type === 'my-feed') loadPersonalFeed()
-    else doSearch('', type)
+    else doSearch('', undefined, type)
   }, [type, user?.id])
 
   return (

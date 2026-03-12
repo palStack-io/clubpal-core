@@ -57,6 +57,15 @@ export const enrichApi = {
     enrichClient.get('/shows/airing-today').then(r => r.data),
 
   // ===== Self-hosted Library =====
+  getConfig: () =>
+    enrichClient.get('/config').then(r => r.data),
+
+  moviesLibrary: () =>
+    enrichClient.get('/movies/library').then(r => r.data),
+
+  showsLibrary: () =>
+    enrichClient.get('/shows/library').then(r => r.data),
+
   getRadarrLibrary: () =>
     enrichClient.get('/library/radarr').then(r => r.data),
 

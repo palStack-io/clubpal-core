@@ -21,6 +21,7 @@ class GroupCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: Optional[str] = Field(None, max_length=500)
     rotation_type: RotationType = RotationType.ROUND_ROBIN
+    activity_type: Optional[str] = None
 
 
 class GroupUpdate(BaseModel):
@@ -31,6 +32,7 @@ class GroupUpdate(BaseModel):
     bg_type: Optional[str] = None
     bg_value: Optional[str] = None
     bg_scope: Optional[str] = None
+    activity_type: Optional[str] = None
 
 
 class GroupResponse(BaseModel):
@@ -42,6 +44,7 @@ class GroupResponse(BaseModel):
     bg_value: Optional[str] = None
     bg_scope: Optional[str] = "hero"
     rotation_type: RotationType
+    activity_type: Optional[str] = None
     created_by: int
     created_at: datetime
     updated_at: datetime
@@ -138,6 +141,7 @@ class PollConvert(BaseModel):
     scheduled_date: Optional[datetime] = None
     location: Optional[str] = None
     recurring_schedule_id: Optional[int] = None  # Link event to a recurring series
+    max_attendees: Optional[int] = Field(None, ge=1)
 
 
 class PollResponseModel(BaseModel):

@@ -5,6 +5,7 @@ export default function SearchHero({ eyebrow, headline, onSearch, suggestions = 
   const [query, setQuery] = useState('')
   const [activeChip, setActiveChip] = useState(null)
   const [location, setLocation] = useState(null)
+  const [locationOverride, setLocationOverride] = useState(null)
   const debounceRef = useRef(null)
 
   useEffect(() => {
@@ -13,34 +14,42 @@ export default function SearchHero({ eyebrow, headline, onSearch, suggestions = 
       .catch(() => {})
   }, [])
 
+  const currentLocation = locationOverride ?? location
+
   const handleInput = (val) => {
     setQuery(val)
     setActiveChip(null)
     clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => onSearch(val), 350)
+    debounceRef.current = setTimeout(() => onSearch(val, currentLocation), 350)
   }
 
   const handleSubmit = () => {
     clearTimeout(debounceRef.current)
-    onSearch(query)
+    onSearch(query, currentLocation)
   }
 
   const handleChip = (chip) => {
     if (activeChip === chip) {
       setActiveChip(null)
       setQuery('')
-      onSearch('')
+      onSearch('', currentLocation)
     } else {
       const text = chip.split(' ').slice(1).join(' ')
       setActiveChip(chip)
       setQuery(text)
       clearTimeout(debounceRef.current)
-      onSearch(text)
+      onSearch(text, currentLocation)
     }
   }
 
-  // city-only location label: "Sarasota, FL 34239, USA" → "Sarasota"
-  const locationLabel = location ? location.split(',')[0] : null
+  const handleLocationChange = (newLoc) => {
+    setLocationOverride(newLoc)
+    clearTimeout(debounceRef.current)
+    onSearch(query, newLoc)
+  }
+
+  // city-only label: "Sarasota, FL 34239, USA" → "Sarasota"
+  const locationLabel = currentLocation ? currentLocation.split(',')[0] : null
 
   return (
     <div style={{
@@ -68,8 +77,10 @@ export default function SearchHero({ eyebrow, headline, onSearch, suggestions = 
       <SearchRow
         query={query}
         locationLabel={locationLabel}
+        locationOverride={locationOverride}
         onChange={handleInput}
         onSubmit={handleSubmit}
+        onLocationChange={handleLocationChange}
       />
 
       {/* Suggestion chips */}
@@ -97,8 +108,23 @@ export default function SearchHero({ eyebrow, headline, onSearch, suggestions = 
   )
 }
 
-function SearchRow({ query, locationLabel, onChange, onSubmit }) {
+function SearchRow({ query, locationLabel, locationOverride, onChange, onSubmit, onLocationChange }) {
   const [focused, setFocused] = useState(false)
+  const [editingLocation, setEditingLocation] = useState(false)
+  const [locationInput, setLocationInput] = useState('')
+  const locationInputRef = useRef(null)
+
+  const startEditLocation = () => {
+    setLocationInput(locationOverride || locationLabel || '')
+    setEditingLocation(true)
+    setTimeout(() => locationInputRef.current?.focus(), 0)
+  }
+
+  const confirmLocation = () => {
+    setEditingLocation(false)
+    const val = locationInput.trim()
+    if (val) onLocationChange(val)
+  }
 
   return (
     <div style={{
@@ -117,7 +143,7 @@ function SearchRow({ query, locationLabel, onChange, onSubmit }) {
         🔍
       </span>
 
-      {/* Input */}
+      {/* Search input */}
       <input
         type="text"
         value={query}
@@ -132,17 +158,46 @@ function SearchRow({ query, locationLabel, onChange, onSubmit }) {
         }}
       />
 
-      {/* Location badge */}
-      {locationLabel && (
+      {/* Location badge / editor */}
+      {editingLocation ? (
         <div style={{
           display: 'flex', alignItems: 'center', flexShrink: 0,
-          fontSize: '11px', color: 'var(--t3)',
           background: 'var(--s3)', borderLeft: '1px solid var(--glass)',
-          padding: '0 10px', maxWidth: '110px',
-          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          padding: '0 8px', gap: '4px',
         }}>
-          📍 {locationLabel}
+          <span style={{ fontSize: '11px', flexShrink: 0 }}>📍</span>
+          <input
+            ref={locationInputRef}
+            type="text"
+            value={locationInput}
+            onChange={e => setLocationInput(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') confirmLocation(); if (e.key === 'Escape') setEditingLocation(false) }}
+            onBlur={confirmLocation}
+            placeholder="City or address"
+            style={{
+              width: '130px', background: 'none', border: 'none', outline: 'none',
+              fontSize: '11px', color: 'var(--t1)',
+            }}
+          />
         </div>
+      ) : (
+        <button
+          onClick={startEditLocation}
+          title="Change location"
+          style={{
+            display: 'flex', alignItems: 'center', flexShrink: 0,
+            fontSize: '11px', color: locationOverride ? 'var(--rose-soft)' : 'var(--t3)',
+            background: locationOverride ? 'rgba(244,63,94,0.08)' : 'var(--s3)',
+            borderLeft: '1px solid var(--glass)',
+            padding: '0 10px', maxWidth: '130px',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            border: 'none', cursor: 'pointer', gap: '3px',
+            borderLeft: '1px solid var(--glass)',
+          }}
+        >
+          📍 {locationLabel || 'Set location'}
+          <span style={{ fontSize: '9px', opacity: 0.6, marginLeft: '2px' }}>✎</span>
+        </button>
       )}
 
       {/* Search button */}

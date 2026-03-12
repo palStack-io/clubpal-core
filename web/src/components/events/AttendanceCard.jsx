@@ -35,11 +35,13 @@ export default function AttendanceCard({
   eventStatus,
   onRsvpChange,
   rsvpDeadline,
+  maxAttendees,
 }) {
   const going = attendees.filter((a) => a.status === 'going').length
   const maybe = attendees.filter((a) => a.status === 'maybe').length
   const notGoing = attendees.filter((a) => a.status === 'not_going').length
   const total = attendees.length
+  const spotsLeft = maxAttendees ? Math.max(0, maxAttendees - going) : null
 
   const myRsvp = currentUser
     ? attendees.find((a) => String(a.user_id) === String(currentUser.id))
@@ -79,7 +81,7 @@ export default function AttendanceCard({
   return (
     <Card>
       <Card.Header
-        title={`Attendance (${going}/${total})`}
+        title={maxAttendees ? `Attendance (${going}/${maxAttendees} seats)` : `Attendance (${going}/${total})`}
         action={eventStatus === 'scheduled' ? <RsvpPills /> : null}
       />
       <Card.Body>
@@ -109,6 +111,11 @@ export default function AttendanceCard({
           <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--t3)' }}>
             No: {notGoing}
           </span>
+          {spotsLeft !== null && (
+            <span style={{ fontSize: '12px', fontWeight: 600, color: spotsLeft === 0 ? '#f87171' : 'var(--blue)' }}>
+              {spotsLeft === 0 ? '🔴 Full' : `${spotsLeft} spot${spotsLeft === 1 ? '' : 's'} left`}
+            </span>
+          )}
         </div>
 
         {attendees.length === 0 ? (

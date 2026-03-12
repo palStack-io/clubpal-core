@@ -15,6 +15,7 @@ class EventStatus(str, Enum):
 class EventCreate(BaseModel):
     group_id: int
     activity_id: Optional[int] = None
+    activity_type: Optional[str] = None
     title: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = Field(None, max_length=1000)
     scheduled_date: Optional[datetime] = None
@@ -22,6 +23,7 @@ class EventCreate(BaseModel):
     host_user_id: Optional[int] = None  # If None, use rotation
     created_by: Optional[int] = None    # Passed explicitly from web UI
     rsvp_deadline: Optional[datetime] = None
+    max_attendees: Optional[int] = Field(None, ge=1)
     # Link to an existing recurring schedule (poll → recurring event conversion)
     parent_recurring_id: Optional[int] = None
     # Recurring fields (only used when is_recurring=True)
@@ -71,6 +73,7 @@ class EventUpdate(BaseModel):
     host_user_id: Optional[int] = None
     status: Optional[EventStatus] = None
     rsvp_deadline: Optional[datetime] = None
+    max_attendees: Optional[int] = Field(None, ge=1)
     bg_type: Optional[str] = None
     bg_value: Optional[str] = None
     bg_scope: Optional[str] = None
@@ -80,6 +83,7 @@ class EventResponse(BaseModel):
     id: int
     group_id: int
     activity_id: Optional[int] = None
+    activity_type: Optional[str] = None
     title: str
     description: Optional[str] = None
     scheduled_date: Optional[datetime] = None
@@ -94,6 +98,7 @@ class EventResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     rsvp_deadline: Optional[datetime] = None
+    max_attendees: Optional[int] = None
 
 
 class EventDetailResponse(EventResponse):

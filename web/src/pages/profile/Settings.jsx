@@ -11,6 +11,7 @@ import { gatewayClient, enrichClient } from '../../api/client'
 import { SunIcon, MoonIcon } from '@heroicons/react/24/outline'
 import { authApi } from '../../api/auth'
 import { enrichApi } from '../../api/enrich'
+import { GoogleLogin } from '@react-oauth/google'
 
 const NAV_SECTIONS = [
   { group: 'Account', items: [
@@ -21,12 +22,15 @@ const NAV_SECTIONS = [
   ]},
   { group: 'System', items: [
     { id: 'apikeys', icon: '🔑', label: 'API Keys' },
-    { id: 'integrations', icon: '🔌', label: 'Integrations' },
+    { id: 'integrations', icon: '🛡️', label: 'Admin Panel', adminOnly: true },
     { id: 'appearance', icon: '🎨', label: 'Appearance' },
+  ]},
+  { group: 'App', items: [
+    { id: 'about', icon: 'ℹ️', label: 'About' },
   ]},
 ]
 
-function SettingsNav({ active, onChange }) {
+function SettingsNav({ active, onChange, isAdmin }) {
   return (
     <div
       style={{
@@ -36,39 +40,53 @@ function SettingsNav({ active, onChange }) {
         minHeight: 'calc(100vh - 56px)',
       }}
     >
-      {NAV_SECTIONS.map(section => (
-        <div key={section.group} style={{ marginBottom: '16px' }}>
-          <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.2px', color: 'var(--t4)', padding: '0 8px', marginBottom: '4px' }}>
-            {section.group}
+      {NAV_SECTIONS.map(section => {
+        const items = section.items.filter(item => !item.adminOnly || isAdmin)
+        if (!items.length) return null
+        return (
+          <div key={section.group} style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '9px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '1.2px', color: 'var(--t4)', padding: '0 8px', marginBottom: '4px' }}>
+              {section.group}
+            </div>
+            {items.map(item => (
+              <button
+                key={item.id}
+                onClick={() => onChange(item.id)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  width: '100%',
+                  padding: '9px 10px',
+                  borderRadius: '8px',
+                  border: 'none',
+                  background: active === item.id ? 'rgba(244,63,94,0.15)' : 'transparent',
+                  color: active === item.id ? 'var(--rose-soft)' : item.adminOnly ? 'var(--rose-soft)' : 'var(--t2)',
+                  fontSize: '13px',
+                  fontWeight: active === item.id ? 600 : 500,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                  marginBottom: '2px',
+                  transition: 'all 0.12s',
+                }}
+              >
+                <span>{item.icon}</span>
+                <span style={{ flex: 1 }}>{item.label}</span>
+                {item.adminOnly && (
+                  <span style={{
+                    fontSize: '8px', fontWeight: 800, letterSpacing: '0.5px',
+                    textTransform: 'uppercase', color: 'var(--rose)',
+                    background: 'var(--rose-glow)', border: '1px solid var(--rose-border)',
+                    borderRadius: '4px', padding: '1px 4px',
+                  }}>
+                    Admin
+                  </span>
+                )}
+              </button>
+            ))}
           </div>
-          {section.items.map(item => (
-            <button
-              key={item.id}
-              onClick={() => onChange(item.id)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px',
-                width: '100%',
-                padding: '9px 10px',
-                borderRadius: '8px',
-                border: 'none',
-                background: active === item.id ? 'rgba(244,63,94,0.15)' : 'transparent',
-                color: active === item.id ? 'var(--rose-soft)' : 'var(--t2)',
-                fontSize: '13px',
-                fontWeight: active === item.id ? 600 : 500,
-                cursor: 'pointer',
-                textAlign: 'left',
-                marginBottom: '2px',
-                transition: 'all 0.12s',
-              }}
-            >
-              <span>{item.icon}</span>
-              {item.label}
-            </button>
-          ))}
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }
@@ -460,6 +478,7 @@ function IntegrationsSection({ user }) {
   const [usageLoading, setUsageLoading] = useState(false)
   const [limitEdits, setLimitEdits] = useState({})
   const [savingLimits, setSavingLimits] = useState(false)
+  const [approvingBlock, setApprovingBlock] = useState(null)
 
   // Tenor key is stored client-side in localStorage (used by GifPicker)
   const [tenorKey, setTenorKey] = useState(() => localStorage.getItem('tenor_api_key') || '')
@@ -482,6 +501,15 @@ function IntegrationsSection({ user }) {
       .then(r => setUsage(r.data?.summary || []))
       .catch(() => setUsage([]))
       .finally(() => setUsageLoading(false))
+  }
+
+  const approveBlock = async (apiName) => {
+    setApprovingBlock(apiName)
+    try {
+      await gatewayClient.post(`/admin/api-blocks/${apiName}/approve`)
+      loadUsage()
+    } catch {}
+    finally { setApprovingBlock(null) }
   }
 
   const saveLimit = async (apiName, value) => {
@@ -542,10 +570,20 @@ function IntegrationsSection({ user }) {
 
   return (
     <div>
-      <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--t1)', marginBottom: '4px' }}>Integrations</div>
-      <p style={{ fontSize: '12px', color: 'var(--t3)', marginBottom: '20px' }}>
-        Connect external services to unlock additional features.
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '4px' }}>
+        <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--t1)' }}>Admin Panel</div>
+        <span style={{
+          fontSize: '10px', fontWeight: 800, letterSpacing: '0.5px', textTransform: 'uppercase',
+          color: 'var(--rose)', background: 'var(--rose-glow)', border: '1px solid var(--rose-border)',
+          borderRadius: '6px', padding: '2px 8px',
+        }}>
+          🛡️ Admin
+        </span>
+      </div>
+      <p style={{ fontSize: '12px', color: 'var(--t3)', marginBottom: '16px' }}>
+        You're the instance administrator. Configure external API integrations and manage server-wide settings.
       </p>
+
 
       {/* Tenor — available to all users, stored in localStorage */}
       <FormSection title="GIF Search (Tenor)">
@@ -670,27 +708,49 @@ function IntegrationsSection({ user }) {
                       const limit = u.daily_limit || 9999999
                       const barPct = limit < 9999999 ? Math.min(100, Math.round((todayLive / limit) * 100)) : 0
                       const exceeded = u.quota_exceeded
+                      const blocked = u.blocked
                       const total30 = (u.total_live || 0) + (u.total_cached || 0)
                       const cachePct = total30 > 0 ? Math.round(((u.total_cached || 0) / total30) * 100) : 0
                       const costPerCall = u.api_name === 'google_places' ? 0.02 : u.api_name === 'google_geocoding' ? 0.005 : null
                       const estCost = costPerCall ? (u.total_live || 0) * costPerCall : null
                       const isEditing = limitEdits[u.api_name] !== undefined
-                      const barColor = exceeded ? '#ef4444' : barPct > 75 ? '#f59e0b' : 'var(--rose)'
+                      const barColor = blocked ? '#ef4444' : exceeded ? '#f59e0b' : barPct > 75 ? '#f59e0b' : 'var(--rose)'
 
                       return (
-                        <div key={u.api_name} style={{ background: 'var(--s3)', border: `1px solid ${exceeded ? 'rgba(239,68,68,0.3)' : 'var(--glass)'}`, borderRadius: '10px', padding: '12px' }}>
+                        <div key={u.api_name} style={{ background: 'var(--s3)', border: `1px solid ${blocked ? 'rgba(239,68,68,0.5)' : exceeded ? 'rgba(239,68,68,0.3)' : 'var(--glass)'}`, borderRadius: '10px', padding: '12px' }}>
                           {/* Header row */}
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                               <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--t1)' }}>
                                 {u.api_name.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                               </span>
-                              {exceeded && <span style={{ fontSize: '10px', fontWeight: 700, color: '#ef4444', background: 'rgba(239,68,68,0.1)', padding: '1px 6px', borderRadius: '4px' }}>QUOTA HIT</span>}
+                              {blocked && <span style={{ fontSize: '10px', fontWeight: 700, color: '#ef4444', background: 'rgba(239,68,68,0.12)', padding: '1px 6px', borderRadius: '4px' }}>BLOCKED</span>}
+                              {!blocked && exceeded && <span style={{ fontSize: '10px', fontWeight: 700, color: '#f59e0b', background: 'rgba(245,158,11,0.1)', padding: '1px 6px', borderRadius: '4px' }}>QUOTA HIT</span>}
                             </div>
                             {estCost !== null && (
                               <span style={{ fontSize: '10px', color: 'var(--t4)' }}>~${estCost.toFixed(2)} est. (30d)</span>
                             )}
                           </div>
+
+                          {/* Blocked banner + approve button */}
+                          {blocked && (
+                            <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', padding: '10px 12px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+                              <div>
+                                <div style={{ fontSize: '11px', fontWeight: 700, color: '#ef4444', marginBottom: '2px' }}>API calls suspended</div>
+                                <div style={{ fontSize: '10px', color: 'var(--t3)' }}>
+                                  Quota was hit and the API was auto-blocked. Approve to resume — or raise the daily limit first.
+                                  {u.blocked_at && <span style={{ display: 'block', marginTop: '2px', color: 'var(--t4)' }}>Blocked {new Date(u.blocked_at).toLocaleString()}</span>}
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => approveBlock(u.api_name)}
+                                disabled={approvingBlock === u.api_name}
+                                style={{ flexShrink: 0, fontSize: '11px', fontWeight: 700, color: '#fff', background: approvingBlock === u.api_name ? 'var(--t4)' : '#22d3a0', border: 'none', borderRadius: '7px', padding: '6px 14px', cursor: approvingBlock === u.api_name ? 'default' : 'pointer', whiteSpace: 'nowrap' }}
+                              >
+                                {approvingBlock === u.api_name ? 'Approving…' : 'Approve & Resume'}
+                              </button>
+                            </div>
+                          )}
 
                           {/* Progress bar — today's quota */}
                           {limit < 9999999 && (
@@ -886,7 +946,7 @@ function NotificationsSection() {
 }
 
 function SecuritySection() {
-  const { updateUser } = useAuth()
+  const { user, updateUser } = useAuth()
   const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' })
   const [pwSaving, setPwSaving] = useState(false)
   const [pwError, setPwError] = useState('')
@@ -894,6 +954,34 @@ function SecuritySection() {
   const [sessions, setSessions] = useState([])
   const [sessionsLoading, setSessionsLoading] = useState(true)
   const [revokingId, setRevokingId] = useState(null)
+  const [linkError, setLinkError] = useState('')
+  const [linkSuccess, setLinkSuccess] = useState('')
+
+  const linkedProviders = user?.linked_providers || []
+
+  const handleLinkGoogle = async (credential) => {
+    setLinkError('')
+    try {
+      const updated = await authApi.linkOidc(credential, 'google')
+      updateUser(updated)
+      setLinkSuccess('Google account linked successfully!')
+      setTimeout(() => setLinkSuccess(''), 3000)
+    } catch (e) {
+      setLinkError(e?.response?.data?.detail || 'Failed to link Google account.')
+    }
+  }
+
+  const handleUnlink = async (provider) => {
+    setLinkError('')
+    try {
+      await authApi.unlinkOidc(provider)
+      updateUser({ linked_providers: linkedProviders.filter(p => p !== provider) })
+      setLinkSuccess(`${provider.charAt(0).toUpperCase() + provider.slice(1)} account unlinked.`)
+      setTimeout(() => setLinkSuccess(''), 3000)
+    } catch (e) {
+      setLinkError(e?.response?.data?.detail || 'Failed to unlink account.')
+    }
+  }
 
   const loadSessions = () => {
     setSessionsLoading(true)
@@ -919,7 +1007,6 @@ function SecuritySection() {
       setPwForm({ current: '', next: '', confirm: '' })
       setPwSaved(true)
       setTimeout(() => setPwSaved(false), 2500)
-      // Clear the default-password warning banner immediately
       updateUser({ password_changed: true })
     } catch (e) {
       setPwError(e?.response?.data?.detail || 'Failed to change password.')
@@ -970,8 +1057,74 @@ function SecuritySection() {
     <div>
       <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--t1)', marginBottom: '4px' }}>Security</div>
       <p style={{ fontSize: '12px', color: 'var(--t3)', marginBottom: '20px' }}>
-        Manage your password and active sessions.
+        Manage your password, linked accounts, and active sessions.
       </p>
+
+      {/* Linked Accounts */}
+      <div style={{ background: 'var(--s2)', border: '1px solid var(--glass)', borderRadius: '14px', padding: '16px', marginBottom: '16px' }}>
+        <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--t1)', marginBottom: '14px' }}>Linked Accounts</div>
+        <p style={{ fontSize: '12px', color: 'var(--t3)', marginBottom: '14px', marginTop: '-8px' }}>
+          Link a social login so you can sign in without a password.
+        </p>
+
+        {linkError && (
+          <div style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: '8px', padding: '8px 12px', fontSize: '12px', color: '#f87171', marginBottom: '12px' }}>
+            {linkError}
+          </div>
+        )}
+        {linkSuccess && (
+          <div style={{ background: 'rgba(34,211,160,0.1)', border: '1px solid rgba(34,211,160,0.2)', borderRadius: '8px', padding: '8px 12px', fontSize: '12px', color: '#22d3a0', marginBottom: '12px' }}>
+            ✓ {linkSuccess}
+          </div>
+        )}
+
+        {/* Google */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'var(--s3)', borderRadius: '10px', border: '1px solid var(--glass)', marginBottom: '8px' }}>
+          <span style={{ fontSize: '20px' }}>🔵</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)' }}>Google</div>
+            <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '1px' }}>
+              {linkedProviders.includes('google') ? '✓ Linked' : 'Not linked'}
+            </div>
+          </div>
+          {linkedProviders.includes('google') ? (
+            <button
+              onClick={() => handleUnlink('google')}
+              style={{ padding: '5px 12px', borderRadius: '8px', border: '1px solid rgba(248,113,113,0.35)', background: 'rgba(248,113,113,0.08)', color: '#f87171', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+            >
+              Unlink
+            </button>
+          ) : (
+            <GoogleLogin
+              onSuccess={r => handleLinkGoogle(r.credential)}
+              onError={() => setLinkError('Google sign-in failed.')}
+              text="signin_with"
+              shape="pill"
+              size="small"
+              theme="filled_black"
+            />
+          )}
+        </div>
+
+        {/* Apple — web sign-in not supported; show informational note */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '12px', background: 'var(--s3)', borderRadius: '10px', border: '1px solid var(--glass)' }}>
+          <span style={{ fontSize: '20px' }}>🍎</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)' }}>Apple</div>
+            <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '1px' }}>
+              {linkedProviders.includes('apple') ? '✓ Linked' : 'Link from the mobile app'}
+            </div>
+          </div>
+          {linkedProviders.includes('apple') && (
+            <button
+              onClick={() => handleUnlink('apple')}
+              style={{ padding: '5px 12px', borderRadius: '8px', border: '1px solid rgba(248,113,113,0.35)', background: 'rgba(248,113,113,0.08)', color: '#f87171', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}
+            >
+              Unlink
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Change Password */}
       <div style={sectionStyle}>
@@ -1395,6 +1548,69 @@ function DiscoverSection({ user }) {
   )
 }
 
+function AboutSection() {
+  return (
+    <div style={{ padding: '32px', maxWidth: '600px' }}>
+      <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--t1)', marginBottom: '24px' }}>About</div>
+
+      <div style={{
+        background: 'var(--s2)',
+        border: '1px solid var(--glass)',
+        borderRadius: '16px',
+        padding: '28px',
+        marginBottom: '20px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
+          <img src="/palStack.png" alt="palStack" style={{ height: '28px', objectFit: 'contain' }} />
+          <span style={{ fontSize: '20px', fontWeight: 800, color: 'var(--t1)', letterSpacing: '-0.5px' }}>palStack</span>
+        </div>
+
+        <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)', marginBottom: '12px', lineHeight: 1.5 }}>
+          Your digital pal for everyday stuff
+        </p>
+        <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t2)', marginBottom: '12px', lineHeight: 1.6 }}>
+          Life gets easier when you've got a pal
+        </p>
+        <p style={{ fontSize: '13px', color: 'var(--t3)', lineHeight: 1.7, marginBottom: '0' }}>
+          That's what pals do—they show up and help with the everyday stuff. palStack is a collection of privacy-first tools
+          that act like reliable friends: track your pantry to reduce waste, manage home repairs, budget your money, and
+          coordinate group dining. Self-host for complete control or use our managed hosting—either way, no tracking,
+          no data harvesting, just helpful tools that respect you.
+        </p>
+      </div>
+
+      <a
+        href="https://palstack.io"
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '8px',
+          padding: '10px 20px',
+          background: 'rgba(244,63,94,0.15)',
+          border: '1px solid rgba(244,63,94,0.22)',
+          borderRadius: '10px',
+          color: 'var(--rose-soft)',
+          fontSize: '13px',
+          fontWeight: 600,
+          textDecoration: 'none',
+        }}
+      >
+        <span>Learn more at palStack.io</span>
+        <span style={{ fontSize: '12px' }}>→</span>
+      </a>
+
+      <div style={{ marginTop: '28px', padding: '16px', background: 'var(--s1)', borderRadius: '10px' }}>
+        <div style={{ fontSize: '11px', color: 'var(--t4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>clubPal</div>
+        <div style={{ fontSize: '12px', color: 'var(--t3)', lineHeight: 1.6 }}>
+          Group outing coordination, rotation tracking, and activity discovery — built for friend groups who want to keep things fair and fun.
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Settings() {
   const { user } = useAuth()
   const location = useLocation()
@@ -1409,6 +1625,7 @@ export default function Settings() {
       case 'security': return <SecuritySection />
       case 'notifications': return <NotificationsSection />
       case 'discover': return <DiscoverSection user={user} key={user?.id} />
+      case 'about': return <AboutSection />
       default: return <ProfileSection user={user} />
     }
   }
@@ -1422,7 +1639,7 @@ export default function Settings() {
           minHeight: 'calc(100vh - 56px)',
         }}
       >
-        <SettingsNav active={section} onChange={setSection} />
+        <SettingsNav active={section} onChange={setSection} isAdmin={!!user?.is_admin} />
         <div style={{ padding: '22px', background: 'var(--bg)' }}>
           {renderSection()}
         </div>

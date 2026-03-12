@@ -431,6 +431,59 @@ async def radarr_library() -> list:
     return []
 
 
+async def radarr_library_full() -> list:
+    """Return full normalized movie list from Radarr. Empty list if not configured."""
+    if not RADARR_URL or not RADARR_API_KEY:
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as c:
+            resp = await c.get(
+                f"{RADARR_URL.rstrip('/')}/api/v3/movie",
+                headers={"X-Api-Key": RADARR_API_KEY},
+            )
+            if resp.status_code == 200:
+                return [_normalize_radarr_movie(m) for m in resp.json() if m.get("tmdbId")]
+    except Exception:
+        pass
+    return []
+
+
+def _normalize_radarr_movie(m: dict) -> dict:
+    ratings = m.get("ratings") or {}
+    rating = None
+    if isinstance(ratings, dict):
+        if "tmdb" in ratings:
+            rating = (ratings["tmdb"] or {}).get("value")
+        elif "value" in ratings:
+            rating = ratings.get("value")
+
+    poster = m.get("remotePoster")
+    backdrop = None
+    for img in (m.get("images") or []):
+        if not poster and img.get("coverType") == "poster":
+            poster = img.get("remoteUrl") or img.get("url")
+        if not backdrop and img.get("coverType") == "fanart":
+            backdrop = img.get("remoteUrl") or img.get("url")
+
+    year = m.get("year")
+    release_date = (
+        m.get("digitalRelease") or m.get("physicalRelease") or m.get("releaseDate")
+        or (f"{year}-01-01" if year else None)
+    )
+    return {
+        "tmdb_id": m.get("tmdbId"),
+        "title": m.get("title"),
+        "overview": m.get("overview", ""),
+        "release_date": release_date,
+        "rating": rating,
+        "genres": m.get("genres") or [],
+        "poster_url": poster,
+        "backdrop_url": backdrop,
+        "in_library": True,
+        "has_file": m.get("hasFile", False),
+    }
+
+
 async def sonarr_library() -> list:
     """Return list of TMDB IDs from Sonarr. Empty list if not configured."""
     if not SONARR_URL or not SONARR_API_KEY:
@@ -446,6 +499,51 @@ async def sonarr_library() -> list:
     except Exception:
         pass
     return []
+
+
+async def sonarr_library_full() -> list:
+    """Return full normalized show list from Sonarr. Empty list if not configured."""
+    if not SONARR_URL or not SONARR_API_KEY:
+        return []
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as c:
+            resp = await c.get(
+                f"{SONARR_URL.rstrip('/')}/api/v3/series",
+                headers={"X-Api-Key": SONARR_API_KEY},
+            )
+            if resp.status_code == 200:
+                return [_normalize_sonarr_show(s) for s in resp.json() if s.get("tmdbId")]
+    except Exception:
+        pass
+    return []
+
+
+def _normalize_sonarr_show(s: dict) -> dict:
+    ratings = s.get("ratings") or {}
+    rating = ratings.get("value") if isinstance(ratings, dict) else None
+
+    poster = s.get("remotePoster")
+    backdrop = None
+    for img in (s.get("images") or []):
+        if not poster and img.get("coverType") == "poster":
+            poster = img.get("remoteUrl") or img.get("url")
+        if not backdrop and img.get("coverType") == "fanart":
+            backdrop = img.get("remoteUrl") or img.get("url")
+
+    year = s.get("year")
+    first_air_date = s.get("firstAired") or (f"{year}-01-01" if year else None)
+    return {
+        "tmdb_id": s.get("tmdbId") or None,
+        "tvdb_id": s.get("tvdbId"),
+        "title": s.get("title"),
+        "overview": s.get("overview", ""),
+        "first_air_date": first_air_date,
+        "rating": rating,
+        "genres": s.get("genres") or [],
+        "poster_url": poster,
+        "backdrop_url": backdrop,
+        "in_library": True,
+    }
 
 
 # ===== IGDB =====

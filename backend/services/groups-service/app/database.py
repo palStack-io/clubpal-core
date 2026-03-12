@@ -21,6 +21,7 @@ def init_db():
             name TEXT NOT NULL,
             description TEXT,
             rotation_type TEXT DEFAULT 'round_robin',
+            activity_type TEXT,
             banner_url TEXT,
             created_by INTEGER NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -45,6 +46,7 @@ def init_db():
     # Migrations for existing databases
     for table, col, definition in [
         ("groups", "banner_url", "TEXT"),
+        ("groups", "activity_type", "TEXT"),
         ("group_members", "rotation_order", "INTEGER DEFAULT NULL"),
     ]:
         try:
@@ -138,7 +140,7 @@ def get_db():
 # ===== Group CRUD =====
 
 def create_group(name: str, created_by: int, description: str = None,
-                rotation_type: str = "round_robin") -> int:
+                rotation_type: str = "round_robin", activity_type: str = None) -> int:
     """Create a new group and add creator as owner."""
     conn = get_db()
     cursor = conn.cursor()
@@ -146,9 +148,9 @@ def create_group(name: str, created_by: int, description: str = None,
     try:
         # Create group
         cursor.execute(
-            """INSERT INTO groups (name, description, rotation_type, created_by)
-               VALUES (%s, %s, %s, %s) RETURNING id""",
-            (name, description, rotation_type, created_by)
+            """INSERT INTO groups (name, description, rotation_type, activity_type, created_by)
+               VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+            (name, description, rotation_type, activity_type, created_by)
         )
         group_id = cursor.fetchone()['id']
 
@@ -218,7 +220,8 @@ def get_groups_by_user(user_id: int) -> List[dict]:
 
 def update_group(group_id: int, name: str = None, description: str = None,
                 rotation_type: str = None, banner_url: str = None,
-                bg_type: str = None, bg_value: str = None, bg_scope: str = None) -> bool:
+                bg_type: str = None, bg_value: str = None, bg_scope: str = None,
+                activity_type: str = None) -> bool:
     """Update group details."""
     conn = get_db()
     cursor = conn.cursor()
@@ -247,6 +250,9 @@ def update_group(group_id: int, name: str = None, description: str = None,
     if bg_scope is not None:
         updates.append("bg_scope = %s")
         params.append(bg_scope)
+    if activity_type is not None:
+        updates.append("activity_type = %s")
+        params.append(activity_type)
 
     if not updates:
         conn.close()

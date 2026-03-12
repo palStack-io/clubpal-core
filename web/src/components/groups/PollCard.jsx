@@ -47,6 +47,7 @@ export default function PollCard({ poll, currentUserId, onUpdated }) {
   const [showConvertForm, setShowConvertForm] = useState(false)
   const [convertDate, setConvertDate] = useState('')
   const [convertLocation, setConvertLocation] = useState('')
+  const [convertMaxAttendees, setConvertMaxAttendees] = useState('')
   const [recurringSchedules, setRecurringSchedules] = useState([])
   const [selectedScheduleId, setSelectedScheduleId] = useState('')
 
@@ -93,6 +94,7 @@ export default function PollCard({ poll, currentUserId, onUpdated }) {
         scheduled_date: convertDate ? `${convertDate}T12:00:00` : null,
         location: convertLocation || null,
         recurring_schedule_id: selectedScheduleId ? parseInt(selectedScheduleId) : null,
+        max_attendees: convertMaxAttendees ? parseInt(convertMaxAttendees, 10) : null,
       })
       onUpdated?.(updated)
       if (updated.converted_event_id) {
@@ -241,6 +243,14 @@ export default function PollCard({ poll, currentUserId, onUpdated }) {
                   style={{ background: 'var(--s3)', border: '1px solid var(--glass)', borderRadius: '8px', padding: '8px', fontSize: '12px', color: 'var(--t1)', outline: 'none' }}
                 />
               </div>
+              <input
+                type="number"
+                min="1"
+                value={convertMaxAttendees}
+                onChange={e => setConvertMaxAttendees(e.target.value)}
+                placeholder="Max seats (optional, leave blank for unlimited)"
+                style={{ width: '100%', background: 'var(--s3)', border: '1px solid var(--glass)', borderRadius: '8px', padding: '8px', fontSize: '12px', color: 'var(--t1)', outline: 'none', marginBottom: '8px', boxSizing: 'border-box' }}
+              />
               {recurringSchedules.length > 0 && (
                 <div style={{ marginBottom: '8px' }}>
                   <select

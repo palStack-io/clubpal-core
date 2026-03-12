@@ -69,6 +69,7 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
   const [notes, setNotes] = useState('')
   const [rsvpDeadlineDate, setRsvpDeadlineDate] = useState('')
   const [rsvpDeadlineTime, setRsvpDeadlineTime] = useState('')
+  const [maxAttendees, setMaxAttendees] = useState('')
   const [coverPreview, setCoverPreview] = useState(null)
   const [coverUploading, setCoverUploading] = useState(false)
   const [bgType, setBgType] = useState('default')
@@ -96,6 +97,7 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
         setRsvpDeadlineDate('')
         setRsvpDeadlineTime('')
       }
+      setMaxAttendees(event.max_attendees ? String(event.max_attendees) : '')
     }
   }, [event])
 
@@ -124,6 +126,7 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
         scheduled_date: scheduledDateTime,
         description: notes.trim() || null,
         rsvp_deadline: rsvpDeadlineISO,
+        max_attendees: maxAttendees ? parseInt(maxAttendees, 10) : null,
         bg_type: bgType,
         bg_value: bgValue,
         bg_scope: bgScope,
@@ -295,6 +298,21 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
               ⏰ Members will be reminded as the deadline approaches.
             </div>
           )}
+        </div>
+
+        {/* Seat limit */}
+        <div style={{ marginTop: '14px', paddingTop: '12px', borderTop: '1px solid var(--glass)', display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <label style={{ ...labelStyle, marginBottom: 0, whiteSpace: 'nowrap' }}>Max Seats (optional)</label>
+          <input
+            type="number"
+            min="1"
+            value={maxAttendees}
+            onChange={(e) => setMaxAttendees(e.target.value)}
+            placeholder="∞ unlimited"
+            style={{ ...inputStyle, maxWidth: '140px' }}
+            onFocus={focusBorder}
+            onBlur={blurBorder}
+          />
         </div>
       </div>
 

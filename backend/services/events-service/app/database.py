@@ -19,6 +19,7 @@ def init_db():
             id SERIAL PRIMARY KEY,
             group_id INTEGER NOT NULL,
             activity_id INTEGER,
+            activity_type TEXT,
             title TEXT NOT NULL,
             description TEXT,
             scheduled_date TIMESTAMP,
@@ -120,6 +121,15 @@ def init_db():
         pass
     try:
         cursor.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS deadline_notification_sent BOOLEAN DEFAULT FALSE")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS activity_type TEXT")
+    except Exception:
+        pass
+
+    try:
+        cursor.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS max_attendees INTEGER")
     except Exception:
         pass
 
@@ -237,17 +247,18 @@ def get_recurring_schedule_by_id(schedule_id: int):
 
 def create_event(group_id: int, activity_id: Optional[int], title: str, scheduled_date,
                 created_by: int, host_user_id: int, description: str = None,
-                location: str = None, rsvp_deadline=None, parent_recurring_id: int = None) -> int:
+                location: str = None, rsvp_deadline=None, parent_recurring_id: int = None,
+                activity_type: str = None, max_attendees: int = None) -> int:
     """Create a new event."""
     conn = get_db()
     cursor = conn.cursor()
 
     cursor.execute(
-        """INSERT INTO events (group_id, activity_id, title, description, scheduled_date,
-                              location, host_user_id, created_by, rsvp_deadline, parent_recurring_id)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-        (group_id, activity_id, title, description, scheduled_date, location,
-         host_user_id, created_by, rsvp_deadline, parent_recurring_id)
+        """INSERT INTO events (group_id, activity_id, activity_type, title, description, scheduled_date,
+                              location, host_user_id, created_by, rsvp_deadline, parent_recurring_id, max_attendees)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+        (group_id, activity_id, activity_type, title, description, scheduled_date, location,
+         host_user_id, created_by, rsvp_deadline, parent_recurring_id, max_attendees)
     )
 
     event_id = cursor.fetchone()['id']
@@ -355,7 +366,7 @@ def update_event(event_id: int, title: str = None, description: str = None,
                 scheduled_date: datetime = None, location: str = None,
                 host_user_id: int = None, status: str = None,
                 cover_url: str = None, updated_by: int = None,
-                rsvp_deadline=None,
+                rsvp_deadline=None, max_attendees: int = None,
                 bg_type: str = None, bg_value: str = None, bg_scope: str = None) -> bool:
     """Update event details."""
     conn = get_db()
@@ -404,6 +415,11 @@ def update_event(event_id: int, title: str = None, description: str = None,
         updates.append("rsvp_deadline = %s")
         params.append(rsvp_deadline)
         changes.append(f"RSVP deadline set to {rsvp_deadline}")
+
+    if max_attendees is not None:
+        updates.append("max_attendees = %s")
+        params.append(max_attendees)
+        changes.append(f"max attendees set to {max_attendees}")
 
     if bg_type is not None:
         updates.append("bg_type = %s")

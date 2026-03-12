@@ -3,7 +3,7 @@ import AppShell from '../../components/shell/AppShell'
 import PageHero from '../../components/shell/PageHero'
 import Avatar from '../../components/ui/Avatar'
 import { groupsApi } from '../../api/groups'
-import { ratingsClient } from '../../api/client'
+import { ratingsClient, gatewayClient } from '../../api/client'
 import { useAuth } from '../../contexts/AuthContext'
 
 const MEDALS = ['🥇', '🥈', '🥉']
@@ -39,12 +39,21 @@ export default function Leaderboard() {
   useEffect(() => {
     if (!groupId) return
     ratingsClient.get(`/groups/${groupId}/leaderboard`)
-      .then(r => setEntries(Array.isArray(r.data) ? r.data : r.data?.entries || []))
+      .then(async r => {
+        const raw = Array.isArray(r.data) ? r.data : r.data?.leaderboard || []
+        // Enrich each entry with user profile (full_name, avatar_url, username)
+        const enriched = await Promise.all(raw.map(entry =>
+          gatewayClient.get(`/users/${entry.user_id}/profile`)
+            .then(pr => ({ ...entry, ...pr.data }))
+            .catch(() => entry)
+        ))
+        setEntries(enriched)
+      })
       .catch(() => setEntries([]))
   }, [groupId])
 
   const selectedGroup = groups.find(g => String(g.id) === groupId)
-  const maxHosted = Math.max(...entries.map(e => e.total_hosted || 0), 1)
+  const maxHosted = Math.max(...entries.map(e => e.total_hosted_events || 0), 1)
   const maxRatings = Math.max(...entries.map(e => e.total_ratings || 0), 1)
   const topScore = entries[0] ? Number(entries[0].average_score || 0).toFixed(1) : '—'
 
@@ -197,8 +206,8 @@ export default function Leaderboard() {
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span style={{ fontSize: '10px', color: 'var(--t4)', width: '60px' }}>Hosted</span>
-                          <StatBar value={entry.total_hosted || 0} max={maxHosted} color="var(--rose)" />
-                          <span style={{ fontSize: '11px', color: 'var(--t2)', fontWeight: 600, width: '20px', textAlign: 'right' }}>{entry.total_hosted || 0}</span>
+                          <StatBar value={entry.total_hosted_events || 0} max={maxHosted} color="var(--rose)" />
+                          <span style={{ fontSize: '11px', color: 'var(--t2)', fontWeight: 600, width: '20px', textAlign: 'right' }}>{entry.total_hosted_events || 0}</span>
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                           <span style={{ fontSize: '10px', color: 'var(--t4)', width: '60px' }}>Avg Score</span>

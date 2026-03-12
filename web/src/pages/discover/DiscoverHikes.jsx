@@ -66,12 +66,12 @@ export default function DiscoverHikes() {
     finally { setLoading(false) }
   }
 
-  const doSearch = async (q) => {
+  const doSearch = async (q, location) => {
     if (!q) return loadPersonalFeed()
     setLoading(true)
     setSetupRequired(false)
     try {
-      const data = await enrichApi.searchHikes({ query: q })
+      const data = await enrichApi.searchHikes({ query: q, location: location || undefined })
       setResults(data?.results || [])
     } catch { setResults([]) }
     finally { setLoading(false) }

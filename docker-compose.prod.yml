@@ -1,18 +1,18 @@
-# ClubPal Core — Production Compose
+# clubPal Core — Production Compose
 #
-# Uses pre-built images from GitHub Container Registry instead of building from source.
-# Requires GHCR_OWNER to be set to your GitHub username or org name.
+# Pulls pre-built images from GitHub Container Registry:
+#   https://github.com/palStack-io/clubpal-core/pkgs/container
 #
 # Quickstart:
-#   cp .env.example .env          # fill in passwords and GHCR_OWNER
+#   cp .env.example .env          # fill in secrets
 #   docker compose -f docker-compose.prod.yml pull
 #   docker compose -f docker-compose.prod.yml up -d
 #
-# To pin a specific SHA instead of latest:
+# Pin a specific release SHA instead of latest:
 #   IMAGE_TAG=abc1234 docker compose -f docker-compose.prod.yml up -d
 #
-# Log in first if your packages are private:
-#   echo $GITHUB_TOKEN | docker login ghcr.io -u $GHCR_OWNER --password-stdin
+# Log in to GHCR first (only needed if packages are private):
+#   echo $GITHUB_TOKEN | docker login ghcr.io -u palstack-io --password-stdin
 
 services:
 
@@ -52,8 +52,6 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
     volumes:
       - minio_data:/data
-    ports:
-      - "9001:9001"
     networks:
       - clubpal-network
     restart: unless-stopped
@@ -81,9 +79,10 @@ services:
       /usr/bin/mc config host add clubpal http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD;
       /usr/bin/mc mb --ignore-existing clubpal/clubpal-avatars;
       /usr/bin/mc mb --ignore-existing clubpal/clubpal-events;
+      /usr/bin/mc mb --ignore-existing clubpal/clubpal-cache;
       /usr/bin/mc anonymous set download clubpal/clubpal-avatars;
       /usr/bin/mc anonymous set download clubpal/clubpal-events;
-      /usr/bin/mc mb --ignore-existing clubpal/clubpal-cache;
+      /usr/bin/mc anonymous set download clubpal/clubpal-cache;
       exit 0;"
     restart: on-failure
 
@@ -92,7 +91,7 @@ services:
   # Single public port: 9000 → 80 (override with APP_PORT)
   # ===========================================
   nginx:
-    image: ghcr.io/${GHCR_OWNER:?Set GHCR_OWNER to your GitHub username or org}/clubpal-nginx:${IMAGE_TAG:-latest}
+    image: ghcr.io/palstack-io/clubpal-nginx:${IMAGE_TAG:-latest}
     container_name: clubpal-nginx
     ports:
       - "${APP_PORT:-9000}:80"
@@ -120,7 +119,7 @@ services:
   # API Gateway — Auth, Users, Invites
   # ===========================================
   api-gateway:
-    image: ghcr.io/${GHCR_OWNER}/clubpal-api-gateway:${IMAGE_TAG:-latest}
+    image: ghcr.io/palstack-io/clubpal-api-gateway:${IMAGE_TAG:-latest}
     container_name: clubpal-api-gateway
     expose:
       - "8001"
@@ -132,11 +131,15 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - FROM_EMAIL=${FROM_EMAIL:-noreply@palstack.io}
       - FROM_NAME=${FROM_NAME:-clubPal}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:9000}
       - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio:9000}
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-clubpal}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
       - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-http://localhost:9000/storage}
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - OIDC_PROVIDERS=${OIDC_PROVIDERS:-}
     networks:
       - clubpal-network
     depends_on:
@@ -156,7 +159,7 @@ services:
   # Groups Service — Groups, Members, Rotation
   # ===========================================
   groups-service:
-    image: ghcr.io/${GHCR_OWNER}/clubpal-groups-service:${IMAGE_TAG:-latest}
+    image: ghcr.io/palstack-io/clubpal-groups-service:${IMAGE_TAG:-latest}
     container_name: clubpal-groups-service
     expose:
       - "8002"
@@ -185,7 +188,7 @@ services:
   # Events Service — Events, Attendees, Comments
   # ===========================================
   events-service:
-    image: ghcr.io/${GHCR_OWNER}/clubpal-events-service:${IMAGE_TAG:-latest}
+    image: ghcr.io/palstack-io/clubpal-events-service:${IMAGE_TAG:-latest}
     container_name: clubpal-events-service
     expose:
       - "8003"
@@ -218,7 +221,7 @@ services:
   # Ratings Service — Ratings, Stats, Leaderboard
   # ===========================================
   ratings-service:
-    image: ghcr.io/${GHCR_OWNER}/clubpal-ratings-service:${IMAGE_TAG:-latest}
+    image: ghcr.io/palstack-io/clubpal-ratings-service:${IMAGE_TAG:-latest}
     container_name: clubpal-ratings-service
     expose:
       - "8004"
@@ -245,7 +248,7 @@ services:
   # Activities Service — Activity Types, Categories
   # ===========================================
   activities-service:
-    image: ghcr.io/${GHCR_OWNER}/clubpal-activities-service:${IMAGE_TAG:-latest}
+    image: ghcr.io/palstack-io/clubpal-activities-service:${IMAGE_TAG:-latest}
     container_name: clubpal-activities-service
     expose:
       - "8005"
@@ -265,10 +268,10 @@ services:
       start_period: 15s
 
   # ===========================================
-  # Enrichment Service — External API cache
+  # Enrichment Service — External API cache (Places, Books, TMDB, IGDB)
   # ===========================================
   enrichment-service:
-    image: ghcr.io/${GHCR_OWNER}/clubpal-enrichment-service:${IMAGE_TAG:-latest}
+    image: ghcr.io/palstack-io/clubpal-enrichment-service:${IMAGE_TAG:-latest}
     container_name: clubpal-enrichment-service
     expose:
       - "8006"
@@ -285,12 +288,23 @@ services:
       - CACHE_TTL_SEARCH=${CACHE_TTL_SEARCH:-86400}
       - CACHE_TTL_DETAIL=${CACHE_TTL_DETAIL:-604800}
       - CACHE_TTL_GEOCODE=${CACHE_TTL_GEOCODE:-2592000}
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-}
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - FROM_EMAIL=${FROM_EMAIL:-noreply@palstack.io}
+      - FROM_NAME=${FROM_NAME:-clubPal}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:9000}
     networks:
       - clubpal-network
     depends_on:
       db:
         condition: service_healthy
       minio:
+        condition: service_healthy
+      api-gateway:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:

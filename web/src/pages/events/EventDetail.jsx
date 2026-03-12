@@ -261,6 +261,7 @@ export default function EventDetail() {
               eventStatus={event.status}
               onRsvpChange={handleRsvp}
               rsvpDeadline={event.rsvp_deadline}
+              maxAttendees={event.max_attendees}
             />
             <EventMetaCard
               event={event}

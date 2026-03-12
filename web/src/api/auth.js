@@ -54,4 +54,13 @@ export const authApi = {
 
   refreshPreferences: () =>
     gatewayClient.post('/users/me/preferences/refresh').then(r => r.data),
+
+  oidcLogin: (idToken, provider = 'google') =>
+    gatewayClient.post('/auth/oidc', { provider, id_token: idToken }).then(r => r.data),
+
+  linkOidc: (idToken, provider = 'google') =>
+    gatewayClient.post('/auth/link', { provider, id_token: idToken }).then(r => r.data),
+
+  unlinkOidc: (provider) =>
+    gatewayClient.delete(`/auth/link/${provider}`).then(r => r.data),
 }

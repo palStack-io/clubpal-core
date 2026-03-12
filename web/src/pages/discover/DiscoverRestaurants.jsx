@@ -67,12 +67,12 @@ export default function DiscoverRestaurants() {
     finally { setLoading(false) }
   }
 
-  const doSearch = async (q) => {
+  const doSearch = async (q, location) => {
     if (!q) { setSubType('all'); return loadPersonalFeed() }
     setLoading(true)
     setSetupRequired(false)
     try {
-      const data = await enrichApi.searchPlaces({ query: q, type: 'restaurant' })
+      const data = await enrichApi.searchPlaces({ query: q, type: 'restaurant', location: location || undefined })
       setResults(data?.results || data || [])
     } catch { setResults([]) }
     finally { setLoading(false) }

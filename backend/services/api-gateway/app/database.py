@@ -40,12 +40,36 @@ def init_db():
     for col, definition in [
         ("avatar_url", "TEXT"),
         ("is_active", "INTEGER DEFAULT 1"),
-        ("password_changed", "INTEGER DEFAULT 1"),
     ]:
         try:
             cursor.execute(f"ALTER TABLE users ADD COLUMN IF NOT EXISTS {col} {definition}")
         except Exception:
             pass
+
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS password_changed INTEGER DEFAULT 1")
+    except Exception:
+        pass
+
+    # OIDC — store the provider:sub identifier (e.g. "google:1234567890")
+    try:
+        cursor.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS oidc_sub TEXT")
+        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_oidc_sub ON users(oidc_sub) WHERE oidc_sub IS NOT NULL")
+    except Exception:
+        pass
+
+    # Short-lived tokens for pending OIDC account-link confirmations (Apple only)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS oidc_pending_links (
+            token      TEXT PRIMARY KEY,
+            oidc_sub   TEXT NOT NULL,
+            email      TEXT NOT NULL,
+            full_name  TEXT,
+            avatar_url TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TIMESTAMP NOT NULL
+        )
+    """)
 
     # Sessions table
     cursor.execute("""
@@ -290,6 +314,14 @@ def get_user_by_email(email: str) -> dict:
     conn.close()
 
     return dict(row) if row else None
+
+
+def get_user_count() -> int:
+    """Return the total number of registered users."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) FROM users")
+    return cursor.fetchone()[0]
 
 
 def get_user_by_id(user_id: int) -> dict:
@@ -645,6 +677,19 @@ def delete_session_by_token_for_user(token: str, user_id: int) -> bool:
 
 
 # Admin user management
+def get_admin_emails() -> list:
+    """Return email addresses of all admin users, oldest first.
+    Used as fallback alert recipients when ADMIN_EMAIL env var is not set."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT email FROM users WHERE is_admin = 1 AND is_active = 1 ORDER BY created_at ASC"
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [row["email"] for row in rows if row["email"]]
+
+
 def get_all_users(limit: int = 100, offset: int = 0) -> list:
     """Get all users (admin only)."""
     conn = get_db()
@@ -903,3 +948,109 @@ def mark_all_notifications_read(user_id: int) -> None:
     cursor.execute("UPDATE user_notifications SET read = 1 WHERE user_id = %s", (user_id,))
     conn.commit()
     conn.close()
+
+
+# ── OIDC helpers ──────────────────────────────────────────────────────────────
+
+import re as _re
+
+
+def get_user_by_oidc_sub(oidc_sub: str):
+    """Get user by OIDC subject identifier (e.g. 'google:1234567890')."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM users WHERE oidc_sub = %s", (oidc_sub,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def link_oidc_sub(user_id: int, oidc_sub: str) -> None:
+    """Associate an OIDC subject identifier with an existing user."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET oidc_sub = %s WHERE id = %s", (oidc_sub, user_id))
+    conn.commit()
+    conn.close()
+
+
+def unlink_oidc_sub(user_id: int) -> None:
+    """Remove the OIDC subject identifier from a user."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET oidc_sub = NULL WHERE id = %s", (user_id,))
+    conn.commit()
+    conn.close()
+
+
+def _unique_username(base: str, cursor) -> str:
+    """Generate a unique username derived from `base`."""
+    # Strip non-alphanumeric chars (keep _ -)
+    clean = _re.sub(r'[^a-z0-9_-]', '', base.lower())[:30] or 'user'
+    candidate = clean
+    suffix = 1
+    while True:
+        cursor.execute("SELECT id FROM users WHERE username = %s", (candidate,))
+        if not cursor.fetchone():
+            return candidate
+        candidate = f"{clean}{suffix}"
+        suffix += 1
+
+
+def create_pending_link(oidc_sub: str, email: str, full_name: str = None, avatar_url: str = None) -> str:
+    """Store a short-lived token for a pending OIDC link confirmation (5-min TTL)."""
+    import secrets
+    token = secrets.token_urlsafe(32)
+    conn = get_db()
+    cursor = conn.cursor()
+    # Clean up expired tokens first
+    cursor.execute("DELETE FROM oidc_pending_links WHERE expires_at < NOW()")
+    cursor.execute("""
+        INSERT INTO oidc_pending_links (token, oidc_sub, email, full_name, avatar_url, expires_at)
+        VALUES (%s, %s, %s, %s, %s, NOW() + INTERVAL '5 minutes')
+        ON CONFLICT (token) DO NOTHING
+    """, (token, oidc_sub, email, full_name, avatar_url))
+    conn.commit()
+    conn.close()
+    return token
+
+
+def consume_pending_link(token: str) -> dict:
+    """Return and delete the pending link record if it exists and hasn't expired."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        DELETE FROM oidc_pending_links
+        WHERE token = %s AND expires_at > NOW()
+        RETURNING oidc_sub, email, full_name, avatar_url
+    """, (token,))
+    row = cursor.fetchone()
+    conn.commit()
+    conn.close()
+    return dict(row) if row else None
+
+
+def create_oidc_user(email: str, full_name: str, oidc_sub: str, avatar_url: str = None) -> int:
+    """Create a user that signed up via OIDC. No password needed."""
+    conn = get_db()
+    cursor = conn.cursor()
+    # Derive username from email prefix
+    base = email.split('@')[0]
+    username = _unique_username(base, cursor)
+    try:
+        cursor.execute(
+            """INSERT INTO users
+               (username, email, password_hash, full_name, email_verified,
+                password_changed, oidc_sub, avatar_url)
+               VALUES (%s, %s, %s, %s, 1, 1, %s, %s)
+               RETURNING id""",
+            (username, email.lower(), '', full_name, oidc_sub, avatar_url)
+        )
+        user_id = cursor.fetchone()['id']
+        conn.commit()
+        return user_id
+    except psycopg2.IntegrityError as e:
+        conn.rollback()
+        raise ValueError(f"OIDC user creation failed: {e}")
+    finally:
+        conn.close()

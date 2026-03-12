@@ -3,7 +3,7 @@
 .gitignore
 .github/
 
-# Claude Code workspace
+# Local tool workspace
 .claude/
 
 # Python caches
@@ -21,6 +21,9 @@ web/.vite/
 .env
 .env.local
 **/.env.local
+
+# Deployment files with live credentials
+docker-compose.deploy.yml
 
 # Logs
 nginx/logs/

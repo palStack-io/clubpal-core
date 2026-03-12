@@ -4,7 +4,11 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 import os
 import uuid
+import json
 import httpx
+from datetime import datetime, timedelta
+from jose import jwt as jose_jwt
+from cachetools import TTLCache
 
 from app.models import (
     UserCreate, UserLogin, UserResponse, SessionResponse,
@@ -12,10 +16,11 @@ from app.models import (
     InviteResponse, InviteValidateResponse, InviteAcceptResponse,
     EmailVerifyRequest, ForgotPasswordRequest, ResetPasswordRequest,
     AdminUserCreate, UserProfileUpdate, UserAdminUpdate, SessionInfo,
-    UserPreferencesUpdate, UserPreferencesResponse
+    UserPreferencesUpdate, UserPreferencesResponse,
+    OIDCAuthRequest,
 )
 from app.database import (
-    init_db, create_user, get_user_by_username, get_user_by_email,
+    init_db, create_user, get_user_count, get_user_by_username, get_user_by_email,
     get_user_by_id, verify_password, update_last_login, create_session,
     get_user_by_session, delete_session, cleanup_expired_sessions,
     create_invite_token, get_invite_by_token, mark_invite_accepted,
@@ -23,13 +28,15 @@ from app.database import (
     create_reset_token, verify_reset_token, update_user_password,
     update_user_profile, get_sessions_for_user, delete_session_by_token_for_user,
     delete_sessions_except,
-    get_all_users, admin_update_user, deactivate_user,
+    get_all_users, admin_update_user, deactivate_user, get_admin_emails,
     get_all_integrations, set_integration, delete_integration,
     get_notification_prefs, set_notification_prefs,
     upsert_push_token, get_push_tokens_for_users,
     create_notification, get_notifications_for_user,
     mark_notification_read, mark_all_notifications_read,
-    get_user_preferences, upsert_user_preferences
+    get_user_preferences, upsert_user_preferences,
+    get_user_by_oidc_sub, link_oidc_sub, create_oidc_user, unlink_oidc_sub,
+    create_pending_link, consume_pending_link,
 )
 from app.email_service import email_service
 from app import storage
@@ -52,6 +59,96 @@ ENRICHMENT_SERVICE_URL = "http://enrichment-service:8006"
 # Internal service secret — shared with enrichment-service to protect /internal/* endpoints
 INTERNAL_API_SECRET = os.environ.get("INTERNAL_API_SECRET", "")
 
+# Admin alert email — receives quota-exceeded notifications
+ADMIN_EMAIL = os.environ.get("ADMIN_EMAIL", "")
+
+# ── OIDC configuration ────────────────────────────────────────────────────────
+# GOOGLE_CLIENT_ID — set this env var to enable Google sign-in.
+GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "")
+# OIDC_PROVIDERS — JSON array of additional providers, e.g.:
+#   [{"name":"myidp","client_id":"...","discovery_url":"https://.../.well-known/openid-configuration"}]
+_OIDC_PROVIDERS_JSON = os.environ.get("OIDC_PROVIDERS", "[]")
+
+# Cache for OIDC discovery docs and JWKS (TTL=1 hour)
+_oidc_cache: TTLCache = TTLCache(maxsize=32, ttl=3600)
+
+
+async def _oidc_provider_config(provider_name: str) -> dict:
+    """Return config dict for the requested OIDC provider."""
+    if provider_name == "google" and GOOGLE_CLIENT_ID:
+        return {
+            "name": "google",
+            "client_id": GOOGLE_CLIENT_ID,
+            "discovery_url": "https://accounts.google.com/.well-known/openid-configuration",
+        }
+    try:
+        extra = json.loads(_OIDC_PROVIDERS_JSON)
+    except Exception:
+        extra = []
+    for p in extra:
+        if p.get("name") == provider_name:
+            return p
+    raise HTTPException(status_code=400, detail=f"Unknown or unconfigured OIDC provider: {provider_name}")
+
+
+async def _fetch_jwks(discovery_url: str) -> list:
+    """Fetch JWKS keys from the provider's discovery document. Cached for 1 h."""
+    cache_key = f"jwks:{discovery_url}"
+    if cache_key in _oidc_cache:
+        return _oidc_cache[cache_key]
+    async with httpx.AsyncClient(timeout=10) as client:
+        disc_resp = await client.get(discovery_url)
+        disc_resp.raise_for_status()
+        jwks_uri = disc_resp.json()["jwks_uri"]
+        jwks_resp = await client.get(jwks_uri)
+        jwks_resp.raise_for_status()
+        keys = jwks_resp.json().get("keys", [])
+    _oidc_cache[cache_key] = keys
+    return keys
+
+
+async def _verify_id_token(id_token: str, provider: dict) -> dict:
+    """Verify an OIDC ID token (RS256). Returns claims dict."""
+    keys = await _fetch_jwks(provider["discovery_url"])
+    # Select matching key by kid header
+    try:
+        header = jose_jwt.get_unverified_header(id_token)
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail=f"Malformed ID token: {exc}")
+    kid = header.get("kid")
+    alg = header.get("alg", "RS256")
+    matching = next((k for k in keys if not kid or k.get("kid") == kid), None)
+    if not matching:
+        raise HTTPException(status_code=401, detail="No matching JWKS key found for token")
+    try:
+        claims = jose_jwt.decode(
+            id_token, matching, algorithms=[alg], audience=provider["client_id"]
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail=f"ID token verification failed: {exc}")
+    return claims
+
+
+async def _fetch_userinfo(access_token: str, discovery_url: str) -> dict:
+    """Fetch userinfo from the provider's userinfo endpoint."""
+    cache_key = f"disc:{discovery_url}"
+    if cache_key in _oidc_cache:
+        userinfo_endpoint = _oidc_cache[cache_key]
+    else:
+        async with httpx.AsyncClient(timeout=10) as client:
+            disc_resp = await client.get(discovery_url)
+            disc_resp.raise_for_status()
+            userinfo_endpoint = disc_resp.json()["userinfo_endpoint"]
+        _oidc_cache[cache_key] = userinfo_endpoint
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.get(
+            userinfo_endpoint, headers={"Authorization": f"Bearer {access_token}"}
+        )
+        if resp.status_code != 200:
+            raise HTTPException(status_code=401, detail="Access token rejected by OIDC provider")
+        return resp.json()
+
+
 # Integration key names (stored in DB)
 INTEGRATION_KEYS = [
     "google_api_key", "tmdb_api_key", "igdb_client_id", "igdb_client_secret",
@@ -65,15 +162,6 @@ async def startup():
     init_db()
     cleanup_expired_sessions()
     storage.ensure_buckets()
-    # Seed default admin account if it doesn't exist
-    if not get_user_by_username("admin"):
-        try:
-            create_user("admin", "admin@clubpal.local", "admin",
-                        full_name="Admin", is_admin=True, email_verified=True,
-                        password_changed=False)
-            print("Seeded default admin user (admin/admin) — CHANGE THIS PASSWORD")
-        except Exception as e:
-            print(f"Admin seed skipped: {e}")
     if not INTERNAL_API_SECRET:
         print("WARNING: INTERNAL_API_SECRET is not set — /internal/* endpoints are unprotected")
     print("API Gateway started")
@@ -102,6 +190,8 @@ def get_admin_user(current_user: dict = Depends(get_current_user)) -> dict:
 
 def user_to_response(user: dict) -> UserResponse:
     """Convert database user to response model."""
+    oidc_sub = user.get("oidc_sub") or ""
+    linked_providers = [oidc_sub.split(":")[0]] if oidc_sub else []
     return UserResponse(
         id=user["id"],
         username=user["username"],
@@ -114,7 +204,9 @@ def user_to_response(user: dict) -> UserResponse:
         onboarding_complete=bool(user.get("onboarding_complete", 0)),
         password_changed=bool(user.get("password_changed", 1)),
         created_at=user["created_at"],
-        last_login_at=user.get("last_login_at")
+        last_login_at=user.get("last_login_at"),
+        linked_providers=linked_providers,
+        has_password=bool(user.get("password_hash", "")),
     )
 
 
@@ -138,13 +230,18 @@ async def register(user_data: UserCreate):
     if get_user_by_email(user_data.email):
         raise HTTPException(status_code=400, detail="Email already registered")
 
+    # First user to register becomes admin automatically
+    is_first_user = get_user_count() == 0
+
     # Create user
     try:
         user_id = create_user(
             username=user_data.username,
             email=user_data.email,
             password=user_data.password,
-            full_name=user_data.full_name
+            full_name=user_data.full_name,
+            is_admin=is_first_user,
+            email_verified=is_first_user,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -185,6 +282,173 @@ async def login(credentials: UserLogin):
         session_token=session_token,
         expires_at=expires_at
     )
+
+
+@app.post("/auth/oidc", response_model=SessionResponse)
+async def oidc_login(req: OIDCAuthRequest):
+    """Sign in or register using an OIDC provider (Google, etc.).
+
+    Send either `id_token` (preferred — a signed JWT from the provider) or
+    `access_token` (the provider's opaque access token; the backend will call
+    the userinfo endpoint to exchange it for profile data).
+    """
+    provider = await _oidc_provider_config(req.provider)
+
+    if req.id_token:
+        claims = await _verify_id_token(req.id_token, provider)
+        sub = claims.get("sub")
+        email = claims.get("email", "")
+        full_name = claims.get("name")
+        avatar_url = claims.get("picture")
+    elif req.access_token:
+        info = await _fetch_userinfo(req.access_token, provider["discovery_url"])
+        sub = info.get("sub")
+        email = info.get("email", "")
+        full_name = info.get("name")
+        avatar_url = info.get("picture")
+    else:
+        raise HTTPException(status_code=400, detail="Provide id_token or access_token")
+
+    if not sub:
+        raise HTTPException(status_code=401, detail="OIDC provider did not return a subject claim")
+    if not email:
+        raise HTTPException(status_code=400, detail="OIDC provider did not return an email address")
+
+    oidc_sub = f"{req.provider}:{sub}"
+
+    # 1. Find user by OIDC sub (already linked)
+    user = get_user_by_oidc_sub(oidc_sub)
+
+    # 2. Email matches an existing account — linking behaviour differs by provider:
+    #    • Google (email verified by Google) → auto-link silently
+    #    • Apple (or any other provider)    → require explicit confirmation via link_token
+    if not user:
+        existing = get_user_by_email(email)
+        if existing:
+            if req.provider == "google":
+                # Trusted provider: auto-link
+                link_oidc_sub(existing["id"], oidc_sub)
+                user = get_user_by_id(existing["id"])
+            else:
+                # Prompt the user to confirm before linking
+                link_token = create_pending_link(oidc_sub, email, full_name, avatar_url)
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "code": "LINK_REQUIRED",
+                        "link_token": link_token,
+                        "email": email,
+                        "provider": req.provider,
+                        "message": (
+                            f"An account with this email already exists. "
+                            f"Confirm to link your {req.provider.capitalize()} account."
+                        ),
+                    },
+                )
+
+    # 3. Create brand-new OIDC-only user
+    if not user:
+        try:
+            user_id = create_oidc_user(email, full_name, oidc_sub, avatar_url)
+            user = get_user_by_id(user_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+    if not user.get("is_active", 1):
+        raise HTTPException(status_code=403, detail="Account is disabled")
+
+    session_token, expires_at = create_session(user["id"])
+    update_last_login(user["id"])
+
+    return SessionResponse(
+        user=user_to_response(user),
+        session_token=session_token,
+        expires_at=expires_at,
+    )
+
+
+@app.post("/auth/oidc/confirm-link", response_model=SessionResponse)
+async def confirm_oidc_link(body: dict):
+    """Consume a pending OIDC link token (issued during Apple sign-in) and link the accounts.
+
+    Body: { "link_token": "<token>" }
+    Returns a full session just like /auth/oidc would.
+    """
+    link_token = body.get("link_token", "").strip()
+    if not link_token:
+        raise HTTPException(status_code=400, detail="link_token is required")
+
+    pending = consume_pending_link(link_token)
+    if not pending:
+        raise HTTPException(status_code=410, detail="Link token is invalid or has expired. Please sign in again.")
+
+    oidc_sub   = pending["oidc_sub"]
+    email      = pending["email"]
+    full_name  = pending.get("full_name")
+    avatar_url = pending.get("avatar_url")
+
+    # Find the existing account by email and link it
+    existing = get_user_by_email(email)
+    if not existing:
+        # Edge case: account was deleted between token creation and confirmation → create fresh
+        try:
+            user_id = create_oidc_user(email, full_name, oidc_sub, avatar_url)
+            user = get_user_by_id(user_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+    else:
+        link_oidc_sub(existing["id"], oidc_sub)
+        user = get_user_by_id(existing["id"])
+
+    if not user.get("is_active", 1):
+        raise HTTPException(status_code=403, detail="Account is disabled")
+
+    session_token, expires_at = create_session(user["id"])
+    update_last_login(user["id"])
+    return SessionResponse(
+        user=user_to_response(user),
+        session_token=session_token,
+        expires_at=expires_at,
+    )
+
+
+@app.post("/auth/link", response_model=UserResponse)
+async def link_oidc_account(req: OIDCAuthRequest, current_user: dict = Depends(get_current_user)):
+    """Link an OIDC provider (Google, Apple) to the currently logged-in account."""
+    provider = await _oidc_provider_config(req.provider)
+
+    if req.id_token:
+        claims = await _verify_id_token(req.id_token, provider)
+        sub = claims.get("sub")
+    elif req.access_token:
+        info = await _fetch_userinfo(req.access_token, provider["discovery_url"])
+        sub = info.get("sub")
+    else:
+        raise HTTPException(status_code=400, detail="Provide id_token or access_token")
+
+    if not sub:
+        raise HTTPException(status_code=401, detail="OIDC provider did not return a subject claim")
+
+    oidc_sub = f"{req.provider}:{sub}"
+
+    # Make sure this sub isn't already linked to a different account
+    existing = get_user_by_oidc_sub(oidc_sub)
+    if existing and existing["id"] != current_user["id"]:
+        raise HTTPException(status_code=409, detail="This social account is already linked to a different user")
+
+    link_oidc_sub(current_user["id"], oidc_sub)
+    updated_user = get_user_by_id(current_user["id"])
+    return user_to_response(updated_user)
+
+
+@app.delete("/auth/link/{provider}", status_code=200)
+async def unlink_oidc_account(provider: str, current_user: dict = Depends(get_current_user)):
+    """Remove an OIDC provider link from the current account."""
+    oidc_sub = current_user.get("oidc_sub") or ""
+    if not oidc_sub.startswith(f"{provider}:"):
+        raise HTTPException(status_code=404, detail=f"{provider} is not linked to this account")
+    unlink_oidc_sub(current_user["id"])
+    return {"message": f"Unlinked {provider} successfully"}
 
 
 @app.post("/auth/logout")
@@ -525,6 +789,22 @@ async def change_password(
     return {"message": "Password changed successfully"}
 
 
+class SetPasswordRequest(BaseModel):
+    new_password: str = Field(..., min_length=8)
+
+
+@app.post("/auth/set-password")
+async def set_password(
+    request: SetPasswordRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """Set a password for an OIDC-only account that has no password yet."""
+    if current_user.get("password_hash", ""):
+        raise HTTPException(status_code=400, detail="Account already has a password — use change-password instead")
+    update_user_password(current_user["id"], request.new_password)
+    return {"message": "Password set successfully"}
+
+
 # ===== Admin Endpoints =====
 
 # ===== Storage Endpoints =====
@@ -587,6 +867,20 @@ async def list_users(limit: int = 100, offset: int = 0,
     """Admin: list all users."""
     users = get_all_users(limit=limit, offset=offset)
     return [user_to_response(u) for u in users]
+
+
+@app.get("/users/{user_id}/profile")
+async def get_user_public_profile(user_id: int, current_user: dict = Depends(get_current_user)):
+    """Get a user's public profile (id, username, full_name, avatar_url)."""
+    user = get_user_by_id(user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    return {
+        "id": user["id"],
+        "username": user["username"],
+        "full_name": user.get("full_name"),
+        "avatar_url": user.get("avatar_url"),
+    }
 
 
 @app.patch("/users/{user_id}", response_model=UserResponse)
@@ -708,6 +1002,24 @@ async def remove_integration(key: str, admin: dict = Depends(get_admin_user)):
         raise HTTPException(status_code=400, detail="Unknown integration key")
     delete_integration(key)
     return {"ok": True}
+
+
+# ===== API Quota Block Management =====
+
+@app.post("/admin/api-blocks/{api_name}/approve")
+async def approve_api_block(api_name: str, admin: dict = Depends(get_admin_user)):
+    """Admin: lift a quota-exceeded block so the API can resume calls."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                f"{ENRICHMENT_SERVICE_URL}/api-usage/unblock/{api_name}",
+                params={"unblocked_by": admin.get("email", admin.get("username", "admin"))}
+            )
+            resp.raise_for_status()
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=f"Could not reach enrichment service: {e}")
+
+    return {"api_name": api_name, "approved_by": admin.get("email", admin.get("username")), "unblocked": True}
 
 
 # ===== Notification Preferences =====
@@ -842,8 +1154,10 @@ async def refresh_my_preferences(current_user: dict = Depends(get_current_user))
 # ===== Push token + In-app notification endpoints =====
 
 @app.post("/users/{user_id}/push-token", status_code=204)
-async def save_push_token(user_id: int, data: dict):
+async def save_push_token(user_id: int, data: dict, current_user: dict = Depends(get_current_user)):
     """Store an Expo push token for a user (called from mobile on login/register)."""
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     token = data.get("token", "")
     platform = data.get("platform", "unknown")
     if token:
@@ -851,8 +1165,10 @@ async def save_push_token(user_id: int, data: dict):
 
 
 @app.get("/users/{user_id}/notifications")
-async def get_user_notifications(user_id: int):
+async def get_user_notifications(user_id: int, current_user: dict = Depends(get_current_user)):
     """Fetch in-app notifications for a user (newest first)."""
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     notifs = get_notifications_for_user(user_id)
     return [
         {**n, "read": bool(n["read"])}
@@ -861,12 +1177,16 @@ async def get_user_notifications(user_id: int):
 
 
 @app.put("/users/{user_id}/notifications/{notif_id}/read", status_code=204)
-async def mark_notif_read(user_id: int, notif_id: int):
+async def mark_notif_read(user_id: int, notif_id: int, current_user: dict = Depends(get_current_user)):
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     mark_notification_read(notif_id, user_id)
 
 
 @app.put("/users/{user_id}/notifications/read-all", status_code=204)
-async def mark_all_notifs_read(user_id: int):
+async def mark_all_notifs_read(user_id: int, current_user: dict = Depends(get_current_user)):
+    if current_user["id"] != user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
     mark_all_notifications_read(user_id)
 
 
@@ -919,8 +1239,10 @@ class EventNotifyRequest(BaseModel):
 
 
 @app.post("/internal/notify/rotation", status_code=202)
-async def notify_rotation(req: RotationNotifyRequest):
+async def notify_rotation(req: RotationNotifyRequest, x_internal_secret: Optional[str] = Header(None)):
     """Internal: send rotation-alert email + push + in-app to a user if opted in."""
+    if INTERNAL_API_SECRET and x_internal_secret != INTERNAL_API_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
     user = get_user_by_id(req.user_id)
     if not user or not user.get("email"):
         return {"sent": False, "reason": "user not found"}
@@ -953,12 +1275,14 @@ async def notify_rotation(req: RotationNotifyRequest):
 
 
 @app.post("/internal/notify/event", status_code=202)
-async def notify_event(req: EventNotifyRequest):
+async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str] = Header(None)):
     """Internal: send event/poll notifications (email + push + in-app).
 
     Accepts either an explicit ``user_ids`` list or a ``group_id`` — in the
     latter case the gateway fetches the current member list from groups-service.
     """
+    if INTERNAL_API_SECRET and x_internal_secret != INTERNAL_API_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
     # ── Resolve recipient list ───────────────────────────────────────────────
     user_ids = req.user_ids or []
     group_name = req.group_name or "your group"
@@ -1102,6 +1426,18 @@ async def internal_integrations(x_internal_secret: Optional[str] = Header(None))
         raise HTTPException(status_code=403, detail="Forbidden")
     stored = get_all_integrations()
     return {k: v for k, v in stored.items() if k in INTEGRATION_KEYS}
+
+
+@app.get("/internal/admin-email")
+async def internal_admin_email(x_internal_secret: Optional[str] = Header(None)):
+    """Internal-only: return alert recipient emails (ADMIN_EMAIL env var or first admin user)."""
+    if INTERNAL_API_SECRET and x_internal_secret != INTERNAL_API_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    # Explicit env var takes priority; otherwise use the first admin user's email
+    if ADMIN_EMAIL:
+        return {"emails": [ADMIN_EMAIL]}
+    emails = get_admin_emails()
+    return {"emails": emails}
 
 
 if __name__ == "__main__":

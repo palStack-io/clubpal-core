@@ -1,35 +1,9 @@
-import { Link } from 'react-router-dom'
 import Sidebar from './Sidebar'
+import { useAuth } from '../../contexts/AuthContext'
 
-function DefaultPasswordBanner() {
-  return (
-    <div style={{
-      background: 'rgba(239,68,68,0.12)',
-      borderBottom: '1px solid rgba(239,68,68,0.35)',
-      padding: '10px 20px',
-      display: 'flex',
-      alignItems: 'center',
-      gap: '10px',
-      flexShrink: 0,
-    }}>
-      <span style={{ fontSize: '16px' }}>⚠️</span>
-      <span style={{ color: '#fca5a5', fontSize: '13px', fontWeight: 500 }}>
-        You're using the default admin password.{' '}
-        <Link
-          to="/settings"
-          state={{ scrollTo: 'security' }}
-          style={{ color: '#f87171', textDecoration: 'underline', fontWeight: 600 }}
-        >
-          Change it now
-        </Link>
-        {' '}to secure your deployment.
-      </span>
-    </div>
-  )
-}
-
-export default function AppShell({ children, activeRoute, user, groupCount = 0, notifCount = 0 }) {
-  const showDefaultPasswordWarning = user?.is_admin && user?.password_changed === false
+export default function AppShell({ children, activeRoute, user: userProp, groupCount = 0, notifCount = 0 }) {
+  const { user: authUser } = useAuth()
+  const user = userProp || authUser
 
   return (
     <div
@@ -54,8 +28,29 @@ export default function AppShell({ children, activeRoute, user, groupCount = 0, 
           minHeight: '100vh',
         }}
       >
-        {showDefaultPasswordWarning && <DefaultPasswordBanner />}
         {children}
+        {/* Footer */}
+        <div style={{
+          marginTop: 'auto',
+          padding: '16px 24px',
+          borderTop: '1px solid var(--glass)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+        }}>
+          <img src="/palStack.png" alt="palStack" style={{ height: '12px', objectFit: 'contain', opacity: 0.5 }} />
+          <span style={{ fontSize: '11px', color: 'var(--t4)' }}>Part of</span>
+          <a
+            href="https://palstack.io"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ fontSize: '11px', color: 'var(--t3)', fontWeight: 600, textDecoration: 'none' }}
+            onMouseEnter={e => e.target.style.color = 'var(--t2)'}
+            onMouseLeave={e => e.target.style.color = 'var(--t3)'}
+          >
+            palStack.io
+          </a>
+        </div>
       </div>
     </div>
   )

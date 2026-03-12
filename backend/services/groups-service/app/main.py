@@ -83,7 +83,8 @@ async def create_group_endpoint(group_data: GroupCreate, user_id: int = Depends(
             name=group_data.name,
             created_by=user_id,
             description=group_data.description,
-            rotation_type=group_data.rotation_type
+            rotation_type=group_data.rotation_type,
+            activity_type=group_data.activity_type,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -134,6 +135,7 @@ async def update_group_endpoint(group_id: int, group_data: GroupUpdate, user_id:
         bg_type=group_data.bg_type,
         bg_value=group_data.bg_value,
         bg_scope=group_data.bg_scope,
+        activity_type=group_data.activity_type,
     )
 
     if not success:
@@ -594,12 +596,12 @@ async def close_poll_endpoint(poll_id: int, user_id: int = Depends(get_current_u
 
 
 @app.post("/polls/{poll_id}/convert", response_model=PollResponseModel)
-async def convert_poll_endpoint(poll_id: int, data: PollConvert):
+async def convert_poll_endpoint(poll_id: int, data: PollConvert, user_id: int = Depends(get_current_user_id)):
     """Convert a poll to an event (creator only)."""
     poll = get_poll(poll_id)
     if not poll:
         raise HTTPException(status_code=404, detail="Poll not found")
-    if poll['created_by'] != data.user_id:
+    if poll['created_by'] != user_id:
         raise HTTPException(status_code=403, detail="Only the creator can convert this poll")
     if poll['status'] == 'converted':
         raise HTTPException(status_code=400, detail="Poll already converted")
@@ -609,7 +611,7 @@ async def convert_poll_endpoint(poll_id: int, data: PollConvert):
         try:
             resp = await client.post(
                 f"{EVENTS_SERVICE_URL}/events",
-                params={"user_id": data.user_id},
+                params={"user_id": user_id},
                 json={
                     "group_id": poll['group_id'],
                     "title": poll['activity_name'],
@@ -618,6 +620,7 @@ async def convert_poll_endpoint(poll_id: int, data: PollConvert):
                     "created_by": poll['created_by'],
                     "host_user_id": poll['created_by'],
                     "parent_recurring_id": data.recurring_schedule_id,
+                    "max_attendees": data.max_attendees,
                 },
                 timeout=10.0,
             )
@@ -633,7 +636,7 @@ async def convert_poll_endpoint(poll_id: int, data: PollConvert):
     group = get_group(poll['group_id'])
     member_count = group['member_count'] if group else 0
     poll = get_poll(poll_id)
-    summary = _build_poll_summary(poll_id, data.user_id, member_count)
+    summary = _build_poll_summary(poll_id, user_id, member_count)
     return _poll_to_model(poll, summary)
 
 

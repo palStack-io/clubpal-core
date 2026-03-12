@@ -302,7 +302,7 @@ async def get_activity_name(activity_id: int) -> Optional[str]:
 # ===== Event Endpoints =====
 
 @app.post("/events", response_model=EventResponse, status_code=201)
-async def create_event_endpoint(event_data: EventCreate, user_id: int):
+async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(get_current_user_id)):
     """Create a new event. If is_recurring=True, also registers a recurring schedule."""
     # creator may be passed explicitly from the web UI payload
     creator_id = event_data.created_by or user_id
@@ -319,6 +319,7 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int):
     event_id = create_event(
         group_id=event_data.group_id,
         activity_id=event_data.activity_id,
+        activity_type=event_data.activity_type,
         title=event_data.title,
         description=event_data.description,
         scheduled_date=event_data.scheduled_date,
@@ -327,6 +328,7 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int):
         created_by=creator_id,
         rsvp_deadline=event_data.rsvp_deadline,
         parent_recurring_id=event_data.parent_recurring_id,
+        max_attendees=event_data.max_attendees,
     )
 
     # If linked to an existing recurring schedule, advance it so the daily job
@@ -429,7 +431,7 @@ async def get_user_hosting_events(user_id: int, status: Optional[str] = None):
 
 
 @app.patch("/events/{event_id}", response_model=EventResponse)
-async def update_event_endpoint(event_id: int, event_data: EventUpdate, user_id: int):
+async def update_event_endpoint(event_id: int, event_data: EventUpdate, user_id: int = Depends(get_current_user_id)):
     """Update event details."""
     # Check if event exists
     event = get_event(event_id)
@@ -447,6 +449,7 @@ async def update_event_endpoint(event_id: int, event_data: EventUpdate, user_id:
         status=event_data.status,
         updated_by=user_id,
         rsvp_deadline=event_data.rsvp_deadline,
+        max_attendees=event_data.max_attendees,
         bg_type=event_data.bg_type,
         bg_value=event_data.bg_value,
         bg_scope=event_data.bg_scope,
@@ -460,7 +463,7 @@ async def update_event_endpoint(event_id: int, event_data: EventUpdate, user_id:
 
 
 @app.delete("/events/{event_id}", status_code=204)
-async def delete_event_endpoint(event_id: int, user_id: int):
+async def delete_event_endpoint(event_id: int, user_id: int = Depends(get_current_user_id)):
     """Delete an event."""
     event = get_event(event_id)
     if not event:
@@ -479,12 +482,23 @@ async def delete_event_endpoint(event_id: int, user_id: int):
 # ===== Attendee Endpoints =====
 
 @app.post("/events/{event_id}/rsvp", response_model=AttendeeResponse)
-async def rsvp_event(event_id: int, rsvp_data: AttendeeRSVP):
+async def rsvp_event(event_id: int, rsvp_data: AttendeeRSVP, user_id: int = Depends(get_current_user_id)):
     """Upsert an RSVP for an event — creates or updates the attendee record."""
-    if not get_event(event_id):
+    event = get_event(event_id)
+    if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    attendee = upsert_attendee(event_id, rsvp_data.user_id, rsvp_data.status)
+    # Enforce seat cap when RSVPing as "going"
+    if rsvp_data.status == "going" and event.get("max_attendees"):
+        existing = get_attendee(event_id, user_id)
+        # Only check capacity if the user isn't already "going"
+        if not existing or existing["status"] != "going":
+            attendees = get_attendees(event_id)
+            going_count = sum(1 for a in attendees if a["status"] == "going")
+            if going_count >= event["max_attendees"]:
+                raise HTTPException(status_code=409, detail="This event is full")
+
+    attendee = upsert_attendee(event_id, user_id, rsvp_data.status)
     return AttendeeResponse(**attendee)
 
 
@@ -557,7 +571,7 @@ async def remove_attendee_endpoint(event_id: int, user_id: int):
 # ===== Comment Endpoints =====
 
 @app.post("/events/{event_id}/comments", response_model=CommentResponse, status_code=201)
-async def add_comment_endpoint(event_id: int, comment_data: CommentCreate, user_id: int):
+async def add_comment_endpoint(event_id: int, comment_data: CommentCreate, user_id: int = Depends(get_current_user_id)):
     """Add a comment to an event."""
     # Check if event exists
     if not get_event(event_id):
@@ -582,7 +596,7 @@ async def get_comments_endpoint(event_id: int):
 
 
 @app.delete("/events/{event_id}/comments/{comment_id}", status_code=204)
-async def delete_comment_endpoint(event_id: int, comment_id: int, user_id: int):
+async def delete_comment_endpoint(event_id: int, comment_id: int, user_id: int = Depends(get_current_user_id)):
     """Delete a comment."""
     comment = get_comment(comment_id)
 
@@ -613,7 +627,7 @@ class UploadUrlResponse(BaseModel):
 
 @app.post("/events/{event_id}/cover/upload-url", response_model=UploadUrlResponse)
 async def get_event_cover_upload_url(event_id: int, request: EventImageUploadRequest,
-                                      user_id: int):
+                                      user_id: int = Depends(get_current_user_id)):
     """Get a pre-signed URL to upload an event cover image."""
     event = get_event(event_id)
     if not event:
@@ -634,7 +648,7 @@ async def get_event_cover_upload_url(event_id: int, request: EventImageUploadReq
 
 
 @app.post("/events/{event_id}/photos/upload-url", response_model=UploadUrlResponse)
-async def get_photo_upload_url(event_id: int, request: EventImageUploadRequest, user_id: int):
+async def get_photo_upload_url(event_id: int, request: EventImageUploadRequest, user_id: int = Depends(get_current_user_id)):
     """Get a pre-signed URL to upload a member photo for an event."""
     if not get_event(event_id):
         raise HTTPException(status_code=404, detail="Event not found")
@@ -651,7 +665,7 @@ async def get_photo_upload_url(event_id: int, request: EventImageUploadRequest, 
 
 
 @app.post("/events/{event_id}/photos/confirm", response_model=PhotoResponse, status_code=201)
-async def confirm_photo_upload(event_id: int, body: PhotoConfirmRequest, user_id: int):
+async def confirm_photo_upload(event_id: int, body: PhotoConfirmRequest, user_id: int = Depends(get_current_user_id)):
     """Save a photo to the DB after the client has PUT it to MinIO."""
     if not get_event(event_id):
         raise HTTPException(status_code=404, detail="Event not found")
@@ -678,7 +692,7 @@ async def list_photos(event_id: int):
 
 
 @app.delete("/events/{event_id}/photos/{photo_id}", status_code=204)
-async def remove_photo(event_id: int, photo_id: int, user_id: int):
+async def remove_photo(event_id: int, photo_id: int, user_id: int = Depends(get_current_user_id)):
     """Delete a photo — only the uploader can delete their own photos."""
     photo = get_photo(photo_id)
 
@@ -695,7 +709,7 @@ async def remove_photo(event_id: int, photo_id: int, user_id: int):
 # ===== Recurring Schedule Endpoints =====
 
 @app.post("/recurring-schedules", response_model=RecurringScheduleResponse, status_code=201)
-async def create_recurring_schedule_endpoint(data: RecurringScheduleCreate, user_id: int):
+async def create_recurring_schedule_endpoint(data: RecurringScheduleCreate, user_id: int = Depends(get_current_user_id)):
     """Directly create a recurring schedule (without creating the first event instance)."""
     end_dt = date.fromisoformat(data.end_date)
     first_occ = _next_occurrence(data.recurrence_rule, data.day_of_week, date.today())
@@ -742,7 +756,7 @@ async def list_recurring_schedules(group_id: int):
 
 
 @app.delete("/recurring-schedules/{schedule_id}", status_code=204)
-async def cancel_recurring_schedule(schedule_id: int, user_id: int):
+async def cancel_recurring_schedule(schedule_id: int, user_id: int = Depends(get_current_user_id)):
     """Deactivate a recurring schedule (stops future event generation)."""
     deactivate_recurring_schedule(schedule_id)
 

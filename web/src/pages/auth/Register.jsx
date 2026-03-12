@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../../contexts/AuthContext'
 import Button from '../../components/ui/Button'
 import { FormGroup, FormInput } from '../../components/ui/Form'
@@ -18,7 +19,7 @@ const PAGE = {
 }
 
 export default function Register() {
-  const { register } = useAuth()
+  const { register, loginWithGoogle } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({ fullName: '', email: '', username: '', password: '', confirmPassword: '' })
   const [loading, setLoading] = useState(false)
@@ -84,6 +85,29 @@ export default function Register() {
             Create Account
           </Button>
         </form>
+
+        {/* Divider */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', margin: '20px 0' }}>
+          <div style={{ flex: 1, height: '1px', background: 'var(--glass)' }} />
+          <span style={{ fontSize: '12px', color: 'var(--t3)' }}>or sign up with</span>
+          <div style={{ flex: 1, height: '1px', background: 'var(--glass)' }} />
+        </div>
+
+        {/* Google sign-up */}
+        <div style={{ display: 'flex', justifyContent: 'center' }}>
+          <GoogleLogin
+            theme="filled_black"
+            shape="pill"
+            text="signup_with"
+            onSuccess={async ({ credential }) => {
+              setError('')
+              const result = await loginWithGoogle(credential)
+              if (result.success) navigate('/dashboard')
+              else setError(result.error)
+            }}
+            onError={() => setError('Google sign-up failed. Please try again.')}
+          />
+        </div>
 
         <p style={{ textAlign: 'center', fontSize: '13px', color: 'var(--t3)', marginTop: '20px' }}>
           Already have an account?{' '}

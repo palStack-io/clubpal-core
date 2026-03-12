@@ -123,10 +123,15 @@ class EmailService:
             msg["Subject"] = subject
             msg.attach(MIMEText(html, "html"))
 
-            with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
-                server.starttls()
-                server.login(self.smtp_user, self.smtp_password)
-                server.send_message(msg)
+            if self.smtp_port == 465:
+                with smtplib.SMTP_SSL(self.smtp_host, self.smtp_port) as server:
+                    server.login(self.smtp_user, self.smtp_password)
+                    server.send_message(msg)
+            else:
+                with smtplib.SMTP(self.smtp_host, self.smtp_port) as server:
+                    server.starttls()
+                    server.login(self.smtp_user, self.smtp_password)
+                    server.send_message(msg)
 
             print(f"[EMAIL SENT] To: {to_email} | Subject: {subject}")
             return True
@@ -327,6 +332,30 @@ class EmailService:
             + _btn("Vote Now →", url, "#f43f5e")
             + _note(f"You're receiving this because you're a member of <strong>{group_name}</strong>. "
                     f'Update preferences in <a href="{self.frontend_url}/settings" style="color:#f43f5e;">settings</a>.')
+        )
+        return self._send(to_email, subject, _base(subject, content, self.frontend_url))
+
+    def send_quota_alert(self, to_email: str, api_name: str,
+                         today_calls: int, daily_limit: int,
+                         approve_url: str) -> bool:
+        """Notify admin that an API quota has been exhausted and the API is now blocked."""
+        subject = f"[clubPal] API quota reached — {api_name} is now blocked"
+        content = (
+            _h1("API quota reached ⚠️")
+            + _p(f"The <strong>{api_name}</strong> API has hit its daily call limit and has been "
+                 f"<strong style='color:#f43f5e;'>automatically blocked</strong> to prevent unexpected charges.")
+            + f"""
+<div style="background:#f9f9fb;border-left:3px solid #f43f5e;border-radius:0 8px 8px 0;
+            padding:14px 18px;margin:20px 0;">
+  <p style="margin:0;font-size:14px;color:#111;"><strong>API:</strong> {api_name}</p>
+  <p style="margin:6px 0 0;font-size:14px;color:#111;"><strong>Calls today:</strong> {today_calls}</p>
+  <p style="margin:6px 0 0;font-size:14px;color:#111;"><strong>Daily limit:</strong> {daily_limit}</p>
+  <p style="margin:6px 0 0;font-size:13px;color:#f43f5e;font-weight:600;">
+    Status: BLOCKED — new API calls will be skipped until you approve
+  </p>
+</div>"""
+            + _p("To resume API calls, visit the admin panel to approve the block or increase the daily limit.")
+            + _btn("Review &amp; Approve in Admin Panel", approve_url, "#f43f5e")
         )
         return self._send(to_email, subject, _base(subject, content, self.frontend_url))
 

@@ -5,6 +5,12 @@ import { eventsApi } from '../../api/events'
 import { groupsApi } from '../../api/groups'
 import { useAuth } from '../../contexts/AuthContext'
 
+const toggleStyle = (active) => ({
+  width: '40px', height: '22px', borderRadius: '11px',
+  background: active ? 'var(--rose)' : 'var(--glass)',
+  position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0,
+})
+
 const ACTIVITY = {
   dining: { emoji: '🍽️', color: '#f43f5e', rgb: '244,63,94' },
   movies: { emoji: '🎬', color: '#6366f1', rgb: '99,102,241' },
@@ -78,6 +84,8 @@ export default function CreateEventModal({
   const [userGroups, setUserGroups] = useState([])
   const [coverFile, setCoverFile] = useState(null)
   const [coverPreview, setCoverPreview] = useState(null)
+  const [maxAttendees, setMaxAttendees] = useState('')
+  const [pulseCheck, setPulseCheck] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const coverRef = useRef()
@@ -140,6 +148,7 @@ export default function CreateEventModal({
         created_by: user?.id,
         activity_type: resolvedActivity || null,
         rsvp_deadline: rsvpDeadlineISO,
+        max_attendees: maxAttendees ? parseInt(maxAttendees, 10) : null,
         ...(isRecurring && recurrence.end_date ? {
           is_recurring: true,
           recurrence_rule: recurrence.rule,
@@ -159,6 +168,13 @@ export default function CreateEventModal({
           })
           await eventsApi.update(event.id, { cover_url: urlData.public_url })
         } catch { /* non-fatal */ }
+      }
+      if (pulseCheck) {
+        groupsApi.createPoll(resolvedGroupId, user?.id, {
+          activity_name: title.trim(),
+          activity_type: resolvedActivity || 'dining',
+          note: notes.trim() || null,
+        }).catch(() => {})
       }
       onCreated && onCreated(event.id)
     } catch (err) {
@@ -236,16 +252,30 @@ export default function CreateEventModal({
           />
         </FormGroup>
 
-        <FormGroup label="Location (optional)">
-          <input
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            placeholder="123 Main St"
-            style={inputStyle}
-            onFocus={focusBorder}
-            onBlur={blurBorder}
-          />
-        </FormGroup>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px' }}>
+          <FormGroup label="Location (optional)">
+            <input
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              placeholder="123 Main St"
+              style={inputStyle}
+              onFocus={focusBorder}
+              onBlur={blurBorder}
+            />
+          </FormGroup>
+          <FormGroup label="Max Seats">
+            <input
+              type="number"
+              min="1"
+              value={maxAttendees}
+              onChange={(e) => setMaxAttendees(e.target.value)}
+              placeholder="∞"
+              style={{ ...inputStyle, width: '72px', textAlign: 'center' }}
+              onFocus={focusBorder}
+              onBlur={blurBorder}
+            />
+          </FormGroup>
+        </div>
 
         {resolvedActivity && (
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', background: `rgba(${act.rgb},0.12)`, color: act.color, fontSize: '10px', fontWeight: 700, padding: '3px 8px', borderRadius: '100px', border: `1px solid rgba(${act.rgb},0.22)` }}>
@@ -419,6 +449,17 @@ export default function CreateEventModal({
             <span style={{ fontSize: '12px', color: 'var(--rose-soft)' }}>Add a cover photo</span>
           </div>
         )}
+      </div>
+
+      {/* Pulse Check toggle */}
+      <div style={{ ...sectionStyle, display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }} onClick={() => setPulseCheck(v => !v)}>
+        <div style={toggleStyle(pulseCheck)}>
+          <div style={{ position: 'absolute', top: '2px', left: pulseCheck ? '20px' : '2px', width: '18px', height: '18px', borderRadius: '9px', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
+        </div>
+        <div>
+          <div style={{ fontSize: '13px', fontWeight: 600, color: pulseCheck ? 'var(--rose-soft)' : 'var(--t2)' }}>💬 Send Pulse Check</div>
+          <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>Ask the group how they feel about this pick after creating the event</div>
+        </div>
       </div>
 
       {/* Section 4: Notes */}

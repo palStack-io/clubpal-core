@@ -1,0 +1,370 @@
+# =============================================================================
+# clubPal — Portainer Stack (Plug-and-Play)
+# =============================================================================
+# Drop this file directly into Portainer → Stacks → Add Stack → Web editor.
+# Images are pulled from GitHub Container Registry:
+#   https://github.com/palStack-io/clubpal-core/pkgs/container
+#
+# Log in to GHCR first (only needed if packages are private):
+#   echo $GITHUB_TOKEN | docker login ghcr.io -u palstack-io --password-stdin
+#
+# BEFORE DEPLOYING:
+#   1. Replace every  CHANGEME  value with your own secret / key.
+#   2. Update APP_HOST to your server's public domain or IP.
+#   3. Optional env vars (SMTP, OAuth, external APIs) can be left blank —
+#      features that need them will simply be disabled at runtime.
+#
+# IMAGE TAGS
+#   Pin a specific release by changing &tag below, e.g. "abc1234"
+# =============================================================================
+
+# ---------------------------------------------------------------------------
+# Change these two lines — everything else derives from them.
+# ---------------------------------------------------------------------------
+x-registry:  &registry   "ghcr.io/palstack-io"        # GHCR owner (lowercase)
+x-tag:       &tag         "latest"                     # ← image tag (or SHA)
+x-app-host:  &app-host    "http://your-server-ip:9000" # ← public URL (no trailing slash)
+# ---------------------------------------------------------------------------
+
+services:
+
+  # ===========================================================================
+  # PostgreSQL — single shared instance, 6 isolated databases
+  # ===========================================================================
+  db:
+    image: postgres:15-alpine
+    container_name: clubpal-db
+    environment:
+      POSTGRES_USER: clubpal
+      POSTGRES_PASSWORD: CHANGEME_DB_PASSWORD    # ← required
+      POSTGRES_DB: clubpal
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # pg-init scripts must be mounted from the host or baked into a custom image.
+      # If using Portainer with a Git-based stack, bind-mount the init path:
+      #   - /opt/clubpal/pg-init:/docker-entrypoint-initdb.d:ro
+      # If using a prebuilt postgres image with schemas baked in, remove this line.
+      - /opt/clubpal/pg-init:/docker-entrypoint-initdb.d:ro
+    networks:
+      - clubpal-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clubpal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================================================
+  # MinIO — object storage (avatars, event photos, enrichment cache)
+  # Console UI available on host port 9001
+  # ===========================================================================
+  minio:
+    image: minio/minio:latest
+    container_name: clubpal-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: clubpal
+      MINIO_ROOT_PASSWORD: CHANGEME_MINIO_PASSWORD  # ← required
+    volumes:
+      - minio_data:/data
+    networks:
+      - clubpal-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # One-shot init container — creates the three buckets and makes them public
+  createbuckets:
+    image: minio/mc:latest
+    container_name: clubpal-createbuckets
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - clubpal-network
+    environment:
+      MINIO_ROOT_USER: clubpal
+      MINIO_ROOT_PASSWORD: CHANGEME_MINIO_PASSWORD  # ← must match minio above
+    entrypoint: >
+      /bin/sh -c "
+      until /usr/bin/mc config host add clubpal http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD; do sleep 2; done;
+      /usr/bin/mc mb --ignore-existing clubpal/clubpal-avatars;
+      /usr/bin/mc mb --ignore-existing clubpal/clubpal-events;
+      /usr/bin/mc mb --ignore-existing clubpal/clubpal-cache;
+      /usr/bin/mc anonymous set download clubpal/clubpal-avatars;
+      /usr/bin/mc anonymous set download clubpal/clubpal-events;
+      /usr/bin/mc anonymous set download clubpal/clubpal-cache;
+      exit 0;"
+    restart: on-failure
+
+  # ===========================================================================
+  # Nginx — Web UI + reverse proxy (single public entry point on port 9000)
+  # ===========================================================================
+  nginx:
+    image: ghcr.io/palstack-io/clubpal-nginx:latest
+    container_name: clubpal-nginx
+    ports:
+      - "9000:80"
+    volumes:
+      - ./nginx/logs:/var/log/nginx
+    networks:
+      - clubpal-network
+    depends_on:
+      - api-gateway
+      - groups-service
+      - events-service
+      - ratings-service
+      - activities-service
+      - enrichment-service
+      - minio
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ===========================================================================
+  # API Gateway — auth, users, sessions, invites, notifications, OIDC
+  # ===========================================================================
+  api-gateway:
+    image: ghcr.io/palstack-io/clubpal-api-gateway:latest
+    container_name: clubpal-api-gateway
+    expose:
+      - "8001"
+    environment:
+      # ── Database ──────────────────────────────────────────────────────────
+      DATABASE_URL: postgresql://clubpal:CHANGEME_DB_PASSWORD@db:5432/clubpal_gateway
+
+      # ── MinIO ─────────────────────────────────────────────────────────────
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: clubpal
+      MINIO_SECRET_KEY: CHANGEME_MINIO_PASSWORD
+      MINIO_PUBLIC_URL: http://your-server-ip:9000/storage  # ← public URL
+
+      # ── App URLs ──────────────────────────────────────────────────────────
+      FRONTEND_URL: http://your-server-ip:9000              # ← public URL
+
+      # ── Email / SMTP (leave blank to disable email features) ──────────────
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: "587"
+      SMTP_USER: ""                   # your-email@gmail.com
+      SMTP_PASSWORD: ""               # app password / SMTP credential
+      FROM_EMAIL: noreply@yourapp.io
+      FROM_NAME: clubPal
+
+      # ── Internal service secret (any random string ≥ 32 chars) ────────────
+      INTERNAL_API_SECRET: CHANGEME_INTERNAL_SECRET
+
+      # ── Admin (leave blank — defaults to first admin user's email) ───────
+      ADMIN_EMAIL: ""
+
+      # ── OAuth / OIDC (optional — leave blank to disable) ──────────────────
+      GOOGLE_CLIENT_ID: ""
+      OIDC_PROVIDERS: ""              # JSON array of OIDC provider configs
+    networks:
+      - clubpal-network
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ===========================================================================
+  # Groups Service — groups, members, rotation, polls
+  # ===========================================================================
+  groups-service:
+    image: ghcr.io/palstack-io/clubpal-groups-service:latest
+    container_name: clubpal-groups-service
+    expose:
+      - "8002"
+    environment:
+      DATABASE_URL: postgresql://clubpal:CHANGEME_DB_PASSWORD@db:5432/clubpal_groups
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: clubpal
+      MINIO_SECRET_KEY: CHANGEME_MINIO_PASSWORD
+      MINIO_PUBLIC_URL: http://your-server-ip:9000/storage  # ← public URL
+      GATEWAY_SERVICE_URL: http://api-gateway:8001
+      EVENTS_SERVICE_URL: http://events-service:8003
+    networks:
+      - clubpal-network
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8002/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ===========================================================================
+  # Events Service — events, RSVPs, comments, photos, recurring schedules
+  # ===========================================================================
+  events-service:
+    image: ghcr.io/palstack-io/clubpal-events-service:latest
+    container_name: clubpal-events-service
+    expose:
+      - "8003"
+    environment:
+      DATABASE_URL: postgresql://clubpal:CHANGEME_DB_PASSWORD@db:5432/clubpal_events
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: clubpal
+      MINIO_SECRET_KEY: CHANGEME_MINIO_PASSWORD
+      MINIO_PUBLIC_URL: http://your-server-ip:9000/storage  # ← public URL
+      GROUPS_SERVICE_URL: http://groups-service:8002
+      ACTIVITIES_SERVICE_URL: http://activities-service:8005
+      GATEWAY_URL: http://api-gateway:8001
+    networks:
+      - clubpal-network
+    depends_on:
+      db:
+        condition: service_healthy
+      groups-service:
+        condition: service_healthy
+      activities-service:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8003/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ===========================================================================
+  # Ratings Service — ratings, leaderboards, user stats
+  # ===========================================================================
+  ratings-service:
+    image: ghcr.io/palstack-io/clubpal-ratings-service:latest
+    container_name: clubpal-ratings-service
+    expose:
+      - "8004"
+    environment:
+      DATABASE_URL: postgresql://clubpal:CHANGEME_DB_PASSWORD@db:5432/clubpal_ratings
+      GROUPS_SERVICE_URL: http://groups-service:8002
+      EVENTS_SERVICE_URL: http://events-service:8003
+    networks:
+      - clubpal-network
+    depends_on:
+      db:
+        condition: service_healthy
+      groups-service:
+        condition: service_healthy
+      events-service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8004/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ===========================================================================
+  # Activities Service — activity types, categories, search
+  # ===========================================================================
+  activities-service:
+    image: ghcr.io/palstack-io/clubpal-activities-service:latest
+    container_name: clubpal-activities-service
+    expose:
+      - "8005"
+    environment:
+      DATABASE_URL: postgresql://clubpal:CHANGEME_DB_PASSWORD@db:5432/clubpal_activities
+    networks:
+      - clubpal-network
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8005/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ===========================================================================
+  # Enrichment Service — external API cache (Google Places, TMDB, IGDB, Books)
+  # ===========================================================================
+  enrichment-service:
+    image: ghcr.io/palstack-io/clubpal-enrichment-service:latest
+    container_name: clubpal-enrichment-service
+    expose:
+      - "8006"
+    environment:
+      DATABASE_URL: postgresql://clubpal:CHANGEME_DB_PASSWORD@db:5432/clubpal_enrichment
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: clubpal
+      MINIO_SECRET_KEY: CHANGEME_MINIO_PASSWORD
+      MINIO_PUBLIC_URL: http://your-server-ip:9000/storage  # ← public URL
+      INTERNAL_API_SECRET: CHANGEME_INTERNAL_SECRET
+
+      # ── App URLs ──────────────────────────────────────────────────────────
+      FRONTEND_URL: http://your-server-ip:9000              # ← public URL
+
+      # ── Email / SMTP (leave blank to disable email features) ──────────────
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: "587"
+      SMTP_USER: ""                   # your-email@gmail.com
+      SMTP_PASSWORD: ""               # app password / SMTP credential
+      FROM_EMAIL: noreply@yourapp.io
+      FROM_NAME: clubPal
+
+      # ── Admin alert recipient (leave blank to use first admin user's email)
+      ADMIN_EMAIL: ""
+
+      # ── External API keys (leave blank to disable that search type) ────────
+      GOOGLE_API_KEY: ""              # Google Places + Books + Geocoding
+      TMDB_API_KEY: ""               # Movie / TV search
+      IGDB_CLIENT_ID: ""             # Video game search (Twitch app)
+      IGDB_CLIENT_SECRET: ""
+
+      # ── Cache TTLs (seconds) ───────────────────────────────────────────────
+      CACHE_TTL_SEARCH: "86400"      # 24 h
+      CACHE_TTL_DETAIL: "604800"     # 7 days
+      CACHE_TTL_GEOCODE: "2592000"   # 30 days
+    networks:
+      - clubpal-network
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8006/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+# =============================================================================
+networks:
+  clubpal-network:
+    driver: bridge
+
+volumes:
+  pgdata:
+  minio_data:

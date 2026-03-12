@@ -10,7 +10,7 @@ import SearchHero from '../../components/discover/SearchHero'
 import { enrichApi } from '../../api/enrich'
 import { useAuth } from '../../contexts/AuthContext'
 
-const TABS = [
+const TMDB_TABS = [
   { id: 'popular', label: 'Popular' },
   { id: 'top-rated', label: 'Top Rated' },
   { id: 'airing-today', label: 'Airing Today' },
@@ -19,13 +19,33 @@ const TABS = [
 export default function DiscoverShows() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const [tab, setTab] = useState('popular')
+  const [config, setConfig] = useState(null)
+  const [tab, setTab] = useState(null)
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(true)
   const [pickItem, setPickItem] = useState(null)
   const [pollItem, setPollItem] = useState(null)
   const [sonarrSet, setSonarrSet] = useState(new Set())
 
+  const hasSonarr = config?.sonarr_url?.configured
+  const hasTmdb = config?.tmdb_api_key?.configured
+
+  const tabs = [
+    ...(hasSonarr ? [{ id: 'library', label: 'Library' }] : []),
+    ...(hasTmdb ? TMDB_TABS : []),
+  ]
+
+  // Load config on mount; set default tab based on what's configured
+  useEffect(() => {
+    enrichApi.getConfig()
+      .then(c => {
+        setConfig(c)
+        setTab(c?.sonarr_url?.configured ? 'library' : 'popular')
+      })
+      .catch(() => setTab('popular'))
+  }, [])
+
+  // Fetch Sonarr ID set for badge overlay on non-library tabs
   useEffect(() => {
     enrichApi.getSonarrLibrary()
       .then(d => setSonarrSet(new Set(d?.tmdb_ids || [])))
@@ -36,7 +56,8 @@ export default function DiscoverShows() {
     setLoading(true)
     try {
       let data
-      if (t === 'popular') data = await enrichApi.showsPopular()
+      if (t === 'library') data = await enrichApi.showsLibrary()
+      else if (t === 'popular') data = await enrichApi.showsPopular()
       else if (t === 'top-rated') data = await enrichApi.showsTopRated()
       else data = await enrichApi.showsAiringToday()
       setResults(data?.results || [])
@@ -45,7 +66,7 @@ export default function DiscoverShows() {
   }
 
   const doSearch = async (q) => {
-    if (!q) return loadTab(tab)
+    if (!q) return tab ? loadTab(tab) : null
     setLoading(true)
     try {
       const data = await enrichApi.searchShows(q)
@@ -54,7 +75,7 @@ export default function DiscoverShows() {
     finally { setLoading(false) }
   }
 
-  useEffect(() => { loadTab(tab) }, [tab])
+  useEffect(() => { if (tab) loadTab(tab) }, [tab])
 
   return (
     <AppShell activeRoute="/discover/shows">
@@ -69,7 +90,7 @@ export default function DiscoverShows() {
 
       <div style={{ padding: '20px 24px 24px' }}>
         <div style={{ display: 'flex', gap: '6px', marginBottom: '20px', flexWrap: 'wrap' }}>
-          {TABS.map(p => (
+          {tabs.map(p => (
             <ActivityPill key={p.id} label={p.label} active={tab === p.id} onClick={() => setTab(p.id)} />
           ))}
         </div>
@@ -96,7 +117,7 @@ export default function DiscoverShows() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '14px' }}>
             {results.map((item, i) => (
               <div key={item.tmdb_id || i} style={{ position: 'relative' }}>
-                {sonarrSet.has(item.tmdb_id) && (
+                {(item.in_library || sonarrSet.has(item.tmdb_id)) && (
                   <div style={{
                     position: 'absolute', top: '8px', right: '8px', zIndex: 3,
                     background: '#22d3a0', color: '#000', fontSize: '9px', fontWeight: 800,

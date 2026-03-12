@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-02
 **Scope:** Full stack — all six backend services + React web UI
-**Auditor:** Automated static analysis (Claude Code)
+**Auditor:** Automated static analysis
 
 ---
 
@@ -81,6 +81,8 @@ Both `api-gateway` and `enrichment-service` must have the same value. The gatewa
 
 ### C-3 — Push token and notification endpoints have no authentication
 
+> ✅ **Implemented** — All four endpoints now require `Depends(get_current_user)` with an ownership check (`current_user["id"] == user_id`). Unauthenticated or cross-user requests return HTTP 403.
+
 **File:** `backend/services/api-gateway/app/main.py:836–862`
 
 ```python
@@ -119,6 +121,8 @@ async def save_push_token(user_id: int, data: dict,
 ---
 
 ### C-4 — Backend services accept `user_id` as an untrusted query parameter
+
+> ✅ **Implemented** — groups-service and events-service now use a `get_current_user_id` FastAPI dependency that validates the Bearer token against the gateway (`GET /auth/me`) and returns the authenticated user ID. All mutating endpoints in both services have been updated. The `user_id` query parameter is no longer accepted from callers. (`ratings-service` endpoints are read-only and lower risk; tracked separately.)
 
 **Files:**
 - `backend/services/groups-service/app/main.py:62,100,130,186,208,251`
@@ -728,8 +732,9 @@ async def startup():
 
 | Priority | Issues to fix first | Rationale |
 |---|---|---|
-| P0 — Fix immediately | C-1, C-2, C-3 | Active data exposure / account takeover on any running instance |
-| P1 — Fix before public access | C-4, H-3, H-4, H-6 | Auth bypass on write endpoints |
+| P0 — Fix immediately | C-1 | Active data exposure / account takeover on any running instance |
+| ✅ Done | C-2, C-3, C-4 | Implemented — see individual entries above |
+| P1 — Fix before public access | H-3, H-4, H-6 | Auth bypass on write endpoints |
 | P2 — Fix in next sprint | H-1, H-2, H-5, H-7, H-8 | Security hardening + performance |
 | P3 — Backlog | M-1 through M-10 | Code quality and robustness |
 | P4 — Nice to have | L-1 through L-7 | Defence-in-depth and ops improvements |

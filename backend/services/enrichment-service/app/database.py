@@ -185,9 +185,113 @@ def init_db():
             ON CONFLICT (api_name) DO NOTHING
         """, (api, limit))
 
+    # Quota-exceeded blocks — persists until admin explicitly approves resumption
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS api_quota_blocks (
+            api_name      TEXT PRIMARY KEY,
+            blocked_at    TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+            alert_sent_at TIMESTAMP WITH TIME ZONE,
+            unblocked_at  TIMESTAMP WITH TIME ZONE,
+            unblocked_by  TEXT
+        )
+    """)
+
     conn.commit()
     cur.close()
     conn.close()
+
+
+# ===== API Quota Blocks =====
+
+def is_api_blocked(api_name: str) -> bool:
+    """Return True if this API is currently blocked pending admin approval."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT 1 FROM api_quota_blocks
+        WHERE api_name = %s AND unblocked_at IS NULL
+    """, (api_name,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return row is not None
+
+
+def block_api(api_name: str):
+    """Record a quota-exceeded block for this API (idempotent)."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        INSERT INTO api_quota_blocks (api_name, blocked_at)
+        VALUES (%s, NOW())
+        ON CONFLICT (api_name) DO UPDATE SET
+            blocked_at   = NOW(),
+            unblocked_at = NULL,
+            unblocked_by = NULL,
+            alert_sent_at = NULL
+        WHERE api_quota_blocks.unblocked_at IS NOT NULL
+    """, (api_name,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def unblock_api(api_name: str, unblocked_by: str = "admin"):
+    """Admin approval — lift the block so API calls can resume."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE api_quota_blocks
+        SET unblocked_at = NOW(), unblocked_by = %s
+        WHERE api_name = %s
+    """, (unblocked_by, api_name))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def should_send_quota_alert(api_name: str) -> bool:
+    """Return True if we haven't sent an alert email for this block yet."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT alert_sent_at FROM api_quota_blocks
+        WHERE api_name = %s AND unblocked_at IS NULL
+    """, (api_name,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if row is None:
+        return False
+    return row[0] is None  # alert_sent_at is NULL → haven't sent yet
+
+
+def mark_quota_alert_sent(api_name: str):
+    """Record that the quota alert email has been dispatched."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        UPDATE api_quota_blocks SET alert_sent_at = NOW()
+        WHERE api_name = %s AND unblocked_at IS NULL
+    """, (api_name,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def get_api_blocks() -> list:
+    """Return all current (unresolved) quota blocks."""
+    conn = get_conn()
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    cur.execute("""
+        SELECT api_name, blocked_at, alert_sent_at, unblocked_at, unblocked_by
+        FROM api_quota_blocks
+        ORDER BY blocked_at DESC
+    """)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 # ===== API Usage Tracking =====

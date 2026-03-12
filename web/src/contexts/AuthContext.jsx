@@ -9,16 +9,20 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     const token = localStorage.getItem('session_token')
-    const stored = localStorage.getItem('user')
-    if (token && stored) {
-      try {
-        setUser(JSON.parse(stored))
-      } catch {
-        localStorage.removeItem('user')
-        localStorage.removeItem('session_token')
-      }
+    if (!token) {
+      setLoading(false)
+      return
     }
-    setLoading(false)
+    // Always verify the token and fetch fresh user data on startup so we
+    // pick up any server-side changes (e.g. password_changed flag, avatar, etc.)
+    authApi.me().then(freshUser => {
+      localStorage.setItem('user', JSON.stringify(freshUser))
+      setUser(freshUser)
+    }).catch(() => {
+      // Session expired or invalid — clear it
+      localStorage.removeItem('session_token')
+      localStorage.removeItem('user')
+    }).finally(() => setLoading(false))
   }, [])
 
   const login = async (username, password) => {
@@ -61,10 +65,22 @@ export function AuthProvider({ children }) {
     localStorage.setItem('user', JSON.stringify(updated))
   }
 
+  const loginWithGoogle = async (credential) => {
+    try {
+      const data = await authApi.oidcLogin(credential, 'google')
+      localStorage.setItem('session_token', data.session_token)
+      localStorage.setItem('user', JSON.stringify(data.user))
+      setUser(data.user)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: err.response?.data?.detail || 'Google sign-in failed' }
+    }
+  }
+
   const isAuthenticated = !!user
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAuthenticated, login, register, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, loading, isAuthenticated, login, register, logout, updateUser, loginWithGoogle }}>
       {children}
     </AuthContext.Provider>
   )

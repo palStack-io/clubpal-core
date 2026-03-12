@@ -7,12 +7,14 @@ import MonthlyBarCard from '../components/stats/MonthlyBarCard'
 import AchievementsCard from '../components/stats/AchievementsCard'
 import { eventsApi } from '../api/events'
 import { groupsApi } from '../api/groups'
+import { ratingsClient } from '../api/client'
 import { useAuth } from '../contexts/AuthContext'
 
 export default function Stats() {
   const { user } = useAuth()
   const [events, setEvents] = useState([])
   const [groups, setGroups] = useState([])
+  const [avgRating, setAvgRating] = useState('—')
   const [loading, setLoading] = useState(true)
 
   const year = new Date().getFullYear()
@@ -22,9 +24,13 @@ export default function Stats() {
     Promise.all([
       eventsApi.getUserEvents(user.id).catch(() => []),
       groupsApi.getUserGroups(user.id).catch(() => []),
-    ]).then(([evs, grps]) => {
+      ratingsClient.get(`/users/${user.id}/stats`).then(r => r.data).catch(() => null),
+    ]).then(([evs, grps, ratingStats]) => {
       setEvents(Array.isArray(evs) ? evs : evs?.events || [])
       setGroups(Array.isArray(grps) ? grps : grps?.groups || [])
+      if (ratingStats?.average_score) {
+        setAvgRating(Number(ratingStats.average_score).toFixed(1))
+      }
     }).finally(() => setLoading(false))
   }, [user?.id])
 
@@ -33,12 +39,6 @@ export default function Stats() {
     const d = e.event_date || e.scheduled_date
     return d && new Date(d).getFullYear() === year
   })
-
-  // Average rating
-  const rated = thisYear.filter(e => e.avg_rating)
-  const avgRating = rated.length
-    ? (rated.reduce((s, e) => s + Number(e.avg_rating), 0) / rated.length).toFixed(1)
-    : '—'
 
   // Activity breakdown
   const breakdown = Object.entries(

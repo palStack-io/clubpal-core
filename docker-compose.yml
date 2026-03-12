@@ -62,12 +62,12 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-clubpalpassword}
     entrypoint: >
       /bin/sh -c "
-      /usr/bin/mc config host add clubpal http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD;
+      until /usr/bin/mc config host add clubpal http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD; do sleep 2; done;
       /usr/bin/mc mb --ignore-existing clubpal/clubpal-avatars;
       /usr/bin/mc mb --ignore-existing clubpal/clubpal-events;
+      /usr/bin/mc mb --ignore-existing clubpal/clubpal-cache;
       /usr/bin/mc anonymous set download clubpal/clubpal-avatars;
       /usr/bin/mc anonymous set download clubpal/clubpal-events;
-      /usr/bin/mc mb --ignore-existing clubpal/clubpal-cache;
       /usr/bin/mc anonymous set download clubpal/clubpal-cache;
       exit 0;"
     restart: on-failure
@@ -119,12 +119,15 @@ services:
       - SMTP_PASSWORD=${SMTP_PASSWORD:-}
       - FROM_EMAIL=${FROM_EMAIL:-noreply@palstack.io}
       - FROM_NAME=${FROM_NAME:-clubPal}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:9000}
       - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio:9000}
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-clubpal}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-clubpalpassword}
       - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-http://localhost:9000/storage}
       - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - OIDC_PROVIDERS=${OIDC_PROVIDERS:-}
     networks:
       - clubpal-network
     depends_on:
@@ -274,6 +277,14 @@ services:
       - CACHE_TTL_DETAIL=${CACHE_TTL_DETAIL:-604800}
       - CACHE_TTL_GEOCODE=${CACHE_TTL_GEOCODE:-2592000}
       - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-}
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - FROM_EMAIL=${FROM_EMAIL:-noreply@palstack.io}
+      - FROM_NAME=${FROM_NAME:-clubPal}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:9000}
     networks:
       - clubpal-network
     depends_on:

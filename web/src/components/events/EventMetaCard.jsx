@@ -130,6 +130,19 @@ export default function EventMetaCard({ event, groupName }) {
     })
   }
 
+  if (event.max_attendees) {
+    const goingCount = event.attendees
+      ? event.attendees.filter(a => a.status === 'going').length
+      : null
+    rows.push({
+      icon: '🪑',
+      label: 'Seats',
+      content: goingCount != null
+        ? `${goingCount} / ${event.max_attendees} spots filled`
+        : `${event.max_attendees} spots max`,
+    })
+  }
+
   return (
     <Card>
       <Card.Header title="Details" />

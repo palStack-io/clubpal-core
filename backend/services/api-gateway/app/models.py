@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field, validator, EmailStr
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 
@@ -39,6 +39,8 @@ class UserResponse(BaseModel):
     password_changed: bool = True
     created_at: datetime
     last_login_at: Optional[datetime]
+    linked_providers: List[str] = []
+    has_password: bool = True
 
 
 class SessionResponse(BaseModel):
@@ -150,6 +152,13 @@ class UserPreferencesUpdate(BaseModel):
     book_genres: Optional[List[str]] = None
     movie_genres: Optional[List[str]] = None
     game_types: Optional[List[str]] = None
+
+
+class OIDCAuthRequest(BaseModel):
+    """Payload for OIDC sign-in. Send either id_token (preferred) or access_token."""
+    provider: str = "google"
+    id_token: Optional[str] = None
+    access_token: Optional[str] = None
 
 
 class UserPreferencesResponse(BaseModel):

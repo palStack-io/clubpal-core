@@ -20,6 +20,9 @@ env/
 .env.*.local
 !.env.example
 
+# ── Deployment files with live credentials ────────────────────────────────────
+docker-compose.deploy.yml
+
 # ── Node / Web ───────────────────────────────────────────────────────────────
 web/node_modules/
 web/dist/
@@ -54,5 +57,5 @@ Thumbs.db
 .coverage
 htmlcov/
 
-# ── Claude Code workspace ────────────────────────────────────────────────────
+# ── Local tool workspace ─────────────────────────────────────────────────────
 .claude/

@@ -1,6 +1,10 @@
+import asyncio
 import hashlib
 import json
 import os
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from typing import Optional, List
 
 from fastapi import FastAPI, HTTPException
@@ -18,9 +22,21 @@ from app.database import (
     get_geocode, upsert_geocode,
     track_call, get_api_usage,
     get_api_limits, set_api_limit, get_today_live_calls, is_quota_exceeded,
+    is_api_blocked, block_api, unblock_api,
+    should_send_quota_alert, mark_quota_alert_sent, get_api_blocks,
     get_user_items, upsert_user_item, clear_user_items,
 )
 from app import storage, external
+
+# ── Admin alert email config (reuses same SMTP env vars as the gateway) ──
+ADMIN_EMAIL    = os.getenv("ADMIN_EMAIL")
+SMTP_HOST      = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT      = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER      = os.getenv("SMTP_USER")
+SMTP_PASSWORD  = os.getenv("SMTP_PASSWORD")
+FROM_NAME      = os.getenv("FROM_NAME", "clubPal")
+FROM_EMAIL     = os.getenv("FROM_EMAIL") or SMTP_USER or "noreply@palstack.io"
+FRONTEND_URL   = os.getenv("FRONTEND_URL", "http://localhost:3000")
 
 app = FastAPI(title="ClubPal Enrichment Service", version="1.0.0")
 
@@ -56,6 +72,130 @@ async def startup():
 @app.get("/health")
 async def health():
     return {"status": "healthy", "service": "enrichment-service"}
+
+
+# ── Quota enforcement helpers ─────────────────────────────────────────────────
+
+async def _resolve_admin_emails() -> list:
+    """Return admin emails: ADMIN_EMAIL env var if set, else first admin user from gateway."""
+    if ADMIN_EMAIL:
+        return [ADMIN_EMAIL]
+    try:
+        import httpx as _httpx
+        headers = {}
+        if external.INTERNAL_API_SECRET:
+            headers["X-Internal-Secret"] = external.INTERNAL_API_SECRET
+        async with _httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.get(f"{external.GATEWAY_URL}/internal/admin-email", headers=headers)
+            if resp.status_code == 200:
+                return resp.json().get("emails", [])
+    except Exception as e:
+        print(f"[QUOTA ALERT] Could not fetch admin emails from gateway: {e}")
+    return []
+
+
+async def _send_quota_alert_email(api_name: str, today_calls: int, daily_limit: int):
+    """Fire-and-forget: email the admin when an API quota is exhausted."""
+    if not (SMTP_USER and SMTP_PASSWORD):
+        print(f"[QUOTA ALERT] {api_name} blocked — email disabled (no SMTP config)")
+        return
+    recipients = await _resolve_admin_emails()
+    if not recipients:
+        print(f"[QUOTA ALERT] {api_name} blocked — no admin email configured")
+        return
+    try:
+        approve_url = f"{FRONTEND_URL}/admin/api-usage"
+        subject = f"[clubPal] API quota reached — {api_name} is now blocked"
+        html = f"""<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><title>{subject}</title></head>
+<body style="margin:0;padding:0;background:#f4f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f6;padding:40px 16px;">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+        <tr>
+          <td style="background:#0e0e12;border-radius:12px 12px 0 0;padding:22px 32px;">
+            <span style="font-size:19px;font-weight:900;color:#fff;">club<span style="color:#fb7185;">Pal</span></span>
+          </td>
+        </tr>
+        <tr><td style="height:3px;background:linear-gradient(90deg,#f43f5e,#fb7185,#fda4af);"></td></tr>
+        <tr>
+          <td style="background:#fff;padding:36px 32px 28px;border-radius:0 0 12px 12px;">
+            <h1 style="margin:0 0 16px;font-size:22px;font-weight:800;color:#111;">API quota reached ⚠️</h1>
+            <p style="margin:0 0 14px;font-size:15px;color:#444;line-height:1.6;">
+              The <strong>{api_name}</strong> API has hit its daily call limit and has been
+              <strong style="color:#f43f5e;">automatically blocked</strong> to prevent unexpected charges.
+            </p>
+            <div style="background:#f9f9fb;border-left:3px solid #f43f5e;border-radius:0 8px 8px 0;padding:14px 18px;margin:20px 0;">
+              <p style="margin:0;font-size:14px;color:#111;"><strong>API:</strong> {api_name}</p>
+              <p style="margin:6px 0 0;font-size:14px;color:#111;"><strong>Calls today:</strong> {today_calls}</p>
+              <p style="margin:6px 0 0;font-size:14px;color:#111;"><strong>Daily limit:</strong> {daily_limit}</p>
+              <p style="margin:6px 0 0;font-size:13px;color:#f43f5e;font-weight:600;">Status: BLOCKED — new API calls will be skipped until you approve</p>
+            </div>
+            <p style="margin:0 0 14px;font-size:15px;color:#444;line-height:1.6;">
+              To resume API calls, visit the admin panel and approve the block, or increase the daily limit.
+            </p>
+            <p style="text-align:center;margin:28px 0;">
+              <a href="{approve_url}" style="background:#f43f5e;color:#fff;padding:13px 32px;text-decoration:none;border-radius:8px;display:inline-block;font-size:14px;font-weight:700;">
+                Review &amp; Approve in Admin Panel
+              </a>
+            </p>
+            <div style="margin-top:40px;padding-top:20px;border-top:1px solid #efefef;">
+              <p style="margin:0;font-size:11px;color:#aaa;">
+                clubPal · a <a href="https://palstack.io" style="color:#f43f5e;text-decoration:none;">palStack.io</a> product
+              </p>
+            </div>
+          </td>
+        </tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>"""
+        def _make_messages():
+            for recipient in recipients:
+                msg = MIMEMultipart("alternative")
+                msg["From"]    = f"{FROM_NAME} <{FROM_EMAIL}>"
+                msg["To"]      = recipient
+                msg["Subject"] = subject
+                msg.attach(MIMEText(html, "html"))
+                yield recipient, msg
+
+        if SMTP_PORT == 465:
+            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as server:
+                server.login(SMTP_USER, SMTP_PASSWORD)
+                for _, msg in _make_messages():
+                    server.send_message(msg)
+        else:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+                server.starttls()
+                server.login(SMTP_USER, SMTP_PASSWORD)
+                for _, msg in _make_messages():
+                    server.send_message(msg)
+        print(f"[QUOTA ALERT] Email sent to {recipients} for {api_name}")
+    except Exception as e:
+        print(f"[QUOTA ALERT] Email failed for {api_name}: {e}")
+
+
+def check_and_maybe_block(api_name: str) -> bool:
+    """
+    Return True (skip the API call) if:
+      - the API is already admin-blocked, OR
+      - the daily quota is now exceeded (in which case block it and queue an alert email).
+    Returns False if the call should proceed normally.
+    """
+    if is_api_blocked(api_name):
+        return True
+    if is_quota_exceeded(api_name):
+        block_api(api_name)
+        if should_send_quota_alert(api_name):
+            mark_quota_alert_sent(api_name)
+            today = get_today_live_calls(api_name)
+            limits = get_api_limits()
+            limit = limits.get(api_name, 0)
+            asyncio.create_task(_send_quota_alert_email(api_name, today, limit))
+        return True
+    return False
 
 
 @app.get("/config")
@@ -412,7 +552,91 @@ async def get_show_detail(tmdb_id: int):
     return data
 
 
-# ========== SELF-HOSTED LIBRARY ==========
+# ========== SELF-HOSTED LIBRARY (primary browse endpoints) ==========
+
+@app.get("/movies/library")
+async def movies_library():
+    """Return movies from Radarr as primary source; falls back to TMDB popular if Radarr not configured."""
+    ck = "movies:library"
+    cached = cache_get(ck)
+    if cached:
+        return cached
+
+    if external.RADARR_URL and external.RADARR_API_KEY:
+        results = await external.radarr_library_full()
+        # Overlay any cached TMDB metadata (better posters/ratings) — no extra API calls
+        enriched = []
+        for item in results:
+            tmdb_id = item.get("tmdb_id")
+            if tmdb_id:
+                row = get_movie(tmdb_id)
+                if row:
+                    merged = {**item}
+                    for key in ("poster_url", "backdrop_url", "rating", "overview", "genres"):
+                        if row.get(key):
+                            merged[key] = row[key]
+                    enriched.append(merged)
+                else:
+                    enriched.append(item)
+            else:
+                enriched.append(item)
+        payload = {"results": enriched, "source": "radarr"}
+        cache_set(ck, "movies", payload, CACHE_TTL_LIBRARY)
+        return payload
+
+    # Fallback to TMDB popular
+    if external.TMDB_API_KEY:
+        track_call("tmdb", False)
+        results = await external.tmdb_list("popular")
+        payload = {"results": results, "source": "tmdb"}
+        cache_set(ck, "movies", payload, CACHE_TTL_SHORT)
+        return payload
+
+    return {"results": [], "source": "none"}
+
+
+@app.get("/shows/library")
+async def shows_library():
+    """Return shows from Sonarr as primary source; falls back to TMDB popular if Sonarr not configured."""
+    ck = "shows:library"
+    cached = cache_get(ck)
+    if cached:
+        return cached
+
+    if external.SONARR_URL and external.SONARR_API_KEY:
+        results = await external.sonarr_library_full()
+        # Overlay any cached TMDB metadata — no extra API calls
+        enriched = []
+        for item in results:
+            tmdb_id = item.get("tmdb_id")
+            if tmdb_id:
+                row = get_show(tmdb_id)
+                if row:
+                    merged = {**item}
+                    for key in ("poster_url", "backdrop_url", "rating", "overview", "genres"):
+                        if row.get(key):
+                            merged[key] = row[key]
+                    enriched.append(merged)
+                else:
+                    enriched.append(item)
+            else:
+                enriched.append(item)
+        payload = {"results": enriched, "source": "sonarr"}
+        cache_set(ck, "shows", payload, CACHE_TTL_LIBRARY)
+        return payload
+
+    # Fallback to TMDB popular
+    if external.TMDB_API_KEY:
+        track_call("tmdb", False)
+        results = await external.tmdb_tv_list("popular")
+        payload = {"results": results, "source": "tmdb"}
+        cache_set(ck, "shows", payload, CACHE_TTL_SHORT)
+        return payload
+
+    return {"results": [], "source": "none"}
+
+
+# ========== SELF-HOSTED LIBRARY (ID-only endpoints for badge overlay) ==========
 
 @app.get("/library/radarr")
 async def library_radarr():
@@ -596,7 +820,8 @@ async def api_usage(days: int = 30):
         totals[name]["total_cached"] += r["cache_hits"]
         totals[name]["days"].append(r)
 
-    # Merge in limits + today's live calls for each API
+    # Merge in limits + today's live calls + block status for each API
+    blocks = {b["api_name"]: b for b in get_api_blocks()}
     all_apis = set(totals.keys()) | set(limits.keys())
     summary = []
     for name in sorted(all_apis):
@@ -604,9 +829,12 @@ async def api_usage(days: int = 30):
         entry["daily_limit"] = limits.get(name, 9999999)
         entry["today_live"] = get_today_live_calls(name)
         entry["quota_exceeded"] = is_quota_exceeded(name)
+        block = blocks.get(name)
+        entry["blocked"] = block is not None and block["unblocked_at"] is None
+        entry["blocked_at"] = block["blocked_at"].isoformat() if block and block["unblocked_at"] is None else None
         summary.append(entry)
 
-    return {"summary": summary, "rows": rows}
+    return {"summary": summary, "rows": rows, "blocks": list(blocks.values())}
 
 
 class ApiLimitsUpdate(BaseModel):
@@ -620,6 +848,13 @@ async def update_api_limits(body: ApiLimitsUpdate):
         if isinstance(limit, int) and limit > 0:
             set_api_limit(api_name, limit)
     return get_api_limits()
+
+
+@app.post("/api-usage/unblock/{api_name}")
+async def unblock_api_endpoint(api_name: str, unblocked_by: str = "admin"):
+    """Internal: admin approval to lift a quota block and resume API calls."""
+    unblock_api(api_name, unblocked_by)
+    return {"api_name": api_name, "unblocked": True, "unblocked_by": unblocked_by}
 
 
 # ========== CACHE ADMIN ==========
@@ -771,7 +1006,7 @@ async def load_user_preferences(req: PreferencesLoadRequest):
 
     # ── DINING ────────────────────────────────────────────────────────────────
     if "dining" in activities and req.lat is not None and req.lng is not None:
-        if is_quota_exceeded("google_places"):
+        if check_and_maybe_block("google_places"):
             loaded["dining"] = 0
         else:
             track_call("google_places", False)
@@ -788,7 +1023,7 @@ async def load_user_preferences(req: PreferencesLoadRequest):
 
     # ── HIKING ────────────────────────────────────────────────────────────────
     if "hiking" in activities and req.lat is not None and req.lng is not None:
-        if is_quota_exceeded("google_places"):
+        if check_and_maybe_block("google_places"):
             loaded["hiking"] = 0
         else:
             track_call("google_places", False)
@@ -805,7 +1040,7 @@ async def load_user_preferences(req: PreferencesLoadRequest):
 
     # ── ARTS ──────────────────────────────────────────────────────────────────
     if "arts" in activities and req.lat is not None and req.lng is not None:
-        if is_quota_exceeded("google_places"):
+        if check_and_maybe_block("google_places"):
             loaded["arts"] = 0
         else:
             track_call("google_places", False)
@@ -825,7 +1060,7 @@ async def load_user_preferences(req: PreferencesLoadRequest):
         genre_ids = [TMDB_GENRE_MAP[g.lower()] for g in req.movie_genres if g.lower() in TMDB_GENRE_MAP]
         movie_ids_seen: set = set()
         all_movies: list = []
-        if external.TMDB_API_KEY and not is_quota_exceeded("tmdb"):
+        if external.TMDB_API_KEY and not check_and_maybe_block("tmdb"):
             import httpx as _httpx
             for page in (1, 2):
                 params = {"api_key": external.TMDB_API_KEY, "language": "en-US", "page": page}
@@ -850,7 +1085,7 @@ async def load_user_preferences(req: PreferencesLoadRequest):
     if "books" in activities:
         seen_ids: set = set()
         book_ids: list = []
-        if not is_quota_exceeded("google_books"):
+        if not check_and_maybe_block("google_books"):
             genres_to_fetch = req.book_genres if req.book_genres else ["fiction", "nonfiction"]
             for genre in genres_to_fetch[:4]:
                 results = await external.books_search(f"subject:{genre}", max_results=10)

@@ -88,7 +88,7 @@ export default function OnboardingWizard() {
 
   const handleSkip = () => {
     updateUser({ onboarding_complete: true })
-    navigate('/discover/restaurants')
+    navigate('/dashboard')
   }
 
   const needsLocation = activities.some(a => LOCATION_ACTIVITIES.has(a))
@@ -188,10 +188,13 @@ export default function OnboardingWizard() {
 
   const overlay = {
     position: 'fixed', inset: 0, zIndex: 1000,
-    background: 'rgba(0,0,0,0.85)',
+    background: 'rgba(0,0,0,0.6)',
     display: 'flex', alignItems: 'center', justifyContent: 'center',
     backdropFilter: 'blur(4px)',
+    cursor: 'pointer',
   }
+
+  const stopProp = (e) => e.stopPropagation()
 
   const card = {
     background: 'var(--s1)',
@@ -249,8 +252,8 @@ export default function OnboardingWizard() {
 
   // ── Step 1: Welcome ────────────────────────────────────────────────────────
   if (step === 1) return (
-    <div style={overlay}>
-      <div style={card}>
+    <div style={overlay} onClick={handleSkip}>
+      <div style={card} onClick={stopProp}>
         <div style={{ fontSize: '48px', marginBottom: '16px' }}>👋</div>
         <div style={h2}>Welcome to clubPal, {user?.full_name?.split(' ')[0] || user?.username}!</div>
         <div style={sub}>
@@ -273,8 +276,8 @@ export default function OnboardingWizard() {
 
   // ── Step 2: Activities ─────────────────────────────────────────────────────
   if (step === 2) return (
-    <div style={overlay}>
-      <div style={card}>
+    <div style={overlay} onClick={handleSkip}>
+      <div style={card} onClick={stopProp}>
         {progressDots()}
         <div style={h2}>What do you enjoy?</div>
         <div style={sub}>Select all that apply — you can change this later in Settings.</div>
@@ -313,8 +316,8 @@ export default function OnboardingWizard() {
 
   // ── Step 3: Location ───────────────────────────────────────────────────────
   if (step === 3) return (
-    <div style={overlay}>
-      <div style={card}>
+    <div style={overlay} onClick={handleSkip}>
+      <div style={card} onClick={stopProp}>
         {progressDots()}
         <div style={h2}>Where are you based?</div>
         <div style={sub}>
@@ -404,8 +407,8 @@ export default function OnboardingWizard() {
 
   // ── Step 4: Genres ─────────────────────────────────────────────────────────
   if (step === 4 && needsGenres) return (
-    <div style={overlay}>
-      <div style={card}>
+    <div style={overlay} onClick={handleSkip}>
+      <div style={card} onClick={stopProp}>
         {progressDots()}
         <div style={h2}>What do you like?</div>
         <div style={sub}>Select your favorites — we'll use this to curate your feed.</div>
@@ -455,8 +458,8 @@ export default function OnboardingWizard() {
   if (step === 5) {
     const counts = loadResult || {}
     return (
-      <div style={overlay}>
-        <div style={card}>
+      <div style={overlay} onClick={loading ? undefined : handleSkip}>
+        <div style={card} onClick={stopProp}>
           {progressDots()}
           <div style={h2}>{loading ? 'Building your feed…' : loadError ? 'Something went wrong' : 'Ready to load'}</div>
           <div style={sub}>
@@ -567,8 +570,8 @@ export default function OnboardingWizard() {
     const summary = Object.entries(loaded).map(([k, v]) => `${v} ${k}`).join(' · ')
 
     return (
-      <div style={overlay}>
-        <div style={card}>
+      <div style={overlay} onClick={() => navigate('/dashboard')}>
+        <div style={card} onClick={stopProp}>
           <div style={{ fontSize: '52px', marginBottom: '16px' }}>🎉</div>
           <div style={h2}>Your feed is ready!</div>
           <div style={sub}>
@@ -579,14 +582,14 @@ export default function OnboardingWizard() {
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
               type="button"
-              onClick={() => navigate('/discover/restaurants')}
+              onClick={() => navigate('/dashboard')}
               style={{
                 background: 'var(--rose)', color: '#fff', border: 'none',
                 borderRadius: '10px', padding: '10px 24px', fontSize: '14px',
                 fontWeight: 700, cursor: 'pointer',
               }}
             >
-              Explore Now →
+              Go to Dashboard →
             </button>
           </div>
         </div>

@@ -15,6 +15,9 @@ import ActivityFeedCard from '../components/dashboard/ActivityFeedCard'
 import RsvpNeededCard from '../components/dashboard/RsvpNeededCard'
 import CreateGroupModal from '../components/modals/CreateGroupModal'
 import CreateEventModal from '../components/modals/CreateEventModal'
+import { useTour } from '../components/onboarding/useTour'
+import TourOverlay from '../components/onboarding/TourOverlay'
+import { tourSteps } from '../components/onboarding/tourSteps'
 
 function getGreeting() {
   const h = new Date().getHours()
@@ -56,6 +59,7 @@ export default function Dashboard() {
   const [activityLoading, setActivityLoading] = useState(true)
   const [showCreateGroup, setShowCreateGroup] = useState(false)
   const [showCreateEvent, setShowCreateEvent] = useState(false)
+  const { active: tourActive, step: tourStep, next: tourNext, prev: tourPrev, goTo: tourGoTo, end: tourEnd } = useTour(user)
 
   useEffect(() => {
     if (!user?.id) return
@@ -249,41 +253,51 @@ export default function Dashboard() {
           {/* Left column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {/* 1. Pick CTA — only when it's your turn */}
-            {!loading && activeTurn && (
-              <PickCTACard
-                turn={activeTurn}
-                groupId={primaryGroupId}
-                onSkip={() => groupsApi.skipRotation(primaryGroupId).then(load)}
-              />
-            )}
+            <div id="tour-turn">
+              {!loading && activeTurn && (
+                <PickCTACard
+                  turn={activeTurn}
+                  groupId={primaryGroupId}
+                  onSkip={() => groupsApi.skipRotation(primaryGroupId).then(load)}
+                />
+              )}
+            </div>
 
             {/* 2. RSVP needed */}
-            <RsvpNeededCard
-              events={rsvpNeeded}
-              userId={user?.id}
-              onResponded={handleRsvpResponded}
-            />
+            <div id="tour-rsvp">
+              <RsvpNeededCard
+                events={rsvpNeeded}
+                userId={user?.id}
+                onResponded={handleRsvpResponded}
+              />
+            </div>
 
             {/* 3. Pending polls + my active polls */}
-            <PendingPollsCard
-              polls={pendingPolls}
-              myPolls={myPolls}
-              groups={groups}
-              loading={loading}
-              onRespond={handlePollRespond}
-            />
+            <div id="tour-polls">
+              <PendingPollsCard
+                polls={pendingPolls}
+                myPolls={myPolls}
+                groups={groups}
+                loading={loading}
+                onRespond={handlePollRespond}
+              />
+            </div>
 
-            {/* 4. Upcoming events */}
-            <UpcomingEventsCard events={events} loading={loading} />
           </div>
 
           {/* Right column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <TurnQueueCard
-              groupId={primaryGroupId}
-              groupName={primaryGroup?.name}
-              currentUserId={user?.id}
-            />
+            <div id="tour-queue">
+              <TurnQueueCard
+                groupId={primaryGroupId}
+                groupName={primaryGroup?.name}
+                currentUserId={user?.id}
+              />
+            </div>
+            {/* 4. Upcoming events — under turn queue */}
+            <div id="tour-events">
+              <UpcomingEventsCard events={events} loading={loading} />
+            </div>
             <ActivityFeedCard
               items={activityItems}
               loading={activityLoading}
@@ -303,6 +317,31 @@ export default function Dashboard() {
         onClose={() => setShowCreateEvent(false)}
         onCreated={(eventId) => { setShowCreateEvent(false); if (eventId) navigate(`/events/${eventId}`) }}
       />
+
+      {tourActive && (
+        <TourOverlay
+          step={tourStep}
+          total={tourSteps.length}
+          onNext={tourNext}
+          onPrev={tourPrev}
+          onGoTo={tourGoTo}
+          onEnd={tourEnd}
+        />
+      )}
+
+      {import.meta.env.DEV && (
+        <button
+          onClick={() => { localStorage.removeItem('clubpal_tour_done'); window.location.reload() }}
+          style={{
+            position: 'fixed', bottom: 12, right: 12, zIndex: 9999,
+            fontSize: '10px', padding: '4px 8px', opacity: 0.35,
+            background: 'var(--s3)', border: '1px solid var(--glass)',
+            borderRadius: '6px', color: 'var(--t3)', cursor: 'pointer',
+          }}
+        >
+          Reset tour
+        </button>
+      )}
     </AppShell>
   )
 }

@@ -12,11 +12,11 @@ const SIGNOUT_ICON = (
 )
 
 const MAIN_NAV = [
-  { to: '/dashboard', label: 'Dashboard', icon: '🏠' },
-  { to: '/groups',    label: 'My Groups',  icon: '👥' },
-  { to: '/events',    label: 'Events',     icon: '📅' },
-  { to: '/stats',     label: 'Stats',      icon: '📊' },
-  { to: '/leaderboard', label: 'Leaderboard', icon: '🏆' },
+  { to: '/dashboard',   label: 'Dashboard',   icon: '🏠' },
+  { to: '/groups',      label: 'My Groups',   icon: '👥', id: 'tour-nav-groups' },
+  { to: '/events',      label: 'Events',      icon: '📅', id: 'tour-nav-events' },
+  { to: '/stats',       label: 'Stats',       icon: '📊', id: 'tour-nav-stats' },
+  { to: '/leaderboard', label: 'Leaderboard', icon: '🏆', id: 'tour-nav-leaderboard' },
 ]
 
 const DISCOVER_NAV = [
@@ -34,9 +34,10 @@ const SETTINGS_NAV = [
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ]
 
-function NavItem({ to, label, icon }) {
+function NavItem({ to, label, icon, id }) {
   return (
     <NavLink
+      id={id}
       to={to}
       className={({ isActive }) => `cp-nav-item${isActive ? ' active' : ''}`}
     >
@@ -98,11 +99,12 @@ export default function Sidebar({ user: userProp, groupCount = 0, notifCount = 0
         {/* Main */}
         <div className="cp-nav-label">Main</div>
         {MAIN_NAV.map(item => (
-          <NavItem key={item.to} to={item.to} label={item.label} icon={item.icon} />
+          <NavItem key={item.to} to={item.to} label={item.label} icon={item.icon} id={item.id} />
         ))}
 
         {/* Discover — collapsible */}
         <button
+          id="tour-nav-discover"
           onClick={() => setDiscoverOpen(o => !o)}
           style={{
             display: 'flex',

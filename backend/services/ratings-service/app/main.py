@@ -80,7 +80,8 @@ async def create_rating_endpoint(rating_data: RatingCreate, user_id: int):
             rater_user_id=user_id,
             rated_user_id=rating_data.rated_user_id,
             score=rating_data.score,
-            comment=rating_data.comment
+            comment=rating_data.comment,
+            tags=rating_data.tags
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -192,6 +193,11 @@ async def get_user_stats_endpoint(user_id: int):
             score_3_count=0,
             score_4_count=0,
             score_5_count=0,
+            score_6_count=0,
+            score_7_count=0,
+            score_8_count=0,
+            score_9_count=0,
+            score_10_count=0,
             total_hosted_events=0
         )
 

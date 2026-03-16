@@ -19,7 +19,7 @@ def init_db():
             event_id INTEGER NOT NULL,
             rater_user_id INTEGER NOT NULL,
             rated_user_id INTEGER NOT NULL,
-            score INTEGER NOT NULL CHECK(score >= 1 AND score <= 5),
+            score INTEGER NOT NULL CHECK(score >= 1 AND score <= 10),
             comment TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -38,10 +38,22 @@ def init_db():
             score_3_count INTEGER DEFAULT 0,
             score_4_count INTEGER DEFAULT 0,
             score_5_count INTEGER DEFAULT 0,
+            score_6_count INTEGER DEFAULT 0,
+            score_7_count INTEGER DEFAULT 0,
+            score_8_count INTEGER DEFAULT 0,
+            score_9_count INTEGER DEFAULT 0,
+            score_10_count INTEGER DEFAULT 0,
             total_hosted_events INTEGER DEFAULT 0,
             last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
+    for i in range(6, 11):
+        cursor.execute(f"ALTER TABLE user_stats ADD COLUMN IF NOT EXISTS score_{i}_count INTEGER DEFAULT 0")
+
+    cursor.execute("ALTER TABLE ratings ADD COLUMN IF NOT EXISTS tags JSONB NOT NULL DEFAULT '[]'")
+    # Widen score range from 1-5 to 1-10
+    cursor.execute("ALTER TABLE ratings DROP CONSTRAINT IF EXISTS ratings_score_check")
+    cursor.execute("ALTER TABLE ratings ADD CONSTRAINT ratings_score_check CHECK(score >= 1 AND score <= 10)")
 
     # Indexes
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_ratings_event ON ratings(event_id)")
@@ -62,16 +74,17 @@ def get_db():
 # ===== Rating CRUD =====
 
 def create_rating(event_id: int, rater_user_id: int, rated_user_id: int,
-                 score: int, comment: str = None) -> int:
+                 score: int, comment: str = None, tags: list = None) -> int:
     """Create a new rating."""
+    import json
     conn = get_db()
     cursor = conn.cursor()
 
     try:
         cursor.execute(
-            """INSERT INTO ratings (event_id, rater_user_id, rated_user_id, score, comment)
-               VALUES (%s, %s, %s, %s, %s) RETURNING id""",
-            (event_id, rater_user_id, rated_user_id, score, comment)
+            """INSERT INTO ratings (event_id, rater_user_id, rated_user_id, score, comment, tags)
+               VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+            (event_id, rater_user_id, rated_user_id, score, comment, json.dumps(tags or []))
         )
 
         rating_id = cursor.fetchone()['id']
@@ -255,11 +268,16 @@ def update_user_stats(user_id: int):
         """SELECT
                COUNT(*) as total_ratings,
                AVG(score) as average_score,
-               SUM(CASE WHEN score = 1 THEN 1 ELSE 0 END) as score_1_count,
-               SUM(CASE WHEN score = 2 THEN 1 ELSE 0 END) as score_2_count,
-               SUM(CASE WHEN score = 3 THEN 1 ELSE 0 END) as score_3_count,
-               SUM(CASE WHEN score = 4 THEN 1 ELSE 0 END) as score_4_count,
-               SUM(CASE WHEN score = 5 THEN 1 ELSE 0 END) as score_5_count
+               SUM(CASE WHEN score = 1  THEN 1 ELSE 0 END) as score_1_count,
+               SUM(CASE WHEN score = 2  THEN 1 ELSE 0 END) as score_2_count,
+               SUM(CASE WHEN score = 3  THEN 1 ELSE 0 END) as score_3_count,
+               SUM(CASE WHEN score = 4  THEN 1 ELSE 0 END) as score_4_count,
+               SUM(CASE WHEN score = 5  THEN 1 ELSE 0 END) as score_5_count,
+               SUM(CASE WHEN score = 6  THEN 1 ELSE 0 END) as score_6_count,
+               SUM(CASE WHEN score = 7  THEN 1 ELSE 0 END) as score_7_count,
+               SUM(CASE WHEN score = 8  THEN 1 ELSE 0 END) as score_8_count,
+               SUM(CASE WHEN score = 9  THEN 1 ELSE 0 END) as score_9_count,
+               SUM(CASE WHEN score = 10 THEN 1 ELSE 0 END) as score_10_count
            FROM ratings
            WHERE rated_user_id = %s""",
         (user_id,)
@@ -273,9 +291,11 @@ def update_user_stats(user_id: int):
     # Insert or update stats
     cursor.execute(
         """INSERT INTO user_stats
-               (user_id, total_ratings, average_score, score_1_count, score_2_count,
-                score_3_count, score_4_count, score_5_count, last_updated)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+               (user_id, total_ratings, average_score,
+                score_1_count, score_2_count, score_3_count, score_4_count, score_5_count,
+                score_6_count, score_7_count, score_8_count, score_9_count, score_10_count,
+                last_updated)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
            ON CONFLICT(user_id) DO UPDATE SET
                total_ratings = EXCLUDED.total_ratings,
                average_score = EXCLUDED.average_score,
@@ -284,10 +304,17 @@ def update_user_stats(user_id: int):
                score_3_count = EXCLUDED.score_3_count,
                score_4_count = EXCLUDED.score_4_count,
                score_5_count = EXCLUDED.score_5_count,
+               score_6_count = EXCLUDED.score_6_count,
+               score_7_count = EXCLUDED.score_7_count,
+               score_8_count = EXCLUDED.score_8_count,
+               score_9_count = EXCLUDED.score_9_count,
+               score_10_count = EXCLUDED.score_10_count,
                last_updated = CURRENT_TIMESTAMP""",
         (user_id, total_ratings, average_score,
          stats['score_1_count'] or 0, stats['score_2_count'] or 0,
-         stats['score_3_count'] or 0, stats['score_4_count'] or 0, stats['score_5_count'] or 0)
+         stats['score_3_count'] or 0, stats['score_4_count'] or 0, stats['score_5_count'] or 0,
+         stats['score_6_count'] or 0, stats['score_7_count'] or 0, stats['score_8_count'] or 0,
+         stats['score_9_count'] or 0, stats['score_10_count'] or 0)
     )
 
     conn.commit()
@@ -319,11 +346,16 @@ def get_user_stats(user_id: int) -> Optional[dict]:
 
     cursor.execute(
         """SELECT user_id, total_ratings, average_score,
-                  COALESCE(score_1_count, 0) AS score_1_count,
-                  COALESCE(score_2_count, 0) AS score_2_count,
-                  COALESCE(score_3_count, 0) AS score_3_count,
-                  COALESCE(score_4_count, 0) AS score_4_count,
-                  COALESCE(score_5_count, 0) AS score_5_count,
+                  COALESCE(score_1_count, 0)  AS score_1_count,
+                  COALESCE(score_2_count, 0)  AS score_2_count,
+                  COALESCE(score_3_count, 0)  AS score_3_count,
+                  COALESCE(score_4_count, 0)  AS score_4_count,
+                  COALESCE(score_5_count, 0)  AS score_5_count,
+                  COALESCE(score_6_count, 0)  AS score_6_count,
+                  COALESCE(score_7_count, 0)  AS score_7_count,
+                  COALESCE(score_8_count, 0)  AS score_8_count,
+                  COALESCE(score_9_count, 0)  AS score_9_count,
+                  COALESCE(score_10_count, 0) AS score_10_count,
                   total_hosted_events, last_updated
            FROM user_stats WHERE user_id = %s""",
         (user_id,)
@@ -342,11 +374,16 @@ def get_user_stats(user_id: int) -> Optional[dict]:
     cursor = conn.cursor()
     cursor.execute(
         """SELECT user_id, total_ratings, average_score,
-                  COALESCE(score_1_count, 0) AS score_1_count,
-                  COALESCE(score_2_count, 0) AS score_2_count,
-                  COALESCE(score_3_count, 0) AS score_3_count,
-                  COALESCE(score_4_count, 0) AS score_4_count,
-                  COALESCE(score_5_count, 0) AS score_5_count,
+                  COALESCE(score_1_count, 0)  AS score_1_count,
+                  COALESCE(score_2_count, 0)  AS score_2_count,
+                  COALESCE(score_3_count, 0)  AS score_3_count,
+                  COALESCE(score_4_count, 0)  AS score_4_count,
+                  COALESCE(score_5_count, 0)  AS score_5_count,
+                  COALESCE(score_6_count, 0)  AS score_6_count,
+                  COALESCE(score_7_count, 0)  AS score_7_count,
+                  COALESCE(score_8_count, 0)  AS score_8_count,
+                  COALESCE(score_9_count, 0)  AS score_9_count,
+                  COALESCE(score_10_count, 0) AS score_10_count,
                   total_hosted_events, last_updated
            FROM user_stats WHERE user_id = %s""",
         (user_id,)

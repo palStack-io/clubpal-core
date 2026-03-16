@@ -3,58 +3,84 @@ import Button from '../ui/Button'
 import Avatar from '../ui/Avatar'
 import { ratingsClient } from '../../api/client'
 
+const TAGS = [
+  'Hidden Gem', 'Would Return', 'Special Occasion', 'Date Night',
+  'Family', 'Casual', 'Pricey', 'Great Vibes', 'Loud', 'Cozy',
+]
+
 function ScoreInput({ value, onChange }) {
-  const LABELS = { 1: 'Poor', 2: 'Fair', 3: 'Good', 4: 'Great', 5: 'Amazing' }
   return (
-    <div>
-      <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginBottom: '8px' }}>
-        {[1, 2, 3, 4, 5].map(n => {
-          const selected = value === n
-          return (
-            <button
-              key={n}
-              type="button"
-              onClick={() => onChange(n)}
-              style={{
-                width: '48px',
-                height: '48px',
-                borderRadius: '12px',
-                border: `1px solid ${selected ? 'transparent' : 'var(--glass)'}`,
-                background: selected
-                  ? 'linear-gradient(135deg, var(--rose-soft), var(--rose))'
-                  : 'var(--s3)',
-                color: selected ? '#fff' : 'var(--t2)',
-                fontSize: '18px',
-                fontWeight: 800,
-                cursor: 'pointer',
-                boxShadow: selected ? '0 2px 12px rgba(244,63,94,0.35)' : 'none',
-                transition: 'all 0.12s',
-              }}
-            >
-              {n}
-            </button>
-          )
-        })}
-      </div>
-      {value > 0 && (
-        <div style={{ textAlign: 'center', fontSize: '12px', color: 'var(--rose-soft)', fontWeight: 600 }}>
-          {LABELS[value]}
-        </div>
-      )}
+    <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+        <button
+          key={n}
+          type="button"
+          onClick={() => onChange(n)}
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            fontSize: '24px',
+            color: n <= value ? 'var(--rose)' : 'var(--t4)',
+            padding: '2px',
+            transition: 'color 0.1s, transform 0.1s',
+            lineHeight: 1,
+          }}
+          onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.2)' }}
+          onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
+        >
+          ★
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function TagPicker({ selected, onChange }) {
+  const toggle = tag => onChange(
+    selected.includes(tag) ? selected.filter(t => t !== tag) : [...selected, tag]
+  )
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+      {TAGS.map(tag => {
+        const active = selected.includes(tag)
+        return (
+          <button
+            key={tag}
+            type="button"
+            onClick={() => toggle(tag)}
+            style={{
+              padding: '5px 11px',
+              borderRadius: '20px',
+              border: `1px solid ${active ? 'var(--rose-border)' : 'var(--glass)'}`,
+              background: active ? 'var(--rose-glow)' : 'var(--s3)',
+              color: active ? 'var(--rose-soft)' : 'var(--t3)',
+              fontSize: '11px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              transition: 'all 0.12s',
+            }}
+          >
+            {tag}
+          </button>
+        )
+      })}
     </div>
   )
 }
 
 export default function RateEventModal({ isOpen, onClose, event, attendees, currentUser, onSubmitted }) {
+  const others = (attendees || []).filter(a => String(a.user_id) !== String(currentUser?.id))
+  const defaultRatedUserId = others[0]?.user_id ?? null
+
   const [score, setScore] = useState(0)
   const [comment, setComment] = useState('')
-  const [ratedUserId, setRatedUserId] = useState(event?.host_user_id || null)
+  const [tags, setTags] = useState([])
+  const [ratedUserId, setRatedUserId] = useState(defaultRatedUserId)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
   if (!isOpen) return null
-
-  const others = (attendees || []).filter(a => a.user_id !== currentUser?.id)
 
   const handleSubmit = async () => {
     if (!score) { setError('Please select a score.'); return }
@@ -67,6 +93,7 @@ export default function RateEventModal({ isOpen, onClose, event, attendees, curr
         rated_user_id: ratedUserId,
         score,
         comment: comment.trim() || null,
+        tags,
       }, { params: { user_id: currentUser.id } })
       onSubmitted?.()
       onClose()
@@ -154,6 +181,14 @@ export default function RateEventModal({ isOpen, onClose, event, attendees, curr
             Your Score
           </div>
           <ScoreInput value={score} onChange={setScore} />
+        </div>
+
+        {/* Tags */}
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '10px' }}>
+            Tags (optional)
+          </div>
+          <TagPicker selected={tags} onChange={setTags} />
         </div>
 
         {/* Comment */}

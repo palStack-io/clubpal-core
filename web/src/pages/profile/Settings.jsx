@@ -415,42 +415,30 @@ function AppearanceSection() {
 
 const INTEGRATION_FIELDS = [
   {
-    group: 'Google APIs',
-    description: 'Powers place search, nearby restaurants, hikes, arts, geocoding, and books.',
-    fields: [{ key: 'google_api_key', label: 'Google API Key', placeholder: 'AIza…' }],
+    group: '🔵 Google',
+    description: 'Maps/Places powers discovery features (restaurants, hikes, arts, geocoding, books). Cloud Vision powers receipt OCR for bill splits.',
+    fields: [
+      { key: 'google_api_key', label: 'Google Maps / Places API Key', placeholder: 'AIza…' },
+      { key: 'google_cloud_vision_api_key', label: 'Google Cloud Vision API Key', placeholder: 'AIza…' },
+    ],
   },
   {
-    group: 'TMDB (Movies)',
-    description: 'Powers movie search, now-playing, and upcoming movie discovery.',
-    fields: [{ key: 'tmdb_api_key', label: 'TMDB API Key', placeholder: 'eyJhb…' }],
+    group: '🎬 Movies & TV',
+    description: 'TMDB powers movie search and discovery. Radarr and Sonarr overlay "In Library" badges on movie and TV show cards.',
+    fields: [
+      { key: 'tmdb_api_key', label: 'TMDB API Key', placeholder: 'eyJhb…' },
+      { key: 'radarr_url', label: 'Radarr URL', placeholder: 'http://192.168.1.10:7878', type: 'text' },
+      { key: 'radarr_api_key', label: 'Radarr API Key', placeholder: 'Your Radarr API key' },
+      { key: 'sonarr_url', label: 'Sonarr URL', placeholder: 'http://192.168.1.10:8989', type: 'text' },
+      { key: 'sonarr_api_key', label: 'Sonarr API Key', placeholder: 'Your Sonarr API key' },
+    ],
   },
   {
-    group: 'IGDB (Games)',
+    group: '🎮 Games',
     description: 'Powers video game search and popular game discovery via Twitch/IGDB.',
     fields: [
       { key: 'igdb_client_id', label: 'IGDB Client ID', placeholder: 'Twitch application client ID' },
       { key: 'igdb_client_secret', label: 'IGDB Client Secret', placeholder: 'Twitch application client secret' },
-    ],
-  },
-  {
-    group: 'Google Cloud Vision (Bill Splits)',
-    description: 'Powers receipt OCR scanning — photograph a bill to auto-extract items, tax, and tip.',
-    fields: [{ key: 'google_cloud_vision_api_key', label: 'Google Cloud Vision API Key', placeholder: 'AIza…' }],
-  },
-  {
-    group: 'Radarr (Movies Library)',
-    description: 'Connect your self-hosted Radarr instance to overlay "In Library" badges on movie cards.',
-    fields: [
-      { key: 'radarr_url', label: 'Radarr URL', placeholder: 'http://192.168.1.10:7878', type: 'text' },
-      { key: 'radarr_api_key', label: 'Radarr API Key', placeholder: 'Your Radarr API key' },
-    ],
-  },
-  {
-    group: 'Sonarr (TV Library)',
-    description: 'Connect your self-hosted Sonarr instance to overlay "In Library" badges on TV show cards.',
-    fields: [
-      { key: 'sonarr_url', label: 'Sonarr URL', placeholder: 'http://192.168.1.10:8989', type: 'text' },
-      { key: 'sonarr_api_key', label: 'Sonarr API Key', placeholder: 'Your Sonarr API key' },
     ],
   },
 ]
@@ -584,6 +572,25 @@ function IntegrationsSection({ user }) {
         }}>
           🛡️ Admin
         </span>
+        {Object.keys(status).length > 0 && (() => {
+          const allKeys = INTEGRATION_FIELDS.flatMap(g => g.fields.map(f => f.key))
+          const giphyConfigured = !!localStorage.getItem('giphy_api_key')
+          const backendConfigured = allKeys.filter(k => status[k]?.configured).length
+          const total = allKeys.length + 1
+          const configured = backendConfigured + (giphyConfigured ? 1 : 0)
+          const allDone = configured === total
+          return (
+            <span style={{
+              fontSize: '11px', fontWeight: 700,
+              color: allDone ? '#22d3a0' : 'var(--t3)',
+              background: allDone ? 'rgba(34,211,160,0.1)' : 'var(--s3)',
+              border: `1px solid ${allDone ? 'rgba(34,211,160,0.2)' : 'var(--glass)'}`,
+              borderRadius: '6px', padding: '2px 8px',
+            }}>
+              {configured}/{total} configured
+            </span>
+          )
+        })()}
       </div>
       <p style={{ fontSize: '12px', color: 'var(--t3)', marginBottom: '16px' }}>
         You're the instance administrator. Configure external API integrations and manage server-wide settings.

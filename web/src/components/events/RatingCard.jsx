@@ -3,11 +3,11 @@ import Avatar from '../ui/Avatar'
 import Button from '../ui/Button'
 
 function StarRow({ avg }) {
-  const filled = Math.round(Number(avg) / 2)
+  const filled = Math.round(Number(avg))
   return (
-    <span style={{ color: '#f59e0b', fontSize: '16px' }}>
-      {'★'.repeat(Math.min(5, filled))}
-      {'☆'.repeat(Math.max(0, 5 - filled))}
+    <span style={{ color: 'var(--rose)', fontSize: '13px', letterSpacing: '-1px' }}>
+      {'★'.repeat(Math.min(10, filled))}
+      {'☆'.repeat(Math.max(0, 10 - filled))}
     </span>
   )
 }
@@ -171,7 +171,7 @@ export default function RatingCard({
         ).toFixed(1)
       : null
 
-  const dist = [10, 9, 8, 7, 6].map((score) => ({
+  const dist = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map((score) => ({
     label: score,
     count: ratings.filter((r) => Math.round(r.score || r.rating || 0) === score).length,
   }))

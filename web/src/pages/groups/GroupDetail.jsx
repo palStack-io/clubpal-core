@@ -20,6 +20,18 @@ import { eventsApi } from '../../api/events'
 import { ratingsApi } from '../../api/ratings'
 import { gatewayClient } from '../../api/client'
 
+async function enrichWithProfiles(items, uidField) {
+  if (!items?.length) return items || []
+  const fn = typeof uidField === 'function' ? uidField : (item => item[uidField])
+  const uids = [...new Set(items.map(fn).filter(Boolean))]
+  if (!uids.length) return items
+  const profiles = await Promise.all(
+    uids.map(uid => gatewayClient.get(`/users/${uid}/profile`).then(r => r.data).catch(() => ({ id: uid })))
+  )
+  const profileMap = Object.fromEntries(profiles.map(p => [p.id, p]))
+  return items.map(item => ({ ...item, ...(profileMap[fn(item)] || {}) }))
+}
+
 function activeSinceLabel(createdAt) {
   if (!createdAt) return 'New'
   const years = Math.floor((Date.now() - new Date(createdAt)) / (365.25 * 24 * 60 * 60 * 1000))
@@ -49,6 +61,8 @@ export default function GroupDetail() {
   const [showPastPolls, setShowPastPolls] = useState(false)
   const [comments, setComments] = useState([])
   const [leaderboard, setLeaderboard] = useState([])
+  const [pendingInvites, setPendingInvites] = useState([])
+  const [inviteSuccess, setInviteSuccess] = useState(null)
 
   const fetchAll = async () => {
     try {
@@ -59,16 +73,20 @@ export default function GroupDetail() {
         groupsApi.getRotation(id),
       ])
       setGroup(g)
-      setMembers(m || [])
       setUpcoming(u || [])
       setRotation(r)
+      setMembers(await enrichWithProfiles(m || [], 'user_id'))
     } catch {}
     finally { setLoading(false) }
 
     eventsApi.getGroupEvents(id, 'completed').then(setPast).catch(() => {})
-    groupsApi.getComments(id).then(c => setComments(Array.isArray(c) ? c : [])).catch(() => {})
+    groupsApi.getComments(id).then(async c => {
+      const arr = Array.isArray(c) ? c : []
+      setComments(await enrichWithProfiles(arr, 'user_id'))
+    }).catch(() => {})
     groupsApi.getGroupPolls(id, user?.id).then(p => setPolls(Array.isArray(p) ? p : [])).catch(() => {})
     ratingsApi.getLeaderboard(id).then(d => setLeaderboard(d?.leaderboard || [])).catch(() => {})
+    gatewayClient.get(`/groups/${id}/pending-invites`).then(r => setPendingInvites(Array.isArray(r.data) ? r.data : [])).catch(() => {})
   }
 
   useEffect(() => { fetchAll() }, [id])
@@ -80,10 +98,19 @@ export default function GroupDetail() {
   const handleInvite = async (email) => {
     setInviteLoading(true)
     try {
-      await gatewayClient.post(`/groups/${id}/invite`, { email })
-      setShowInvite(false)
-    } catch {}
-    finally { setInviteLoading(false) }
+      await gatewayClient.post('/invites/send', {
+        email,
+        group_id: parseInt(id),
+        invited_by: user.id,
+        group_name: group.name,
+      })
+      setInviteSuccess(email)
+      gatewayClient.get(`/groups/${id}/pending-invites`).then(r => setPendingInvites(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+    } catch (err) {
+      setInviteSuccess(null)
+    } finally {
+      setInviteLoading(false)
+    }
   }
 
   const handleRemove = async () => {
@@ -107,7 +134,10 @@ export default function GroupDetail() {
   const handleAddComment = async (content) => {
     try {
       await groupsApi.addComment(id, user?.id, content)
-      groupsApi.getComments(id).then(c => setComments(Array.isArray(c) ? c : [])).catch(() => {})
+      groupsApi.getComments(id).then(async c => {
+        const arr = Array.isArray(c) ? c : []
+        setComments(await enrichWithProfiles(arr, 'user_id'))
+      }).catch(() => {})
     } catch {}
   }
 
@@ -271,6 +301,7 @@ export default function GroupDetail() {
             <RotationQueueCard rotation={rotation} currentUserId={user?.id} />
             <MembersCard
               members={members}
+              pendingInvites={pendingInvites}
               canManage={isAdmin}
               currentUserId={user?.id}
               onRoleChange={handleRoleChange}
@@ -283,9 +314,12 @@ export default function GroupDetail() {
 
       <InviteMemberModal
         isOpen={showInvite}
-        onClose={() => setShowInvite(false)}
+        onClose={() => { setShowInvite(false); setInviteSuccess(null) }}
         onInvite={handleInvite}
         loading={inviteLoading}
+        successEmail={inviteSuccess}
+        onInviteAnother={() => setInviteSuccess(null)}
+        pendingInvites={pendingInvites}
       />
       <ConfirmDeleteModal
         isOpen={!!removeTarget}

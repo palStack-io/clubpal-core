@@ -1,17 +1,4 @@
-const AVATAR_PALETTES = [
-  { bg: 'rgba(244,63,94,0.18)',   color: '#fb7185' },
-  { bg: 'rgba(99,102,241,0.18)',  color: '#818cf8' },
-  { bg: 'rgba(20,184,166,0.18)',  color: '#2dd4bf' },
-]
-
-function initials(name = '') {
-  return name
-    .split(' ')
-    .map(n => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2) || '?'
-}
+import Avatar from '../ui/Avatar'
 
 function StarRating({ rating }) {
   return (
@@ -32,8 +19,6 @@ function StarRating({ rating }) {
 }
 
 export default function ReviewCard({ review, index = 0 }) {
-  const palette = AVATAR_PALETTES[index % AVATAR_PALETTES.length]
-
   return (
     <div
       style={{
@@ -52,23 +37,7 @@ export default function ReviewCard({ review, index = 0 }) {
         }}
       >
         {/* Avatar */}
-        <div
-          style={{
-            width: '34px',
-            height: '34px',
-            borderRadius: '50%',
-            background: palette.bg,
-            color: palette.color,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '11px',
-            fontWeight: 800,
-            flexShrink: 0,
-          }}
-        >
-          {initials(review.name)}
-        </div>
+        <Avatar user={{ full_name: review.name, avatar_url: review.avatar_url }} size="sm" />
 
         {/* Name + date */}
         <div style={{ flex: 1, minWidth: 0 }}>

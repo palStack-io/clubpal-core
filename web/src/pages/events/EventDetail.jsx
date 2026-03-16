@@ -10,8 +10,20 @@ import EventMetaCard from '../../components/events/EventMetaCard'
 import EditEventModal from '../../components/modals/EditEventModal'
 import AnimatedBackground from '../../components/ui/AnimatedBackground'
 import { eventsApi } from '../../api/events'
-import { ratingsClient } from '../../api/client'
+import { ratingsClient, gatewayClient } from '../../api/client'
 import { useAuth } from '../../contexts/AuthContext'
+
+async function enrichWithProfiles(items, uidField) {
+  if (!items?.length) return items || []
+  const fn = typeof uidField === 'function' ? uidField : (item => item[uidField])
+  const uids = [...new Set(items.map(fn).filter(Boolean))]
+  if (!uids.length) return items
+  const profiles = await Promise.all(
+    uids.map(uid => gatewayClient.get(`/users/${uid}/profile`).then(r => r.data).catch(() => ({ id: uid })))
+  )
+  const profileMap = Object.fromEntries(profiles.map(p => [p.id, p]))
+  return items.map(item => ({ ...item, ...(profileMap[fn(item)] || {}) }))
+}
 
 export default function EventDetail() {
   const { id } = useParams()
@@ -37,10 +49,21 @@ export default function EventDetail() {
         eventsApi.getComments(id).catch(() => []),
       ])
       setEvent(ev)
-      setAttendees(Array.isArray(att) ? att : att?.attendees || [])
-      setRatings(Array.isArray(rat) ? rat : rat?.ratings || [])
       setPhotos(Array.isArray(ph) ? ph : ph?.photos || [])
-      setComments(Array.isArray(cmt) ? cmt : cmt?.comments || [])
+
+      const rawAttendees = Array.isArray(att) ? att : att?.attendees || []
+      setAttendees(await enrichWithProfiles(rawAttendees, 'user_id'))
+
+      const rawComments = Array.isArray(cmt) ? cmt : cmt?.comments || []
+      setComments(await enrichWithProfiles(rawComments, 'user_id'))
+
+      const rawRatings = Array.isArray(rat) ? rat : rat?.ratings || []
+      const enrichedRatings = await enrichWithProfiles(rawRatings, r => r.reviewer_id || r.rater_id || r.user_id)
+      setRatings(enrichedRatings.map(r => ({
+        ...r,
+        reviewer_name: r.reviewer_name || r.full_name,
+        reviewer_avatar: r.reviewer_avatar || r.avatar_url,
+      })))
     } catch {
       // silently ignore top-level failures; individual catches already handle per-resource errors
     } finally {

@@ -222,7 +222,55 @@ function MemberRow({ member, canManage, currentUserId, onRoleChange, onRemove })
   )
 }
 
-export default function MembersCard({ members = [], canManage, currentUserId, onRoleChange, onRemove, onInvite }) {
+function PendingInviteRow({ email }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        padding: '10px 0',
+        borderBottom: '1px solid rgba(255,255,255,0.04)',
+        opacity: 0.45,
+      }}
+    >
+      <div
+        style={{
+          width: '30px', height: '30px', borderRadius: '50%',
+          background: 'var(--s4)', border: '1px dashed var(--t4)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '14px', flexShrink: 0,
+        }}
+      >
+        ✉️
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontSize: '13px', fontWeight: 600, color: 'var(--t2)',
+            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+          }}
+        >
+          {email}
+        </div>
+        <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '1px' }}>
+          Invite pending
+        </div>
+      </div>
+      <span
+        style={{
+          fontSize: '10px', fontWeight: 600, color: 'var(--t4)',
+          background: 'var(--s4)', borderRadius: '6px', padding: '2px 7px',
+        }}
+      >
+        ⏳ Awaiting
+      </span>
+    </div>
+  )
+}
+
+export default function MembersCard({ members = [], pendingInvites = [], canManage, currentUserId, onRoleChange, onRemove, onInvite }) {
+  const totalCount = members.length + pendingInvites.length
   const headerAction = (
     <button
       onClick={onInvite}
@@ -243,9 +291,9 @@ export default function MembersCard({ members = [], canManage, currentUserId, on
 
   return (
     <Card>
-      <Card.Header title={`Members (${members.length})`} action={headerAction} />
+      <Card.Header title={`Members (${totalCount})`} action={headerAction} />
       <Card.Body>
-        {members.length === 0 ? (
+        {members.length === 0 && pendingInvites.length === 0 ? (
           <div style={{ fontSize: '12px', color: 'var(--t3)', textAlign: 'center', padding: '16px' }}>
             No members yet
           </div>
@@ -254,7 +302,7 @@ export default function MembersCard({ members = [], canManage, currentUserId, on
             {members.map((member, i) => (
               <div
                 key={member.user_id}
-                style={i === members.length - 1 ? { borderBottom: 'none' } : {}}
+                style={(i === members.length - 1 && pendingInvites.length === 0) ? { borderBottom: 'none' } : {}}
               >
                 <MemberRow
                   member={member}
@@ -263,6 +311,14 @@ export default function MembersCard({ members = [], canManage, currentUserId, on
                   onRoleChange={onRoleChange}
                   onRemove={onRemove}
                 />
+              </div>
+            ))}
+            {pendingInvites.map((inv, i) => (
+              <div
+                key={inv.email}
+                style={i === pendingInvites.length - 1 ? { borderBottom: 'none' } : {}}
+              >
+                <PendingInviteRow email={inv.email} />
               </div>
             ))}
           </div>

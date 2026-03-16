@@ -23,7 +23,7 @@ from app.database import (
     init_db, create_user, get_user_count, get_user_by_username, get_user_by_email,
     get_user_by_id, verify_password, update_last_login, create_session,
     get_user_by_session, delete_session, cleanup_expired_sessions,
-    create_invite_token, get_invite_by_token, mark_invite_accepted,
+    create_invite_token, get_invite_by_token, mark_invite_accepted, get_pending_invites_for_group,
     create_verification_token, verify_email_token, update_user_email_verified,
     create_reset_token, verify_reset_token, update_user_password,
     update_user_profile, get_sessions_for_user, delete_session_by_token_for_user,
@@ -544,6 +544,12 @@ async def send_invite(invite_data: InviteSendRequest, current_user: dict = Depen
         expires_at=expires_at,
         user_exists=user_exists
     )
+
+
+@app.get("/groups/{group_id}/pending-invites")
+async def list_pending_invites(group_id: int, current_user: dict = Depends(get_current_user)):
+    """List pending (unaccepted) email invites for a group."""
+    return get_pending_invites_for_group(group_id)
 
 
 @app.get("/auth/invite/{token}", response_model=InviteValidateResponse)

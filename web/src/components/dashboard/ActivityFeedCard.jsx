@@ -1,4 +1,5 @@
 import Card from '../ui/Card'
+import Avatar from '../ui/Avatar'
 
 function timeAgo(dt) {
   try {
@@ -14,9 +15,6 @@ function timeAgo(dt) {
   } catch { return '' }
 }
 
-function initials(str = '') {
-  return str.split(' ').map(w => w[0] || '').join('').toUpperCase().slice(0, 2) || '?'
-}
 
 const TYPE_CONFIG = {
   comment: {
@@ -50,15 +48,18 @@ function FeedItem({ item, index, total }) {
       borderBottom: isLast ? 'none' : '1px solid var(--glass)',
     }}>
       {/* Icon / avatar */}
-      <div style={{
-        width: '30px', height: '30px', borderRadius: '9px', flexShrink: 0,
-        background: cfg.bgColor, border: `1px solid ${cfg.borderColor}`,
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        fontSize: cfg.icon ? '14px' : '11px',
-        fontWeight: 700, color: cfg.icon ? undefined : 'var(--t2)',
-      }}>
-        {cfg.icon || initials(item.actor || item.groupName)}
-      </div>
+      {cfg.icon ? (
+        <div style={{
+          width: '30px', height: '30px', borderRadius: '9px', flexShrink: 0,
+          background: cfg.bgColor, border: `1px solid ${cfg.borderColor}`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '14px',
+        }}>
+          {cfg.icon}
+        </div>
+      ) : (
+        <Avatar user={{ full_name: item.actor, avatar_url: item.actor_avatar }} size="sm" />
+      )}
 
       {/* Text */}
       <div style={{ flex: 1, minWidth: 0 }}>

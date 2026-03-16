@@ -512,6 +512,23 @@ def mark_invite_accepted(token: str):
     conn.close()
 
 
+def get_pending_invites_for_group(group_id: int) -> list:
+    """Get pending (unaccepted, non-expired) email invites for a group."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        SELECT email, invited_by, created_at, expires_at
+        FROM invite_tokens
+        WHERE group_id = %s AND accepted = 0 AND expires_at > CURRENT_TIMESTAMP
+        ORDER BY created_at DESC
+    """, (group_id,))
+
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 # Email verification functions
 def create_verification_token(user_id: int) -> tuple[str, datetime]:
     """Create email verification token (24-hour expiry)."""

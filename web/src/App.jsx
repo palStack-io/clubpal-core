@@ -29,6 +29,7 @@ import Settings from './pages/profile/Settings'
 import NotFound from './pages/NotFound'
 import AdminPage from './pages/admin/AdminPage'
 import PayConfirm from './pages/PayConfirm'
+import ClaimItems from './pages/ClaimItems'
 
 import DiscoverRestaurants from './pages/discover/DiscoverRestaurants'
 import RestaurantDetail from './pages/discover/RestaurantDetail'
@@ -104,6 +105,7 @@ function AppRoutes() {
       <Route path="/join/:code" element={<JoinGroup />} />
       <Route path="/verify-email/:token" element={<VerifyEmail />} />
       <Route path="/pay/:token" element={<PayConfirm />} />
+      <Route path="/claim/:token" element={<ClaimItems />} />
 
       {/* Protected */}
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

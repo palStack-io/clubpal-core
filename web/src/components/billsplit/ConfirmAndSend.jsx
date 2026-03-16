@@ -43,6 +43,8 @@ export default function ConfirmAndSend({
   onPaymentNoteChange,
   onBack,
   onComplete,
+  claimMode = false,
+  onClaimStarted,
 }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -69,7 +71,12 @@ export default function ConfirmAndSend({
         payment_note: paymentNote,
         attending_user_ids: attendees.map(a => a.user_id),
       })
-      onComplete(result)
+      if (claimMode && onClaimStarted) {
+        const claimResp = await billSplitApi.startClaiming(result.id)
+        onClaimStarted(result, claimResp.claim_url)
+      } else {
+        onComplete(result)
+      }
     } catch (e) {
       setError('Failed to send bill split. Please try again.')
       setLoading(false)
@@ -195,7 +202,10 @@ export default function ConfirmAndSend({
               color: '#a5b4fc',
             }}
           >
-            {nonPayers.length} email{nonPayers.length !== 1 ? 's' : ''} will be sent with itemized breakdowns and one-tap Mark as Paid links.
+            {claimMode
+            ? `A claim link will be generated — share it with ${nonPayers.length} member${nonPayers.length !== 1 ? 's' : ''} to let them tap what they ordered.`
+            : `${nonPayers.length} email${nonPayers.length !== 1 ? 's' : ''} will be sent with itemized breakdowns and one-tap Mark as Paid links.`
+          }
           </div>
 
           {/* Error */}
@@ -222,7 +232,7 @@ export default function ConfirmAndSend({
                 {copied ? '✓ Copied!' : 'Copy summary'}
               </Button>
               <Button variant="primary" onClick={handleSend} loading={loading}>
-                Send Bill Splits
+                {claimMode ? 'Generate Claim Link' : 'Send Bill Splits'}
               </Button>
             </div>
           </div>

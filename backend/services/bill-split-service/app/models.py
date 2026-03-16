@@ -61,3 +61,45 @@ class OCRStatsResponse(BaseModel):
     high_confidence_pct: float
     estimated_cost_usd: float
     key_configured: bool
+
+
+class StartClaimingResponse(BaseModel):
+    claim_token: str
+    claim_url: str
+
+
+class ClaimItemsRequest(BaseModel):
+    claimed_items: list[int]  # list of item IDs this user claims
+
+
+class ClaimStatusMember(BaseModel):
+    user_id: int
+    full_name: str
+    avatar_url: Optional[str]
+    submitted: bool
+    submitted_at: Optional[str]
+    claimed_items: list[int]
+
+
+class ClaimStatusResponse(BaseModel):
+    split_id: int
+    status: str  # 'claiming'
+    claim_token: str
+    claim_url: str
+    total_members: int
+    submitted_count: int
+    members: list[ClaimStatusMember]
+
+
+class ClaimViewResponse(BaseModel):
+    split_id: int
+    event_id: int
+    event_name: str
+    payer_name: str
+    items: list[BillItemResponse]
+    tax_amount: float
+    tip_amount: float
+    total_amount: float
+    # current user's existing claim (if any)
+    my_claimed_items: list[int]
+    already_submitted: bool

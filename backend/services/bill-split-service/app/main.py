@@ -22,6 +22,13 @@ from app.database import (
     mark_share_paid,
     update_split_status,
     get_ocr_stats,
+    set_claim_token,
+    get_split_by_claim_token,
+    upsert_claim,
+    submit_claim,
+    get_claims_by_split,
+    apply_claims_to_items,
+    delete_shares_by_split,
 )
 from app.models import (
     CreateBillSplitRequest,
@@ -29,6 +36,11 @@ from app.models import (
     BillShareResponse,
     BillSplitResponse,
     OCRStatsResponse,
+    StartClaimingResponse,
+    ClaimItemsRequest,
+    ClaimStatusResponse,
+    ClaimStatusMember,
+    ClaimViewResponse,
 )
 from app.utils import compute_shares
 from app.ocr import extract_receipt, reload_config
@@ -605,7 +617,7 @@ async def send_reminders(
         to_email = profile.get("email") or ""
         if not to_email:
             continue
-        mark_paid_url = f"{FRONTEND_URL}/api/bill-splits/pay/{share['payment_token']}"
+        mark_paid_url = f"{FRONTEND_URL}/pay/{share['payment_token']}"
         await send_member_email(
             to_email=to_email,
             member_name=profile.get("full_name") or f"User {share['user_id']}",
@@ -622,6 +634,292 @@ async def send_reminders(
         sent_count += 1
 
     return {"sent": sent_count}
+
+
+@app.post("/{split_id}/start-claiming", response_model=StartClaimingResponse)
+async def start_claiming(
+    split_id: int,
+    current_user: dict = Depends(verify_session),
+):
+    split = get_split_by_id(split_id)
+    if not split:
+        raise HTTPException(status_code=404, detail="Bill split not found")
+    if current_user["id"] != split["paid_by_user_id"]:
+        raise HTTPException(status_code=403, detail="Only the payer can start claiming")
+
+    # Generate or reuse existing claim token; always ensure status is 'claiming'
+    token = split.get("claim_token")
+    if not token:
+        token = str(uuid.uuid4())
+        set_claim_token(split_id, token)
+    if split["status"] != "claiming":
+        update_split_status(split_id, "claiming")
+
+    claim_url = f"{FRONTEND_URL}/claim/{token}"
+    return StartClaimingResponse(claim_token=token, claim_url=claim_url)
+
+
+@app.get("/claim/{claim_token}", response_model=ClaimViewResponse)
+async def get_claim_view(
+    claim_token: str,
+    current_user: dict = Depends(verify_session),
+):
+    split = get_split_by_claim_token(claim_token)
+    if not split:
+        raise HTTPException(status_code=404, detail="Claim link not found or expired")
+
+    if split["status"] not in ("claiming", "draft"):
+        raise HTTPException(status_code=410, detail="Claiming is no longer open for this bill")
+
+    items = get_items_by_split(split["id"])
+    claims = get_claims_by_split(split["id"])
+
+    # Find current user's existing claim
+    my_claim = next((c for c in claims if c["user_id"] == current_user["id"]), None)
+    my_claimed_items = my_claim["claimed_items"] if my_claim else []
+    already_submitted = bool(my_claim and my_claim.get("submitted_at"))
+
+    # Fetch event name and payer name
+    event = await _fetch_event(split["event_id"], current_user["id"])
+    event_name = (event.get("title") or event.get("name") or f"Event {split['event_id']}") if event else f"Event {split['event_id']}"
+
+    payer_profile = await _fetch_user_profile(split["paid_by_user_id"])
+    payer_name = payer_profile.get("full_name") or f"User {split['paid_by_user_id']}"
+
+    item_responses = [
+        BillItemResponse(
+            id=item["id"],
+            name=item["name"],
+            price=float(item["price"]),
+            assigned_to=item.get("assigned_to") or [],
+        )
+        for item in items
+    ]
+
+    return ClaimViewResponse(
+        split_id=split["id"],
+        event_id=split["event_id"],
+        event_name=event_name,
+        payer_name=payer_name,
+        items=item_responses,
+        tax_amount=float(split["tax_amount"]),
+        tip_amount=float(split["tip_amount"]),
+        total_amount=float(split["total_amount"]),
+        my_claimed_items=my_claimed_items,
+        already_submitted=already_submitted,
+    )
+
+
+@app.post("/claim/{claim_token}/submit")
+async def submit_my_claim(
+    claim_token: str,
+    req: ClaimItemsRequest,
+    current_user: dict = Depends(verify_session),
+):
+    split = get_split_by_claim_token(claim_token)
+    if not split:
+        raise HTTPException(status_code=404, detail="Claim link not found")
+    if split["status"] not in ("claiming", "draft"):
+        raise HTTPException(status_code=410, detail="Claiming is no longer open")
+
+    # Validate item IDs belong to this split
+    items = get_items_by_split(split["id"])
+    valid_ids = {item["id"] for item in items}
+    invalid = [iid for iid in req.claimed_items if iid not in valid_ids]
+    if invalid:
+        raise HTTPException(status_code=400, detail=f"Invalid item IDs: {invalid}")
+
+    submit_claim(split["id"], current_user["id"], req.claimed_items)
+    return {"ok": True, "submitted": True}
+
+
+@app.get("/{split_id}/claiming-status", response_model=ClaimStatusResponse)
+async def get_claiming_status(
+    split_id: int,
+    current_user: dict = Depends(verify_session),
+):
+    split = get_split_by_id(split_id)
+    if not split:
+        raise HTTPException(status_code=404, detail="Bill split not found")
+    if current_user["id"] != split["paid_by_user_id"]:
+        raise HTTPException(status_code=403, detail="Only the payer can view claiming status")
+
+    claims = get_claims_by_split(split_id)
+    # Get all shares to know total members
+    shares = get_shares_by_split(split_id)
+    attending_ids = [s["user_id"] for s in shares]
+
+    profile_tasks = [_fetch_user_profile(uid) for uid in attending_ids]
+    profiles_list = await asyncio.gather(*profile_tasks)
+    profiles = {p["id"]: p for p in profiles_list}
+
+    claims_by_user = {c["user_id"]: c for c in claims}
+
+    members = []
+    submitted_count = 0
+    for uid in attending_ids:
+        profile = profiles.get(uid, {})
+        claim = claims_by_user.get(uid)
+        submitted = bool(claim and claim.get("submitted_at"))
+        if submitted:
+            submitted_count += 1
+        members.append(ClaimStatusMember(
+            user_id=uid,
+            full_name=profile.get("full_name") or f"User {uid}",
+            avatar_url=profile.get("avatar_url"),
+            submitted=submitted,
+            submitted_at=str(claim["submitted_at"]) if claim and claim.get("submitted_at") else None,
+            claimed_items=claim["claimed_items"] if claim else [],
+        ))
+
+    claim_token = split.get("claim_token") or ""
+    return ClaimStatusResponse(
+        split_id=split_id,
+        status=split["status"],
+        claim_token=claim_token,
+        claim_url=f"{FRONTEND_URL}/claim/{claim_token}" if claim_token else "",
+        total_members=len(attending_ids),
+        submitted_count=submitted_count,
+        members=members,
+    )
+
+
+@app.post("/{split_id}/finalize")
+async def finalize_claims(
+    split_id: int,
+    current_user: dict = Depends(verify_session),
+):
+    """
+    Payer finalizes collaborative claiming:
+    1. Merge all submitted claims into item.assigned_to
+    2. Recompute shares from new assignments
+    3. Delete old shares, insert new shares
+    4. Update status to 'sent', send emails
+    """
+    split = get_split_by_id(split_id)
+    if not split:
+        raise HTTPException(status_code=404, detail="Bill split not found")
+    if current_user["id"] != split["paid_by_user_id"]:
+        raise HTTPException(status_code=403, detail="Only the payer can finalize")
+    if split["status"] == "sent":
+        raise HTTPException(status_code=409, detail="Bill split has already been finalized and sent")
+
+    claims = get_claims_by_split(split_id)
+    items = get_items_by_split(split_id)
+
+    # Build item_assignments from claims: item_id -> set of user_ids who claimed it
+    item_assignments: dict = {}
+    for claim in claims:
+        if not claim.get("submitted_at"):
+            continue  # skip unsubmitted
+        for item_id in claim["claimed_items"]:
+            item_assignments.setdefault(item_id, [])
+            if claim["user_id"] not in item_assignments[item_id]:
+                item_assignments[item_id].append(claim["user_id"])
+
+    # Apply to DB
+    if item_assignments:
+        apply_claims_to_items(split_id, item_assignments)
+
+    # Reload items with new assignments
+    items = get_items_by_split(split_id)
+
+    # Get attending user IDs from existing shares
+    old_shares = get_shares_by_split(split_id)
+    attending_ids = [s["user_id"] for s in old_shares]
+
+    items_as_dicts = [
+        {"name": it["name"], "price": float(it["price"]), "assigned_to": it.get("assigned_to") or []}
+        for it in items
+    ]
+    computed = compute_shares(
+        items=items_as_dicts,
+        tax=float(split["tax_amount"]),
+        tip=float(split["tip_amount"]),
+        attending_user_ids=attending_ids,
+        paid_by_user_id=split["paid_by_user_id"],
+    )
+
+    # Delete old shares and reinsert
+    delete_shares_by_split(split_id)
+
+    new_share_rows = []
+    for cs in computed:
+        # Reuse old payment token if possible
+        old = next((s for s in old_shares if s["user_id"] == cs["user_id"]), None)
+        token = old["payment_token"] if old else str(uuid.uuid4())
+        row = create_bill_share(
+            split_id=split_id,
+            user_id=cs["user_id"],
+            items_subtotal=cs["items_subtotal"],
+            tax_share=cs["tax_share"],
+            tip_share=cs["tip_share"],
+            total_owed=cs["total_owed"],
+            payment_token=token,
+            paid=old["paid"] if old else cs["paid"],
+        )
+        new_share_rows.append(row)
+
+    # Fetch profiles
+    profile_tasks = [_fetch_user_profile(uid) for uid in attending_ids]
+    profiles_list = await asyncio.gather(*profile_tasks)
+    profiles = {p["id"]: p for p in profiles_list}
+
+    # Build items_by_user for email
+    items_by_user: dict = {}
+    for item_row in items:
+        assigned = item_row.get("assigned_to") or []
+        if not assigned:
+            for uid in attending_ids:
+                items_by_user.setdefault(uid, []).append(
+                    {"name": item_row["name"], "price": float(item_row["price"])}
+                )
+        else:
+            for uid in assigned:
+                items_by_user.setdefault(uid, []).append(
+                    {"name": item_row["name"], "price": float(item_row["price"])}
+                )
+
+    # Build shares_for_email
+    shares_for_email = []
+    for share in new_share_rows:
+        profile = profiles.get(share["user_id"], {})
+        shares_for_email.append({
+            **share,
+            "full_name": profile.get("full_name") or f"User {share['user_id']}",
+            "email": profile.get("email") or "",
+            "total_owed": float(share["total_owed"]),
+            "tax_share": float(share["tax_share"]),
+            "tip_share": float(share["tip_share"]),
+            "event_id": split["event_id"],
+        })
+
+    payer_profile = profiles.get(split["paid_by_user_id"], {})
+    payer_name = payer_profile.get("full_name") or f"User {split['paid_by_user_id']}"
+    payer_email = payer_profile.get("email") or ""
+
+    event = await _fetch_event(split["event_id"], split["paid_by_user_id"])
+    event_name = (event.get("title") or event.get("name") or f"Event {split['event_id']}") if event else f"Event {split['event_id']}"
+    event_date = str(event.get("date") or event.get("event_date") or "") if event else ""
+
+    asyncio.create_task(
+        send_all_emails(
+            split_id=split_id,
+            payer_id=split["paid_by_user_id"],
+            payer_name=payer_name,
+            payer_email=payer_email,
+            event_name=event_name,
+            event_date=event_date,
+            payment_note=split.get("payment_note"),
+            shares_with_profiles=shares_for_email,
+            items_by_user=items_by_user,
+        )
+    )
+
+    update_split_status(split_id, "sent")
+    split_row = get_split_by_id(split_id)
+
+    return _build_split_response(split_row, items, new_share_rows, profiles)
 
 
 @app.get("/admin/ocr-stats", response_model=OCRStatsResponse)

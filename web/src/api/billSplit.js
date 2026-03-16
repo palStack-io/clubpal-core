@@ -21,4 +21,14 @@ export const billSplitApi = {
   getOCRStats: () => billSplitClient.get('/admin/ocr-stats').then(r => r.data),
   getIntegrations: () => gatewayClient.get('/admin/integrations').then(r => r.data),
   updateIntegrations: (data) => gatewayClient.put('/admin/integrations', data).then(r => r.data),
+  startClaiming: (splitId) =>
+    billSplitClient.post(`/${splitId}/start-claiming`).then(r => r.data),
+  getClaimView: (token) =>
+    billSplitClient.get(`/claim/${token}`).then(r => r.data),
+  submitClaim: (token, claimedItems) =>
+    billSplitClient.post(`/claim/${token}/submit`, { claimed_items: claimedItems }).then(r => r.data),
+  getClaimingStatus: (splitId) =>
+    billSplitClient.get(`/${splitId}/claiming-status`).then(r => r.data),
+  finalizeClaims: (splitId) =>
+    billSplitClient.post(`/${splitId}/finalize`).then(r => r.data),
 }

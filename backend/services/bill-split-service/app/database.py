@@ -75,11 +75,26 @@ def init_db():
         )
     """)
 
+    cur.execute("ALTER TABLE bill_splits ADD COLUMN IF NOT EXISTS claim_token TEXT UNIQUE")
+
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS bill_claims (
+            id           SERIAL PRIMARY KEY,
+            split_id     INTEGER NOT NULL REFERENCES bill_splits(id) ON DELETE CASCADE,
+            user_id      INTEGER NOT NULL,
+            claimed_items JSONB NOT NULL DEFAULT '[]',
+            submitted_at TIMESTAMPTZ,
+            UNIQUE(split_id, user_id)
+        )
+    """)
+
     cur.execute("CREATE INDEX IF NOT EXISTS idx_bill_splits_event ON bill_splits(event_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_bill_items_split ON bill_items(split_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_bill_shares_split ON bill_shares(split_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_bill_shares_token ON bill_shares(payment_token)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_ocr_log_called_at ON ocr_log(called_at)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_bill_claims_split ON bill_claims(split_id)")
+    cur.execute("CREATE INDEX IF NOT EXISTS idx_bill_splits_claim_token ON bill_splits(claim_token)")
 
     conn.commit()
     cur.close()
@@ -281,6 +296,90 @@ def log_ocr(
         """,
         (event_id, user_id, success, item_count, confidence, error_msg, duration_ms),
     )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def set_claim_token(split_id: int, token: str) -> None:
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "UPDATE bill_splits SET claim_token = %s, updated_at = NOW() WHERE id = %s",
+        (token, split_id),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def get_split_by_claim_token(claim_token: str) -> Optional[dict]:
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM bill_splits WHERE claim_token = %s", (claim_token,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return dict(row) if row else None
+
+
+def submit_claim(split_id: int, user_id: int, claimed_items: list) -> dict:
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        """
+        INSERT INTO bill_claims (split_id, user_id, claimed_items, submitted_at)
+        VALUES (%s, %s, %s, NOW())
+        ON CONFLICT (split_id, user_id) DO UPDATE
+            SET claimed_items = EXCLUDED.claimed_items,
+                submitted_at = NOW()
+        RETURNING *
+        """,
+        (split_id, user_id, json.dumps(claimed_items)),
+    )
+    row = dict(cur.fetchone())
+    conn.commit()
+    cur.close()
+    conn.close()
+    if not isinstance(row.get("claimed_items"), list):
+        row["claimed_items"] = json.loads(row["claimed_items"]) if row["claimed_items"] else []
+    return row
+
+
+def get_claims_by_split(split_id: int) -> list:
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM bill_claims WHERE split_id = %s ORDER BY id", (split_id,))
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    result = []
+    for r in rows:
+        d = dict(r)
+        if not isinstance(d.get("claimed_items"), list):
+            d["claimed_items"] = json.loads(d["claimed_items"]) if d["claimed_items"] else []
+        result.append(d)
+    return result
+
+
+def apply_claims_to_items(split_id: int, item_assignments: dict) -> None:
+    """item_assignments: {item_id: [user_id, ...]}"""
+    conn = get_conn()
+    cur = conn.cursor()
+    for item_id, user_ids in item_assignments.items():
+        cur.execute(
+            "UPDATE bill_items SET assigned_to = %s WHERE id = %s AND split_id = %s",
+            (json.dumps(user_ids), int(item_id), split_id),
+        )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def delete_shares_by_split(split_id: int) -> None:
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM bill_shares WHERE split_id = %s", (split_id,))
     conn.commit()
     cur.close()
     conn.close()

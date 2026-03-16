@@ -4,6 +4,7 @@ import os
 from typing import Optional, List
 from datetime import datetime
 import random
+import string
 
 # Database URL
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://clubpal:clubpal@db:5432/clubpal_groups")
@@ -915,10 +916,9 @@ def auto_close_expired_polls() -> int:
 import re as _re
 
 def _generate_code_str(group_name: str) -> str:
-    """Generate XXX-000 code from group name."""
-    letters = _re.sub(r'[^a-zA-Z]', '', group_name)
-    prefix = (letters[:3] or 'GRP').upper().ljust(3, 'X')
-    suffix = str(random.randint(100, 999))
+    """Generate XXX-0000 code: 3 random letters + random 4-digit number."""
+    prefix = ''.join(random.choices(string.ascii_uppercase, k=3))
+    suffix = str(random.randint(1000, 9999))
     return f"{prefix}-{suffix}"
 
 

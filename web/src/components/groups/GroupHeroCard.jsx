@@ -10,7 +10,7 @@ const ACTIVITY = {
   arts:   { emoji: '🎨', color: '#f59e0b', rgb: '245,158,11',  gradient: 'linear-gradient(135deg, rgba(245,158,11,0.10), rgba(245,158,11,0.04))' },
 }
 
-export default function GroupHeroCard({ group, members = [], rotation, currentUserId, onBack, actions = [] }) {
+export default function GroupHeroCard({ group, members = [], rotation, currentUserId, onBack, actions = [], inviteCode }) {
   if (!group) return null
 
   const type = (group.activity_type || 'dining').toLowerCase()
@@ -123,7 +123,7 @@ export default function GroupHeroCard({ group, members = [], rotation, currentUs
             letterSpacing: '0.3px',
           }}
         >
-          ID: {group.id}
+          {inviteCode ? `Code: ${inviteCode}` : `#${group.id}`}
         </div>
 
         <div

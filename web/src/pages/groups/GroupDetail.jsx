@@ -66,6 +66,7 @@ export default function GroupDetail() {
   const [leaderboard, setLeaderboard] = useState([])
   const [pendingInvites, setPendingInvites] = useState([])
   const [inviteSuccess, setInviteSuccess] = useState(null)
+  const [inviteCode, setInviteCode] = useState(null)
 
   const fetchAll = async () => {
     try {
@@ -81,6 +82,8 @@ export default function GroupDetail() {
       setMembers(await enrichWithProfiles(m || [], 'user_id'))
     } catch {}
     finally { setLoading(false) }
+
+    groupsApi.getActiveInviteCode(id).then(ic => setInviteCode(ic?.code || null)).catch(() => {})
 
     eventsApi.getGroupEvents(id, 'completed').then(setPast).catch(() => {})
     groupsApi.getComments(id).then(async c => {
@@ -189,6 +192,7 @@ export default function GroupDetail() {
         currentUserId={user?.id}
         onBack={() => navigate('/groups')}
         actions={heroActions}
+        inviteCode={inviteCode}
       />
 
       {/* Floating stats — translateY to overlap hero bottom */}

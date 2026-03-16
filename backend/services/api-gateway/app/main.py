@@ -7,7 +7,7 @@ import uuid
 import json
 import httpx
 from datetime import datetime, timedelta
-from jose import jwt as jose_jwt
+import jwt as pyjwt
 from cachetools import TTLCache
 
 from app.models import (
@@ -114,7 +114,7 @@ async def _verify_id_token(id_token: str, provider: dict) -> dict:
     keys = await _fetch_jwks(provider["discovery_url"])
     # Select matching key by kid header
     try:
-        header = jose_jwt.get_unverified_header(id_token)
+        header = pyjwt.get_unverified_header(id_token)
     except Exception as exc:
         raise HTTPException(status_code=401, detail=f"Malformed ID token: {exc}")
     kid = header.get("kid")
@@ -123,8 +123,9 @@ async def _verify_id_token(id_token: str, provider: dict) -> dict:
     if not matching:
         raise HTTPException(status_code=401, detail="No matching JWKS key found for token")
     try:
-        claims = jose_jwt.decode(
-            id_token, matching, algorithms=[alg], audience=provider["client_id"]
+        public_key = pyjwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(matching))
+        claims = pyjwt.decode(
+            id_token, public_key, algorithms=[alg], audience=provider["client_id"]
         )
     except Exception as exc:
         raise HTTPException(status_code=401, detail=f"ID token verification failed: {exc}")

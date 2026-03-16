@@ -212,7 +212,7 @@ async def send_all_emails(
     for share in shares_with_profiles:
         if share["user_id"] == payer_id:
             continue
-        mark_paid_url = f"{frontend_url}/api/bill-splits/pay/{share['payment_token']}"
+        mark_paid_url = f"{frontend_url}/pay/{share['payment_token']}"
         await send_member_email(
             to_email=share["email"],
             member_name=share["full_name"],
@@ -489,6 +489,7 @@ async def pay_by_token(payment_token: str):
                 event_name = event.get("title") or event.get("name") or event_name
         return {
             "success": True,
+            "already_paid": True,
             "member_name": f"User {share['user_id']}",
             "amount": float(share["total_owed"]),
             "event_name": event_name,

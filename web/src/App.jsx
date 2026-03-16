@@ -28,6 +28,7 @@ import Profile from './pages/profile/Profile'
 import Settings from './pages/profile/Settings'
 import NotFound from './pages/NotFound'
 import AdminPage from './pages/admin/AdminPage'
+import PayConfirm from './pages/PayConfirm'
 
 import DiscoverRestaurants from './pages/discover/DiscoverRestaurants'
 import RestaurantDetail from './pages/discover/RestaurantDetail'
@@ -102,6 +103,7 @@ function AppRoutes() {
       <Route path="/invite/:token" element={<AcceptInvite />} />
       <Route path="/join/:code" element={<JoinGroup />} />
       <Route path="/verify-email/:token" element={<VerifyEmail />} />
+      <Route path="/pay/:token" element={<PayConfirm />} />
 
       {/* Protected */}
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

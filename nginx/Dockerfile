@@ -2,7 +2,7 @@
 FROM node:20-alpine AS web-builder
 WORKDIR /web
 COPY web/package*.json ./
-RUN npm ci
+RUN npm install --prefer-offline
 COPY web/ .
 RUN npm run build
 

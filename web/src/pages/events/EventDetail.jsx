@@ -9,6 +9,7 @@ import CommentsCard from '../../components/events/CommentsCard'
 import EventMetaCard from '../../components/events/EventMetaCard'
 import EditEventModal from '../../components/modals/EditEventModal'
 import AnimatedBackground from '../../components/ui/AnimatedBackground'
+import BillSplitSection from '../../components/billsplit/BillSplitSection'
 import { eventsApi } from '../../api/events'
 import { ratingsClient, gatewayClient } from '../../api/client'
 import { useAuth } from '../../contexts/AuthContext'
@@ -295,6 +296,17 @@ export default function EventDetail() {
             />
           </div>
         </div>
+
+        {(event?.activity_type === 'dining') &&
+         (event?.status === 'completed' || event?.status === 'in_progress') && (
+          <div style={{ marginTop: '14px' }}>
+            <BillSplitSection
+              event={event}
+              attendees={attendees}
+              currentUser={user}
+            />
+          </div>
+        )}
       </div>
 
       <EditEventModal

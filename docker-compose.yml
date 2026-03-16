@@ -94,6 +94,7 @@ services:
       - ratings-service
       - activities-service
       - enrichment-service
+      - bill-split-service
       - minio
     restart: unless-stopped
     healthcheck:
@@ -297,6 +298,43 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8006/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ===========================================
+  # Bill Split Service — Receipt OCR, splits, settlement emails
+  # ===========================================
+  bill-split-service:
+    build: ./backend/services/bill-split-service
+    container_name: clubpal-bill-split-service
+    expose:
+      - "8007"
+    environment:
+      - DATABASE_URL=postgresql://clubpal:clubpal@db:5432/clubpal_billsplit
+      - API_GATEWAY_URL=http://api-gateway:8001
+      - EVENTS_SERVICE_URL=http://events-service:8003
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-}
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - FROM_EMAIL=${FROM_EMAIL:-noreply@palstack.io}
+      - FROM_NAME=${FROM_NAME:-clubPal}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:9000}
+    networks:
+      - clubpal-network
+    depends_on:
+      db:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+      events-service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8007/health')"]
       interval: 30s
       timeout: 5s
       retries: 3

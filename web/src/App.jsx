@@ -27,6 +27,7 @@ import ActivityPicker from './pages/activities/ActivityPicker'
 import Profile from './pages/profile/Profile'
 import Settings from './pages/profile/Settings'
 import NotFound from './pages/NotFound'
+import AdminPage from './pages/admin/AdminPage'
 
 import DiscoverRestaurants from './pages/discover/DiscoverRestaurants'
 import RestaurantDetail from './pages/discover/RestaurantDetail'
@@ -55,6 +56,14 @@ function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth()
   if (loading) return <Spinner />
   if (!isAuthenticated) return <Navigate to="/login" replace />
+  return children
+}
+
+function AdminRoute({ children }) {
+  const { isAuthenticated, loading, user } = useAuth()
+  if (loading) return <Spinner />
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  if (!user?.is_admin) return <Navigate to="/dashboard" replace />
   return children
 }
 
@@ -110,6 +119,7 @@ function AppRoutes() {
       <Route path="/activities" element={<ProtectedRoute><ActivityPicker /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+      <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
 
       {/* Discovery */}
       <Route path="/discover/restaurants" element={<ProtectedRoute><DiscoverRestaurants /></ProtectedRoute>} />

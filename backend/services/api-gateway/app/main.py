@@ -56,6 +56,7 @@ app.add_middleware(
 # Service URLs
 GROUPS_SERVICE_URL = "http://groups-service:8002"
 ENRICHMENT_SERVICE_URL = "http://enrichment-service:8006"
+BILL_SPLIT_SERVICE_URL = "http://bill-split-service:8007"
 
 # Internal service secret — shared with enrichment-service to protect /internal/* endpoints
 INTERNAL_API_SECRET = os.environ.get("INTERNAL_API_SECRET", "")
@@ -154,6 +155,7 @@ async def _fetch_userinfo(access_token: str, discovery_url: str) -> dict:
 INTEGRATION_KEYS = [
     "google_api_key", "tmdb_api_key", "igdb_client_id", "igdb_client_secret",
     "radarr_url", "radarr_api_key", "sonarr_url", "sonarr_api_key",
+    "google_cloud_vision_api_key",
 ]
 
 
@@ -966,6 +968,7 @@ class IntegrationsUpdate(BaseModel):
     radarr_api_key: Optional[str] = None
     sonarr_url: Optional[str] = None
     sonarr_api_key: Optional[str] = None
+    google_cloud_vision_api_key: Optional[str] = None
 
 
 def _integration_status(key: str, stored: dict) -> dict:
@@ -996,6 +999,15 @@ async def update_integrations(data: IntegrationsUpdate, admin: dict = Depends(ge
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             await client.post(f"{ENRICHMENT_SERVICE_URL}/admin/reload-config")
+    except Exception:
+        pass
+    # Notify bill-split service to reload keys (picks up google_cloud_vision_api_key)
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            await client.post(
+                f"{BILL_SPLIT_SERVICE_URL}/admin/reload-config",
+                headers={"x-internal-secret": INTERNAL_API_SECRET},
+            )
     except Exception:
         pass
     stored = get_all_integrations()

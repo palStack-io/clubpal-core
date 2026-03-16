@@ -24,14 +24,13 @@ function getStatusChipVariant(status) {
   return 'pending'
 }
 
-function EventRow({ event, onClick }) {
+function EventRow({ event, onClick, onSplitBill }) {
   const [hovered, setHovered] = useState(false)
   const act = getActivityMeta(event.activity_type)
   const dateStr = event.scheduled_date || event.event_date
 
   return (
     <div
-      onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -40,7 +39,6 @@ function EventRow({ event, onClick }) {
         gap: '14px',
         padding: '12px 0',
         borderBottom: '1px solid rgba(255,255,255,0.04)',
-        cursor: 'pointer',
         background: hovered ? 'var(--glass-hover)' : 'transparent',
         transition: 'background 0.15s',
       }}
@@ -76,8 +74,11 @@ function EventRow({ event, onClick }) {
         </div>
       )}
 
-      {/* Meta block */}
-      <div style={{ flex: 1, minWidth: 0 }}>
+      {/* Meta block — clickable to go to event */}
+      <div
+        onClick={onClick}
+        style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
+      >
         <div
           style={{
             fontSize: '14px',
@@ -101,13 +102,36 @@ function EventRow({ event, onClick }) {
         label={event.status || 'pending'}
       />
 
+      {/* Split Bill button */}
+      {event.status !== 'cancelled' && (
+        <button
+          onClick={e => { e.stopPropagation(); onSplitBill(event.id) }}
+          title="Split Bill"
+          style={{
+            flexShrink: 0,
+            background: hovered ? 'rgba(244,63,94,0.12)' : 'var(--s3)',
+            border: '1px solid ' + (hovered ? 'var(--rose-border)' : 'transparent'),
+            borderRadius: '8px',
+            padding: '4px 8px',
+            fontSize: '13px',
+            cursor: 'pointer',
+            color: 'var(--t2)',
+            transition: 'all 0.15s',
+          }}
+        >
+          💸
+        </button>
+      )}
+
       {/* Chevron */}
       <div
+        onClick={onClick}
         style={{
           fontSize: '12px',
           color: hovered ? 'var(--rose-soft)' : 'var(--t3)',
           transition: 'color 0.15s',
           flexShrink: 0,
+          cursor: 'pointer',
         }}
       >
         →
@@ -208,6 +232,7 @@ export default function GroupEventsCard({ upcoming = [], past = [], groupId, isM
                 <EventRow
                   event={event}
                   onClick={() => window.location.href = `/events/${event.id}`}
+                  onSplitBill={id => window.location.href = `/events/${id}#bill-split`}
                 />
               </div>
             ))}

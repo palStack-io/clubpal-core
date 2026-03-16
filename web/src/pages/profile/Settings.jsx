@@ -433,6 +433,11 @@ const INTEGRATION_FIELDS = [
     ],
   },
   {
+    group: 'Google Cloud Vision (Bill Splits)',
+    description: 'Powers receipt OCR scanning — photograph a bill to auto-extract items, tax, and tip.',
+    fields: [{ key: 'google_cloud_vision_api_key', label: 'Google Cloud Vision API Key', placeholder: 'AIza…' }],
+  },
+  {
     group: 'Radarr (Movies Library)',
     description: 'Connect your self-hosted Radarr instance to overlay "In Library" badges on movie cards.',
     fields: [

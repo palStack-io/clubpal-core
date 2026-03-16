@@ -149,11 +149,13 @@ function ReviewItem({ rating }) {
 export default function RatingCard({
   ratings = [],
   eventStatus,
+  scheduledDate,
   currentUserId,
   eventId,
   onAddRating,
 }) {
-  const isCompleted = eventStatus === 'completed'
+  const isPast = scheduledDate && new Date(scheduledDate) < new Date()
+  const isCompleted = eventStatus === 'completed' || (eventStatus !== 'cancelled' && isPast)
   const myRating = ratings.find(
     (r) => String(r.reviewer_id || r.rater_id || r.user_id) === String(currentUserId)
   )

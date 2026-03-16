@@ -115,6 +115,19 @@ export default function GroupHeroCard({ group, members = [], rotation, currentUs
 
         <div
           style={{
+            fontSize: '11px', fontWeight: 500,
+            color: hasCustomBg ? 'rgba(255,255,255,0.45)' : 'var(--t4)',
+            marginBottom: '4px',
+            textShadow: hasCustomBg ? '0 1px 3px rgba(0,0,0,0.4)' : 'none',
+            fontFamily: 'monospace',
+            letterSpacing: '0.3px',
+          }}
+        >
+          ID: {group.id}
+        </div>
+
+        <div
+          style={{
             fontSize: '12px', fontWeight: 500,
             color: hasCustomBg ? 'rgba(255,255,255,0.75)' : 'var(--t3)',
             marginBottom: '12px',

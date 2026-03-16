@@ -150,8 +150,61 @@ def create_bill_item(
     conn.commit()
     cur.close()
     conn.close()
-    row["assigned_to"] = row["assigned_to"] if isinstance(row["assigned_to"], list) else json.loads(row["assigned_to"])
+    if not isinstance(row.get("assigned_to"), list):
+        row["assigned_to"] = json.loads(row["assigned_to"]) if row["assigned_to"] else []
     return row
+
+
+def create_bill_items_bulk(split_id: int, items: list) -> list:
+    """Insert multiple items in a single transaction. items: list of {name, price, assigned_to}."""
+    conn = get_conn()
+    cur = conn.cursor()
+    rows = []
+    for it in items:
+        cur.execute(
+            """
+            INSERT INTO bill_items (split_id, name, price, assigned_to)
+            VALUES (%s, %s, %s, %s)
+            RETURNING *
+            """,
+            (split_id, it["name"], it["price"], json.dumps(it.get("assigned_to") or [])),
+        )
+        row = dict(cur.fetchone())
+        if not isinstance(row.get("assigned_to"), list):
+            row["assigned_to"] = json.loads(row["assigned_to"]) if row["assigned_to"] else []
+        rows.append(row)
+    conn.commit()
+    cur.close()
+    conn.close()
+    return rows
+
+
+def create_bill_shares_bulk(split_id: int, shares: list) -> list:
+    """Insert multiple shares in a single transaction.
+    shares: list of {user_id, items_subtotal, tax_share, tip_share, total_owed, payment_token, paid}
+    """
+    conn = get_conn()
+    cur = conn.cursor()
+    rows = []
+    for s in shares:
+        cur.execute(
+            """
+            INSERT INTO bill_shares
+                (split_id, user_id, items_subtotal, tax_share, tip_share,
+                 total_owed, payment_token, paid)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
+            (
+                split_id, s["user_id"], s["items_subtotal"], s["tax_share"],
+                s["tip_share"], s["total_owed"], s["payment_token"], s["paid"],
+            ),
+        )
+        rows.append(dict(cur.fetchone()))
+    conn.commit()
+    cur.close()
+    conn.close()
+    return rows
 
 
 def create_bill_share(

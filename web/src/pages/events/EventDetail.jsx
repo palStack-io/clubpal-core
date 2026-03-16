@@ -260,6 +260,7 @@ export default function EventDetail() {
             <RatingCard
               ratings={ratings}
               eventStatus={event.status}
+              scheduledDate={event.scheduled_date}
               currentUserId={user?.id}
               eventId={id}
               onAddRating={() => navigate(`/events/${id}/rate`)}
@@ -297,8 +298,7 @@ export default function EventDetail() {
           </div>
         </div>
 
-        {(event?.activity_type === 'dining') &&
-         (event?.status === 'completed' || event?.status === 'in_progress') && (
+        {event?.status !== 'cancelled' && (
           <div style={{ marginTop: '14px' }}>
             <BillSplitSection
               event={event}

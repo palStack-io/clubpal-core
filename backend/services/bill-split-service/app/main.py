@@ -12,7 +12,9 @@ from app.database import (
     init_db,
     create_bill_split,
     create_bill_item,
+    create_bill_items_bulk,
     create_bill_share,
+    create_bill_shares_bulk,
     get_split_by_event,
     get_split_by_id,
     get_items_by_split,
@@ -24,7 +26,6 @@ from app.database import (
     get_ocr_stats,
     set_claim_token,
     get_split_by_claim_token,
-    upsert_claim,
     submit_claim,
     get_claims_by_split,
     apply_claims_to_items,
@@ -365,25 +366,26 @@ async def create_split(
     )
     split_id = split_row["id"]
 
-    item_rows = []
-    for it in req.items:
-        row = create_bill_item(split_id, it.name, it.price, it.assigned_to)
-        item_rows.append(row)
+    item_rows = create_bill_items_bulk(
+        split_id,
+        [{"name": it.name, "price": it.price, "assigned_to": it.assigned_to} for it in req.items],
+    )
 
-    share_rows = []
-    for cs in computed:
-        token = str(uuid.uuid4())
-        row = create_bill_share(
-            split_id=split_id,
-            user_id=cs["user_id"],
-            items_subtotal=cs["items_subtotal"],
-            tax_share=cs["tax_share"],
-            tip_share=cs["tip_share"],
-            total_owed=cs["total_owed"],
-            payment_token=token,
-            paid=cs["paid"],
-        )
-        share_rows.append(row)
+    share_rows = create_bill_shares_bulk(
+        split_id,
+        [
+            {
+                "user_id": cs["user_id"],
+                "items_subtotal": cs["items_subtotal"],
+                "tax_share": cs["tax_share"],
+                "tip_share": cs["tip_share"],
+                "total_owed": cs["total_owed"],
+                "payment_token": str(uuid.uuid4()),
+                "paid": cs["paid"],
+            }
+            for cs in computed
+        ],
+    )
 
     # 8. Fetch user profiles concurrently
     profile_tasks = [_fetch_user_profile(uid) for uid in valid_attending_ids]
@@ -598,14 +600,20 @@ async def send_reminders(
     event_name = (event.get("title") or event.get("name") or f"Event {split['event_id']}") if event else f"Event {split['event_id']}"
     event_date = str(event.get("date") or event.get("event_date") or "") if event else ""
 
-    payer_profile = await _fetch_user_profile(split["paid_by_user_id"])
+    # Fetch payer + all pending member profiles concurrently
+    all_ids = list({split["paid_by_user_id"]} | {s["user_id"] for s in pending})
+    profiles_list = await asyncio.gather(*[_fetch_user_profile(uid) for uid in all_ids])
+    profiles = {p["id"]: p for p in profiles_list}
+
+    payer_profile = profiles.get(split["paid_by_user_id"], {})
     payer_name = payer_profile.get("full_name") or f"User {split['paid_by_user_id']}"
 
     # Build items_by_user
     items_by_user: dict = {}
+    pending_ids = {s["user_id"] for s in pending}
     for item_row in items:
         assigned = item_row.get("assigned_to") or []
-        for uid in [s["user_id"] for s in pending]:
+        for uid in pending_ids:
             if not assigned or uid in assigned:
                 items_by_user.setdefault(uid, []).append(
                     {"name": item_row["name"], "price": float(item_row["price"])}
@@ -613,7 +621,7 @@ async def send_reminders(
 
     sent_count = 0
     for share in pending:
-        profile = await _fetch_user_profile(share["user_id"])
+        profile = profiles.get(share["user_id"], {})
         to_email = profile.get("email") or ""
         if not to_email:
             continue
@@ -843,22 +851,26 @@ async def finalize_claims(
     # Delete old shares and reinsert
     delete_shares_by_split(split_id)
 
-    new_share_rows = []
-    for cs in computed:
-        # Reuse old payment token if possible
-        old = next((s for s in old_shares if s["user_id"] == cs["user_id"]), None)
-        token = old["payment_token"] if old else str(uuid.uuid4())
-        row = create_bill_share(
-            split_id=split_id,
-            user_id=cs["user_id"],
-            items_subtotal=cs["items_subtotal"],
-            tax_share=cs["tax_share"],
-            tip_share=cs["tip_share"],
-            total_owed=cs["total_owed"],
-            payment_token=token,
-            paid=old["paid"] if old else cs["paid"],
-        )
-        new_share_rows.append(row)
+    old_shares_by_user = {s["user_id"]: s for s in old_shares}
+    new_share_rows = create_bill_shares_bulk(
+        split_id,
+        [
+            {
+                "user_id": cs["user_id"],
+                "items_subtotal": cs["items_subtotal"],
+                "tax_share": cs["tax_share"],
+                "tip_share": cs["tip_share"],
+                "total_owed": cs["total_owed"],
+                "payment_token": old_shares_by_user[cs["user_id"]]["payment_token"]
+                    if cs["user_id"] in old_shares_by_user
+                    else str(uuid.uuid4()),
+                "paid": old_shares_by_user[cs["user_id"]]["paid"]
+                    if cs["user_id"] in old_shares_by_user
+                    else cs["paid"],
+            }
+            for cs in computed
+        ],
+    )
 
     # Fetch profiles
     profile_tasks = [_fetch_user_profile(uid) for uid in attending_ids]

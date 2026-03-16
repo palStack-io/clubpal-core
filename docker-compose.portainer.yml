@@ -120,6 +120,7 @@ services:
       - ratings-service
       - activities-service
       - enrichment-service
+      - bill-split-service
       - minio
     restart: unless-stopped
     healthcheck:
@@ -355,6 +356,51 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8006/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ===========================================================================
+  # Bill Split Service — receipt OCR, bill splitting, settlement emails
+  # ===========================================================================
+  bill-split-service:
+    image: ghcr.io/palstack-io/clubpal-bill-split-service:latest
+    container_name: clubpal-bill-split-service
+    expose:
+      - "8007"
+    environment:
+      DATABASE_URL: postgresql://clubpal:CHANGEME_DB_PASSWORD@db:5432/clubpal_billsplit
+      API_GATEWAY_URL: http://api-gateway:8001
+      EVENTS_SERVICE_URL: http://events-service:8003
+      INTERNAL_API_SECRET: CHANGEME_INTERNAL_SECRET
+
+      # ── App URL (used in payment confirmation email links) ─────────────────
+      FRONTEND_URL: http://your-server-ip:9000              # ← public URL
+
+      # ── Email / SMTP (leave blank to disable email features) ──────────────
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: "587"
+      SMTP_USER: ""
+      SMTP_PASSWORD: ""
+      FROM_EMAIL: noreply@yourapp.io
+      FROM_NAME: clubPal
+
+      # ── Google Cloud Vision API key (optional — enables receipt OCR) ───────
+      # Set this via Admin Panel → Integrations instead of hardcoding here.
+      # GOOGLE_CLOUD_VISION_API_KEY: ""
+    networks:
+      - clubpal-network
+    depends_on:
+      db:
+        condition: service_healthy
+      api-gateway:
+        condition: service_healthy
+      events-service:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8007/health')"]
       interval: 30s
       timeout: 5s
       retries: 3

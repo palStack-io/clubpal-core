@@ -10,14 +10,15 @@ ClubPal Core is a containerised, microservice-based backend with a co-located Re
                           │                                                          │
   Browser / Mobile ──────►│                    nginx :80                             │
                           │                                                          │
-                          │  /api/gateway/   ──► api-gateway       :8001             │
-                          │  /api/groups/    ──► groups-service    :8002             │
-                          │  /api/events/    ──► events-service    :8003             │
-                          │  /api/ratings/   ──► ratings-service   :8004             │
-                          │  /api/activities/──► activities-svc    :8005             │
-                          │  /api/enrich/    ──► enrichment-svc    :8006             │
-                          │  /storage/       ──► minio             :9000             │
-                          │  /               ──► static files (React SPA)            │
+                          │  /api/gateway/    ──► api-gateway       :8001             │
+                          │  /api/groups/     ──► groups-service    :8002             │
+                          │  /api/events/     ──► events-service    :8003             │
+                          │  /api/ratings/    ──► ratings-service   :8004             │
+                          │  /api/activities/ ──► activities-svc    :8005             │
+                          │  /api/enrich/     ──► enrichment-svc    :8006             │
+                          │  /api/bill-splits/──► bill-split-svc    :8007             │
+                          │  /storage/        ──► minio             :9000             │
+                          │  /                ──► static files (React SPA)            │
                           └──────────────────────────────────────────────────────────┘
 
   MinIO console ──────────────────────────────────────────────────► host port 9001
@@ -83,6 +84,17 @@ Owns a shared library of activity types:
 - Seeds ~30 default activities on first boot (sport, social, outdoor, etc.)
 - Provides search and "popular activities" endpoints for the UI picker
 
+### Bill Split Service (`:8007`)
+Handles receipt scanning, bill creation, collaborative item claiming, and payment tracking for dining events:
+- **Receipt OCR**: sends a receipt image to Google Cloud Vision API and extracts line items, tax, and tip automatically
+- **Bill creation**: stores items, total, tax, tip, and assigns the bill to an event; supports manual item entry when no Vision key is configured
+- **Share computation**: divides item costs proportionally among attendees (equal split or per-item claiming)
+- **Collaborative claiming**: generates a share link for event attendees to claim their own items; payer sees live claiming progress and can finalize once everyone has submitted
+- **Payment tracking**: generates a unique payment token per member; one-tap "mark as paid" via email link (no auth required); payer can also manually mark shares paid
+- **Payment reminders**: resends outstanding payment reminder emails on demand
+- **Admin OCR stats**: call count and estimated Vision API cost (`GET /admin/ocr-stats`)
+- **Config hot-reload** (`POST /admin/reload-config`): fetches the current `GOOGLE_CLOUD_VISION_API_KEY` from the api-gateway without restarting — called by api-gateway after an admin updates the key via the Integrations panel
+
 ### Enrichment Service (`:8006`)
 Caches and serves external API data, decoupling third-party calls from the frontend:
 - **Google Places** — venue/restaurant search and geocoding
@@ -113,7 +125,8 @@ PostgreSQL :5432
 │                        # recurring_schedules, event_photos
 ├── clubpal_ratings      # ratings, user_stats
 ├── clubpal_activities   # activities
-└── clubpal_enrichment   # api_keys, api_usage_stats (cache stored in MinIO)
+├── clubpal_enrichment   # api_keys, api_usage_stats (cache stored in MinIO)
+└── clubpal_billsplit    # bill_splits, bill_items, bill_shares, bill_claims, ocr_log
 ```
 
 All databases are created by `backend/pg-init/init-databases.sh`, which runs automatically on the first Postgres container boot via the `docker-entrypoint-initdb.d` mechanism.
@@ -187,6 +200,32 @@ activities          id, name, category, description, usage_count,
 ```
 api_keys            key_name, encrypted_value, source, updated_at
 api_usage_stats     api_name, total_calls, cache_hits, last_called_at
+```
+
+**bill-split-service / `clubpal_billsplit`**
+```
+bill_splits         id, event_id, payer_user_id, total_amount, tax_amount,
+                    tip_amount, status, claim_token, created_at, updated_at
+                    — status ∈ draft|claiming|sent
+                    — claim_token is a URL-safe UUID used for the collaborative claiming link
+
+bill_items          id, split_id, name, price, assigned_to JSONB
+                    — assigned_to: list of user_ids who claimed this item
+                    — populated by payer (assign flow) or by finalize (claiming flow)
+
+bill_shares         id, split_id, user_id, amount, paid, payment_token,
+                    paid_at, created_at
+                    — payment_token: unique UUID per member, used in one-tap pay links
+                    — UNIQUE(split_id, user_id)
+
+bill_claims         id, split_id, user_id, claimed_items JSONB, submitted_at
+                    — claimed_items: list of bill_item IDs the member claims
+                    — only populated during collaborative claiming flow
+                    — UNIQUE(split_id, user_id)
+
+ocr_log             id, event_id, user_id, image_size_bytes, item_count,
+                    raw_response TEXT, success, created_at
+                    — audit log of every Vision API call for cost tracking
 ```
 
 ---
@@ -269,14 +308,15 @@ All email is sent from the api-gateway via SMTP. Templates are embedded in `emai
 ## Nginx Routing Detail
 
 ```nginx
-/api/gateway/    → proxy_pass http://api_gateway/;       # strips /api/gateway/
-/api/groups/     → proxy_pass http://groups_service/;    # strips /api/groups/
-/api/events/     → proxy_pass http://events_service/;    # strips /api/events/
-/api/ratings/    → proxy_pass http://ratings_service/;   # strips /api/ratings/
-/api/activities/ → proxy_pass http://activities_service/;
-/api/enrich/     → proxy_pass http://enrichment_service/;
-/storage/        → proxy_pass http://minio/;              # strips /storage/
-/                → static files with SPA fallback
+/api/gateway/     → proxy_pass http://api_gateway/;        # strips /api/gateway/
+/api/groups/      → proxy_pass http://groups_service/;     # strips /api/groups/
+/api/events/      → proxy_pass http://events_service/;     # strips /api/events/
+/api/ratings/     → proxy_pass http://ratings_service/;    # strips /api/ratings/
+/api/activities/  → proxy_pass http://activities_service/;
+/api/enrich/      → proxy_pass http://enrichment_service/;
+/api/bill-splits/ → proxy_pass http://bill_split_service/; # strips /api/bill-splits/
+/storage/         → proxy_pass http://minio/;               # strips /storage/
+/                 → static files with SPA fallback
 ```
 
 Swagger UI is proxied for development convenience:
@@ -288,6 +328,7 @@ Swagger UI is proxied for development convenience:
 /docs/ratings     → ratings-service /docs
 /docs/activities  → activities-service /docs
 /docs/enrich      → enrichment-service /docs
+/docs/bill-splits → bill-split-service /docs
 ```
 
 Rate limit zones:
@@ -306,13 +347,13 @@ Rate limit zones:
 | `MINIO_ROOT_USER` | `clubpal` | minio, all services | MinIO access key |
 | `MINIO_ROOT_PASSWORD` | `clubpalpassword` | minio, all services | MinIO secret key |
 | `MINIO_PUBLIC_URL` | `http://localhost:9000/storage` | api-gateway, groups, events, enrichment | Base URL browsers use to load uploaded files |
-| `FRONTEND_URL` | `http://localhost:9000` | api-gateway | Base URL used in email links |
+| `FRONTEND_URL` | `http://localhost:9000` | api-gateway, bill-split-service | Base URL used in email links and claim/payment URLs |
 
 ### Security (optional but recommended for internet-facing deployments)
 
 | Variable | Default | Service | Purpose |
 |---|---|---|---|
-| `INTERNAL_API_SECRET` | _(empty)_ | api-gateway, enrichment-service | Shared secret that protects the internal `/internal/integrations` endpoint. When set, the enrichment service must include it as an `X-Internal-Secret` header; requests without a matching header are rejected with 403. Safe to leave blank on a private LAN — the gateway will log a warning at startup as a reminder. Generate a value with `openssl rand -hex 32`. |
+| `INTERNAL_API_SECRET` | _(empty)_ | api-gateway, enrichment-service, bill-split-service | Shared secret that protects internal endpoints. When set, the enrichment service and bill-split service must include it as an `X-Internal-Secret` header; requests without a matching header are rejected with 403. Safe to leave blank on a private LAN — the gateway will log a warning at startup as a reminder. Generate a value with `openssl rand -hex 32`. |
 
 ### Email delivery (optional — app works without it)
 
@@ -324,6 +365,12 @@ Rate limit zones:
 | `SMTP_PASSWORD` | _(empty)_ | SMTP password or app password |
 | `FROM_EMAIL` | `noreply@clubpal.app` | Sender address on outgoing emails |
 | `FROM_NAME` | `clubPal` | Sender display name |
+
+### Bill Split service (optional)
+
+| Variable | Default | Service | Enables |
+|---|---|---|---|
+| `GOOGLE_CLOUD_VISION_API_KEY` | _(empty)_ | bill-split-service | Receipt OCR — photograph a receipt to auto-extract items, tax, and tip. Without this key the service starts fine; users can enter items manually. Can also be set at runtime via **Admin Panel → Integrations** (no restart needed). |
 
 ### Enrichment service — external APIs (all optional)
 
@@ -353,6 +400,7 @@ All Radarr/Sonarr vars can alternatively be set at runtime by an admin via **Set
 | `VITE_RATINGS_URL` | `/api/ratings` | Ratings Service base URL |
 | `VITE_ACTIVITIES_URL` | `/api/activities` | Activities Service base URL |
 | `VITE_ENRICH_URL` | `/api/enrich` | Enrichment Service base URL |
+| `VITE_BILL_SPLITS_URL` | `/api/bill-splits` | Bill Split Service base URL |
 | `VITE_TENOR_API_KEY` | _(empty)_ | Tenor GIF search — alternative to per-user localStorage key |
 
 > **Note on Tenor:** end users can also supply their own Tenor API key via **Settings → Integrations** in the UI. The key is saved to `localStorage` in the browser and takes precedence over the build-time env var. This means GIF search works per-user without a server restart.
@@ -401,6 +449,8 @@ All Radarr/Sonarr vars can alternatively be set at runtime by an admin via **Set
 | `/discover/shows/:id` | ShowDetail | Yes |
 | `/profile` | Profile | Yes |
 | `/settings` | Settings | Yes |
+| `/pay/:token` | PayBill | No (public one-tap payment link) |
+| `/claim/:token` | ClaimItems | Yes (redirects to `/login?redirect=...` if unauthenticated) |
 | `*` | NotFound | — |
 
 ### API client configuration
@@ -459,6 +509,7 @@ db (postgres healthcheck)
   └── groups-service
   └── activities-service
   └── enrichment-service
+  └── bill-split-service (needs api-gateway + events-service healthy)
        └── events-service (needs groups + activities healthy)
             └── ratings-service (needs groups + events healthy)
 
@@ -492,9 +543,10 @@ push to main / PR / manual
     │       tags: ghcr.io/<owner>/clubpal-nginx:latest + :<sha>
     │       cache: type=gha, scope=nginx
     │
-    └── build-services (matrix: 6 parallel jobs)
+    └── build-services (matrix: 7 parallel jobs)
             for each of: api-gateway, groups-service, events-service,
-                         ratings-service, activities-service, enrichment-service
+                         ratings-service, activities-service, enrichment-service,
+                         bill-split-service
             context: backend/services/<service>
             tags: ghcr.io/<owner>/clubpal-<service>:latest + :<sha>
             cache: type=gha, scope=<service>
@@ -521,6 +573,10 @@ Services call each other over the internal Docker network using container hostna
 | ratings-service | groups-service | Fetch group member IDs for leaderboard query |
 | ratings-service | events-service | Verify event exists when creating a rating |
 | enrichment-service | api-gateway | Fetch admin-stored API keys on startup (`GET /internal/integrations`) — sends `X-Internal-Secret` header if `INTERNAL_API_SECRET` is set |
+| bill-split-service | api-gateway | Validate bearer sessions (`GET /auth/me`) — results cached for 60 s via TTLCache to avoid hammering the gateway |
+| bill-split-service | api-gateway | Fetch OCR Vision API key on startup and on config hot-reload (`GET /internal/integrations`) |
+| bill-split-service | events-service | Verify event exists and fetch event name/attendees when creating a bill split |
+| api-gateway | bill-split-service | Trigger config reload after admin updates Vision API key (`POST /admin/reload-config`) — sends `X-Internal-Secret` header |
 
 ---
 
@@ -664,13 +720,95 @@ When Radarr and/or Sonarr are configured, a green **IN LIBRARY** pill badge over
 
 ---
 
+## Feature: Bill Split & Collaborative Claiming
+
+Allows the payer at a dining event to scan a receipt (or enter items manually), split costs among attendees, and collect payment confirmations.
+
+### Bill split lifecycle
+
+```
+Payer opens BillSplit tab on an event
+  → POST /api/bill-splits/ocr  (optional — scans receipt photo via Google Vision)
+  → Review and adjust items + tax + tip
+  → Choose split method:
+       A) Assign myself  → payer assigns items per person manually → POST /api/bill-splits/
+       B) Let members claim → payer creates split → POST /api/bill-splits/
+                               → POST /api/bill-splits/{id}/start-claiming
+                               → bill status = "claiming"; claim_token set
+
+--- Collaborative claiming (method B) ---
+
+Payer shares claim link  ({FRONTEND_URL}/claim/{claim_token})
+  → each member opens link, logs in (redirect via ?redirect=), picks their items
+  → POST /api/bill-splits/claim/{token}/submit   (submitted_at set)
+  → payer watches progress at GET /api/bill-splits/{id}/claiming-status
+       (polls every ~8 s in web UI; shows per-member submitted badge)
+
+Payer finalises (POST /api/bill-splits/{id}/finalize)
+  → claimed items merged into bill_items.assigned_to
+  → old shares deleted, new shares computed via compute_shares()
+  → payment reminder emails sent to each member
+  → bill status = "sent"
+  → 409 returned if already finalized (idempotency guard)
+
+--- Payment tracking ---
+
+Each member's email contains a one-tap pay link:
+  {FRONTEND_URL}/pay/{payment_token}
+  → POST /api/bill-splits/pay/{token}   (no auth required)
+  → marks share as paid
+
+Payer can also manually mark paid:
+  PATCH /api/bill-splits/{id}/shares/{uid}/paid
+```
+
+### Schema design notes
+
+- `bill_splits.claim_token` — `TEXT UNIQUE`, only set when collaborative claiming is started; used as a low-friction URL token (no auth required to view, auth required to submit)
+- `bill_shares.payment_token` — generated once on share creation; survives the finalize step (preserved when shares are recomputed so existing payment links stay valid)
+- `bill_claims` — ephemeral staging table; entries are read by `finalize` to populate `bill_items.assigned_to`, after which shares are recomputed. Claims are left in place as an audit trail but are not queried after finalization.
+
+### OCR flow
+
+```
+Client → POST /api/bill-splits/ocr   (multipart: image file, event_id)
+  → bill-split-service fetches GOOGLE_CLOUD_VISION_API_KEY from in-memory cache
+       (populated at startup from api-gateway /internal/integrations; refreshed via /admin/reload-config)
+  → calls Google Cloud Vision API (DOCUMENT_TEXT_DETECTION)
+  → parses response: extracts item names + prices, tax, tip, total
+  → logs call to ocr_log table (size, item count, success flag)
+  → returns { items: [{name, price}], tax_amount, tip_amount, total_amount }
+```
+
+If no Vision key is configured, the endpoint returns `{ items: [], tax_amount: 0, tip_amount: 0, total_amount: 0 }` and the UI falls through to manual entry.
+
+### Endpoints
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/ocr` | Bearer | Scan receipt image → extract items, tax, tip |
+| POST | `/` | Bearer | Create bill split for an event |
+| GET | `/event/{event_id}` | Bearer | Get split + shares for an event |
+| POST | `/pay/{token}` | — | One-tap mark-as-paid (public, email link) |
+| PATCH | `/{id}/shares/{uid}/paid` | Bearer (payer) | Manually mark a share as paid |
+| POST | `/{id}/reminders` | Bearer (payer) | Resend payment reminder emails |
+| POST | `/{id}/start-claiming` | Bearer (payer) | Generate collaborative claim link; idempotent |
+| GET | `/claim/{token}` | Bearer | Member view: items available to claim + already submitted state |
+| POST | `/claim/{token}/submit` | Bearer | Member submits their item selections |
+| GET | `/{id}/claiming-status` | Bearer (payer) | Live claiming progress per member |
+| POST | `/{id}/finalize` | Bearer (payer) | Lock claims, recompute shares, send emails; 409 if already sent |
+| GET | `/admin/ocr-stats` | Bearer (admin) | OCR usage stats and estimated Vision API cost |
+| POST | `/admin/reload-config` | Internal secret | Reload Vision API key from gateway (no restart needed) |
+
+---
+
 ## Deployment Checklist
 
 1. Set strong values in `.env` (especially `MINIO_ROOT_PASSWORD` and `POSTGRES_PASSWORD`)
 2. Set `MINIO_PUBLIC_URL` to your public domain (e.g. `https://example.com/storage`)
 3. Set `FRONTEND_URL` to your domain (used in email links)
 4. Configure SMTP credentials for email delivery
-5. Optionally add enrichment API keys (`GOOGLE_API_KEY`, `TMDB_API_KEY`, `IGDB_CLIENT_ID/SECRET`)
+5. Optionally add enrichment API keys (`GOOGLE_API_KEY`, `TMDB_API_KEY`, `IGDB_CLIENT_ID/SECRET`) and bill-split OCR key (`GOOGLE_CLOUD_VISION_API_KEY`)
 6. **For internet-facing deployments:** set `INTERNAL_API_SECRET` to a random value (`openssl rand -hex 32`) — protects the internal API key sync endpoint between services. Optional for LAN-only installs.
 7. **Change the default admin password** on first login — the web UI will show a red warning banner until this is done.
 8. Point a reverse proxy / load balancer at port 9000 (or map directly)

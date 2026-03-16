@@ -153,7 +153,7 @@ export default function Sidebar({ user: userProp, groupCount = 0, notifCount = 0
         ))}
         {user?.is_admin && (
           <NavLink
-            to="/admin"
+            to="/settings"
             className={({ isActive }) => `cp-nav-item${isActive ? ' active' : ''}`}
             style={{ color: 'var(--rose)' }}
           >

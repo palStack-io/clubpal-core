@@ -8,6 +8,7 @@ import PhotoGalleryCard from '../../components/events/PhotoGalleryCard'
 import CommentsCard from '../../components/events/CommentsCard'
 import EventMetaCard from '../../components/events/EventMetaCard'
 import EditEventModal from '../../components/modals/EditEventModal'
+import RateEventModal from '../../components/events/RateEventModal'
 import AnimatedBackground from '../../components/ui/AnimatedBackground'
 import BillSplitSection from '../../components/billsplit/BillSplitSection'
 import { eventsApi } from '../../api/events'
@@ -42,6 +43,7 @@ export default function EventDetail() {
   const [loading, setLoading] = useState(true)
   const [rsvpLoading, setRsvpLoading] = useState(false)
   const [showEditEvent, setShowEditEvent] = useState(false)
+  const [showRateModal, setShowRateModal] = useState(false)
 
   const fetchAll = async () => {
     try {
@@ -192,7 +194,7 @@ export default function EventDetail() {
 
   const heroActions = [
     ...(event.status === 'scheduled' && isHost ? [{ label: '✏️ Edit', onClick: () => setShowEditEvent(true) }] : []),
-    ...(event.status === 'completed' ? [{ label: '⭐ Rate', onClick: () => handleRsvp('rate') }] : []),
+    ...((event.status === 'completed' || (event.scheduled_date && new Date(event.scheduled_date) < new Date())) ? [{ label: '⭐ Rate', onClick: () => setShowRateModal(true) }] : []),
     ...(isScheduled && myAttendee?.status !== 'going' ? [{ label: '✓ RSVP', onClick: () => handleRsvp('going'), loading: rsvpLoading }] : []),
   ]
 
@@ -263,7 +265,7 @@ export default function EventDetail() {
               scheduledDate={event.scheduled_date}
               currentUserId={user?.id}
               eventId={id}
-              onAddRating={() => navigate(`/events/${id}/rate`)}
+              onAddRating={() => setShowRateModal(true)}
             />
             <PhotoGalleryCard
               photos={photos}
@@ -315,6 +317,14 @@ export default function EventDetail() {
         event={event}
         onSaved={() => { setShowEditEvent(false); fetchAll() }}
         onCancel={handleCancelEvent}
+      />
+      <RateEventModal
+        isOpen={showRateModal}
+        onClose={() => setShowRateModal(false)}
+        event={event}
+        attendees={attendees}
+        currentUser={user}
+        onSubmitted={fetchAll}
       />
     </AppShell>
   )

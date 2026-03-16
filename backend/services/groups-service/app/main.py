@@ -12,7 +12,9 @@ from app.models import (
     RotationSetTurnRequest, RotationSkipRequest, RotationReorderRequest,
     BannerUploadRequest, UploadUrlResponse,
     GroupCommentCreate, GroupCommentResponse,
-    PollCreate, PollRespond, PollConvert, PollResponseModel
+    PollCreate, PollRespond, PollConvert, PollResponseModel,
+    InviteCodeCreate, InviteCodeResponse, InviteCodePreview,
+    JoinRequestResponse, JoinRequestAction,
 )
 from app.database import (
     init_db, create_group, get_group, get_groups_by_user, update_group, delete_group,
@@ -22,7 +24,12 @@ from app.database import (
     add_group_comment, get_group_comments, get_group_comment, delete_group_comment,
     create_poll, get_poll, get_polls_for_group, get_pending_polls_for_user,
     upsert_poll_response, get_poll_responses, get_poll_response,
-    close_poll, convert_poll, auto_close_expired_polls
+    close_poll, convert_poll, auto_close_expired_polls,
+    create_invite_code, get_active_invite_code, get_invite_code_by_code,
+    validate_invite_code, increment_invite_used_count,
+    create_join_request, get_pending_join_requests, get_join_request,
+    get_pending_join_request_by_user, update_join_request,
+    get_pending_join_requests_count,
 )
 from app import storage
 
@@ -78,6 +85,8 @@ async def health_check():
 @app.post("/groups", response_model=GroupResponse, status_code=201)
 async def create_group_endpoint(group_data: GroupCreate, user_id: int = Depends(get_current_user_id)):
     """Create a new group."""
+    if not group_data.join_behavior:
+        raise HTTPException(status_code=400, detail="join_behavior is required (instant or approval)")
     try:
         group_id = create_group(
             name=group_data.name,
@@ -88,6 +97,18 @@ async def create_group_endpoint(group_data: GroupCreate, user_id: int = Depends(
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    # Auto-generate invite code
+    try:
+        create_invite_code(
+            group_id=group_id,
+            group_name=group_data.name,
+            join_behavior=group_data.join_behavior,
+            expiry_type=group_data.expiry_type or "never",
+            expiry_days=group_data.expiry_days,
+        )
+    except Exception:
+        pass  # non-blocking — group still created
 
     group = get_group(group_id)
     return GroupResponse(**group)
@@ -676,6 +697,191 @@ async def get_pending_polls(user_id: int):
         summary = _build_poll_summary(p['id'], user_id, member_count)
         result.append(_poll_to_model(p, summary))
     return result
+
+
+# ===== Invite Code Endpoints =====
+
+@app.post("/groups/{group_id}/invite-codes", response_model=InviteCodeResponse, status_code=201)
+async def generate_invite_code(
+    group_id: int,
+    data: InviteCodeCreate,
+    user_id: int = Depends(get_current_user_id),
+):
+    """Generate (or regenerate) invite code for a group. Admin/owner only."""
+    if not is_admin_or_owner(group_id, user_id):
+        raise HTTPException(status_code=403, detail="Only admins and owners can manage invite codes")
+    group = get_group(group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    row = create_invite_code(
+        group_id=group_id,
+        group_name=group["name"],
+        join_behavior=data.join_behavior,
+        expiry_type=data.expiry_type,
+        expiry_days=data.expiry_days,
+    )
+    return InviteCodeResponse(**row)
+
+
+@app.get("/groups/{group_id}/invite-codes/active", response_model=InviteCodeResponse)
+async def get_group_invite_code(group_id: int, user_id: int = Depends(get_current_user_id)):
+    """Get current active invite code for a group. Admin/owner only."""
+    if not is_admin_or_owner(group_id, user_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    row = get_active_invite_code(group_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="No invite code found")
+    return InviteCodeResponse(**row)
+
+
+@app.get("/invite-codes/{code}", response_model=InviteCodePreview)
+async def preview_invite_code(code: str):
+    """Public endpoint — preview a group via invite code (no auth required)."""
+    result = validate_invite_code(code)
+    if not result["valid"]:
+        return InviteCodePreview(
+            code=code, group_id=0, group_name="", activity_type=None,
+            member_count=0, join_behavior="instant", valid=False, error=result["error"]
+        )
+    row = result["row"]
+    return InviteCodePreview(
+        code=code,
+        group_id=row["group_id"],
+        group_name=row["group_name"],
+        activity_type=row.get("activity_type"),
+        member_count=row["member_count"],
+        join_behavior=row["join_behavior"],
+        valid=True,
+    )
+
+
+@app.post("/invite-codes/{code}/join")
+async def join_via_invite_code(code: str, user_id: int = Depends(get_current_user_id)):
+    """Join a group via invite code. Instant or approval depending on join_behavior."""
+    result = validate_invite_code(code)
+    if not result["valid"]:
+        raise HTTPException(status_code=400, detail=result["error"])
+
+    row = result["row"]
+    group_id = row["group_id"]
+
+    # Already a member?
+    if is_member(group_id, user_id):
+        raise HTTPException(status_code=409, detail="You are already a member of this group")
+
+    if row["join_behavior"] == "instant":
+        success = add_member(group_id, user_id)
+        if not success:
+            raise HTTPException(status_code=409, detail="Could not add member")
+        increment_invite_used_count(row["id"])
+        return {"joined": True, "group_id": group_id}
+
+    else:  # approval
+        # Check for existing pending request
+        existing = get_pending_join_request_by_user(group_id, user_id)
+        if existing:
+            raise HTTPException(status_code=409, detail="You already have a pending request to join this group")
+
+        req = create_join_request(group_id, user_id, row["id"])
+        increment_invite_used_count(row["id"])
+
+        # Notify group admin(s)
+        group = get_group(group_id)
+        group_name = group["name"] if group else f"Group {group_id}"
+        members = get_members(group_id)
+        admin_ids = [m["user_id"] for m in members if m["role"] in ("owner", "admin")]
+        internal_secret = os.getenv("INTERNAL_API_SECRET", "")
+        async with httpx.AsyncClient() as client:
+            try:
+                await client.post(
+                    f"{GATEWAY_SERVICE_URL}/internal/notify/event",
+                    json={
+                        "group_id": group_id,
+                        "user_ids": admin_ids,
+                        "event_title": f"Someone wants to join {group_name}",
+                        "group_name": group_name,
+                        "event_date": "",
+                        "link_type": "group",
+                        "link_id": str(group_id),
+                    },
+                    headers={"x-internal-secret": internal_secret},
+                    timeout=5.0,
+                )
+            except Exception:
+                pass
+
+        return {"requested": True, "request_id": req["id"]}
+
+
+@app.get("/groups/{group_id}/join-requests", response_model=List[JoinRequestResponse])
+async def list_join_requests(group_id: int, user_id: int = Depends(get_current_user_id)):
+    """Get pending join requests. Admin/owner only."""
+    if not is_admin_or_owner(group_id, user_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    rows = get_pending_join_requests(group_id)
+    return [JoinRequestResponse(**r) for r in rows]
+
+
+@app.get("/groups/{group_id}/join-requests/count")
+async def join_requests_count(group_id: int, user_id: int = Depends(get_current_user_id)):
+    """Return pending join request count for badge display."""
+    if not is_admin_or_owner(group_id, user_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    return {"count": get_pending_join_requests_count(group_id)}
+
+
+@app.patch("/join-requests/{request_id}", response_model=JoinRequestResponse)
+async def review_join_request(
+    request_id: int,
+    data: JoinRequestAction,
+    user_id: int = Depends(get_current_user_id),
+):
+    """Approve or decline a join request. Admin/owner only."""
+    req = get_join_request(request_id)
+    if not req:
+        raise HTTPException(status_code=404, detail="Request not found")
+    if not is_admin_or_owner(req["group_id"], user_id):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    if req["status"] != "pending":
+        raise HTTPException(status_code=409, detail="Request already reviewed")
+
+    new_status = "approved" if data.action == "approve" else "declined"
+    updated = update_join_request(request_id, new_status, user_id)
+
+    if data.action == "approve":
+        add_member(req["group_id"], req["user_id"])
+
+    # Notify requester
+    group = get_group(req["group_id"])
+    group_name = group["name"] if group else f"Group {req['group_id']}"
+    if data.action == "approve":
+        notif_title = f"You're in! Welcome to {group_name}"
+        link_type = "group"
+    else:
+        notif_title = f"Your request to join {group_name} was declined"
+        link_type = "group"
+
+    internal_secret = os.getenv("INTERNAL_API_SECRET", "")
+    async with httpx.AsyncClient() as client:
+        try:
+            await client.post(
+                f"{GATEWAY_SERVICE_URL}/internal/notify/event",
+                json={
+                    "group_id": req["group_id"],
+                    "user_ids": [req["user_id"]],
+                    "event_title": notif_title,
+                    "group_name": group_name,
+                    "event_date": "",
+                    "link_type": link_type,
+                    "link_id": str(req["group_id"]),
+                },
+                headers={"x-internal-secret": internal_secret},
+                timeout=5.0,
+            )
+        except Exception:
+            pass
+
+    return JoinRequestResponse(**updated)
 
 
 if __name__ == "__main__":

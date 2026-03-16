@@ -31,6 +31,7 @@ export default function CreateGroup() {
     description: '',
     rotation_mode: 'sequential',
     activity_type: 'dining',
+    join_behavior: null, // must be selected before submit
   })
   const [bannerFile, setBannerFile] = useState(null)
   const [bannerPreview, setBannerPreview] = useState(null)
@@ -73,6 +74,7 @@ export default function CreateGroup() {
 
   const handleSubmit = async () => {
     if (!form.name.trim()) { setError('Group name is required.'); return }
+    if (!form.join_behavior) { setError('Please select how new members can join.'); return }
     setError('')
     setLoading(true)
     try {
@@ -81,6 +83,7 @@ export default function CreateGroup() {
         description: form.description,
         rotation_type: ROTATION_TYPE_MAP[form.rotation_mode] || 'round_robin',
         activity_type: form.activity_type,
+        join_behavior: form.join_behavior,
       })
 
       // Upload banner if provided
@@ -156,6 +159,36 @@ export default function CreateGroup() {
 
         <FormSection title="Activity Type">
           <ActivityTypePicker value={form.activity_type} onChange={v => set('activity_type', v)} />
+        </FormSection>
+
+        <FormSection title="How members join">
+          <div style={{ display: 'flex', gap: '12px' }}>
+            {[
+              { value: 'instant', icon: '⚡', label: 'Instant join', desc: 'Anyone with the code joins right away' },
+              { value: 'approval', icon: '✋', label: 'Admin approval', desc: 'You approve each request before they can join' },
+            ].map(opt => {
+              const selected = form.join_behavior === opt.value
+              return (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => set('join_behavior', opt.value)}
+                  style={{
+                    flex: 1, padding: '16px 14px', borderRadius: '14px', textAlign: 'left', cursor: 'pointer',
+                    background: selected ? 'var(--rose-glow)' : 'var(--s3)',
+                    border: `1.5px solid ${selected ? 'var(--rose-border)' : 'var(--s4)'}`,
+                    transition: 'all 0.15s',
+                  }}
+                >
+                  <div style={{ fontSize: '22px', marginBottom: '6px' }}>{opt.icon}</div>
+                  <div style={{ fontSize: '13px', fontWeight: 700, color: selected ? 'var(--rose-soft)' : 'var(--t1)', marginBottom: '4px' }}>
+                    {opt.label}
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--t3)', lineHeight: 1.4 }}>{opt.desc}</div>
+                </button>
+              )
+            })}
+          </div>
         </FormSection>
 
         <FormSection title="Invite Members">

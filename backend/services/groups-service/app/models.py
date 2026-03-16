@@ -22,6 +22,9 @@ class GroupCreate(BaseModel):
     description: Optional[str] = Field(None, max_length=500)
     rotation_type: RotationType = RotationType.ROUND_ROBIN
     activity_type: Optional[str] = None
+    join_behavior: Optional[str] = Field(None, pattern="^(instant|approval)$")
+    expiry_type: Optional[str] = Field("never", pattern="^(never|days)$")
+    expiry_days: Optional[int] = Field(None, ge=1, le=365)
 
 
 class GroupUpdate(BaseModel):
@@ -158,6 +161,53 @@ class PollResponseModel(BaseModel):
     converted_event_id: Optional[int]
     created_at: datetime
     summary: Optional[dict] = None
+
+
+# Invite code models
+class InviteCodeCreate(BaseModel):
+    join_behavior: str = Field(..., pattern="^(instant|approval)$")
+    expiry_type: str = Field("never", pattern="^(never|days)$")
+    expiry_days: Optional[int] = Field(None, ge=1, le=365)
+
+
+class InviteCodeResponse(BaseModel):
+    id: int
+    group_id: int
+    code: str
+    join_behavior: str
+    expiry_type: str
+    expiry_days: Optional[int]
+    expires_at: Optional[datetime]
+    used_count: int
+    created_at: datetime
+    regenerated_at: Optional[datetime] = None
+
+
+class InviteCodePreview(BaseModel):
+    """Public info returned by GET /invite-codes/:code"""
+    code: str
+    group_id: int
+    group_name: str
+    activity_type: Optional[str]
+    member_count: int
+    join_behavior: str
+    valid: bool
+    error: Optional[str] = None
+
+
+class JoinRequestResponse(BaseModel):
+    id: int
+    group_id: int
+    user_id: int
+    invite_code_id: int
+    status: str
+    requested_at: datetime
+    reviewed_at: Optional[datetime] = None
+    reviewed_by: Optional[int] = None
+
+
+class JoinRequestAction(BaseModel):
+    action: str = Field(..., pattern="^(approve|decline)$")
 
 
 # Update forward references

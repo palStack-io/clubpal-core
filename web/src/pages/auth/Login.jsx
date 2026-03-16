@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../../contexts/AuthContext'
 import Button from '../../components/ui/Button'
@@ -42,6 +42,7 @@ const authPageStyles = {
 export default function Login() {
   const { login, loginWithGoogle } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const [form, setForm] = useState({ username: '', password: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -54,7 +55,7 @@ export default function Login() {
     const result = await login(form.username, form.password)
     setLoading(false)
     if (result.success) {
-      navigate('/dashboard')
+      navigate(searchParams.get('next') || '/dashboard')
     } else {
       setError(result.error)
     }

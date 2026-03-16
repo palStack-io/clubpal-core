@@ -8,6 +8,8 @@ import ActivityTypePicker from '../../components/groups/ActivityTypePicker'
 import ConfirmDeleteModal from '../../components/modals/ConfirmDeleteModal'
 import { groupsApi } from '../../api/groups'
 
+const JOIN_SITE = 'clubpal.io'
+
 const ROTATION_TYPE_MAP = { sequential: 'round_robin', random: 'random', manual: 'none' }
 const ROTATION_MODE_MAP = { round_robin: 'sequential', random: 'random', none: 'manual' }
 
@@ -23,6 +25,13 @@ export default function EditGroup() {
   const [deleting, setDeleting] = useState(false)
   const [showDelete, setShowDelete] = useState(false)
   const [error, setError] = useState('')
+  // Invite code state
+  const [inviteCode, setInviteCode] = useState(null)
+  const [inviteLoading, setInviteLoading] = useState(true)
+  const [regenerating, setRegenerating] = useState(false)
+  const [showRegenConfirm, setShowRegenConfirm] = useState(false)
+  const [joinRequests, setJoinRequests] = useState([])
+  const [reviewingId, setReviewingId] = useState(null)
   const dragItem = useRef(null)
   const dragOver = useRef(null)
 
@@ -30,8 +39,12 @@ export default function EditGroup() {
 
   useEffect(() => {
     if (!id) return
-    Promise.all([groupsApi.getById(id), groupsApi.getMembers(id)])
-      .then(([g, m]) => {
+    Promise.all([
+      groupsApi.getById(id),
+      groupsApi.getMembers(id),
+      groupsApi.getActiveInviteCode(id).catch(() => null),
+      groupsApi.getJoinRequests(id).catch(() => []),
+    ]).then(([g, m, ic, jrs]) => {
         setForm({
           name: g.name || '',
           description: g.description || '',
@@ -41,9 +54,11 @@ export default function EditGroup() {
         const sorted = (m || []).sort((a, b) => (a.rotation_order ?? 999) - (b.rotation_order ?? 999))
         setMembers(sorted)
         setMemberOrder(sorted.map(m => m.user_id))
+        setInviteCode(ic)
+        setJoinRequests(Array.isArray(jrs) ? jrs : [])
       })
       .catch(() => setError('Failed to load group.'))
-      .finally(() => setLoading(false))
+      .finally(() => { setLoading(false); setInviteLoading(false) })
   }, [id])
 
   const handleDragStart = (index) => { dragItem.current = index }
@@ -87,6 +102,53 @@ export default function EditGroup() {
       setError(e.response?.data?.detail || 'Failed to save changes.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleRegenerate = async () => {
+    if (!inviteCode) return
+    setRegenerating(true)
+    try {
+      const newCode = await groupsApi.generateInviteCode(id, {
+        join_behavior: inviteCode.join_behavior,
+        expiry_type: inviteCode.expiry_type,
+        expiry_days: inviteCode.expiry_days,
+      })
+      setInviteCode(newCode)
+      setShowRegenConfirm(false)
+    } catch {
+      setError('Failed to regenerate code.')
+    } finally {
+      setRegenerating(false)
+    }
+  }
+
+  const handleUpdateCodeSettings = async (patch) => {
+    if (!inviteCode) return
+    setRegenerating(true)
+    try {
+      const newCode = await groupsApi.generateInviteCode(id, {
+        join_behavior: patch.join_behavior ?? inviteCode.join_behavior,
+        expiry_type: patch.expiry_type ?? inviteCode.expiry_type,
+        expiry_days: patch.expiry_days !== undefined ? patch.expiry_days : inviteCode.expiry_days,
+      })
+      setInviteCode(newCode)
+    } catch {
+      setError('Failed to update invite settings.')
+    } finally {
+      setRegenerating(false)
+    }
+  }
+
+  const handleReviewRequest = async (requestId, action) => {
+    setReviewingId(requestId)
+    try {
+      await groupsApi.reviewJoinRequest(requestId, action)
+      setJoinRequests(prev => prev.filter(r => r.id !== requestId))
+    } catch {
+      setError('Failed to review request.')
+    } finally {
+      setReviewingId(null)
     }
   }
 
@@ -198,6 +260,147 @@ export default function EditGroup() {
                 <div style={{ fontSize: '13px', color: 'var(--t2)', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '10px', padding: '12px 14px' }}>
                   ✉️ When rotation advances, all group members will be emailed to vote on who picks next.
                 </div>
+              </FormSection>
+            )}
+
+            {/* ── Invite Code Section ── */}
+            <FormSection title="Invite Code">
+              {inviteLoading ? (
+                <div style={{ color: 'var(--t3)', fontSize: '13px' }}>Loading…</div>
+              ) : !inviteCode ? (
+                <div style={{ color: 'var(--t3)', fontSize: '13px' }}>
+                  No invite code found.{' '}
+                  <button
+                    style={{ color: 'var(--rose)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '13px', padding: 0 }}
+                    onClick={() => groupsApi.generateInviteCode(id, { join_behavior: 'instant', expiry_type: 'never' }).then(setInviteCode)}
+                  >
+                    Generate one
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                  {/* Code + link row */}
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <div style={{
+                      flex: 1, background: 'var(--s3)', border: '1px solid var(--s4)',
+                      borderRadius: '10px', padding: '10px 14px',
+                      fontFamily: 'monospace', fontSize: '18px', fontWeight: 700,
+                      color: 'var(--t1)', letterSpacing: '2px',
+                    }}>
+                      {inviteCode.code}
+                    </div>
+                    <Button variant="ghost" onClick={() => navigator.clipboard.writeText(inviteCode.code)}>
+                      Copy code
+                    </Button>
+                  </div>
+
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+                    <div style={{
+                      flex: 1, background: 'var(--s3)', border: '1px solid var(--s4)',
+                      borderRadius: '10px', padding: '9px 14px',
+                      fontSize: '12px', color: 'var(--t3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                    }}>
+                      {JOIN_SITE}/join/{inviteCode.code}
+                    </div>
+                    <Button variant="ghost" onClick={() => navigator.clipboard.writeText(`https://${JOIN_SITE}/join/${inviteCode.code}`)}>
+                      Copy link
+                    </Button>
+                  </div>
+
+                  {/* Settings row */}
+                  <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                    <FormGroup label="Join behavior" style={{ flex: 1, minWidth: '140px' }}>
+                      <FormSelect
+                        value={inviteCode.join_behavior}
+                        onChange={e => handleUpdateCodeSettings({ join_behavior: e.target.value })}
+                        disabled={regenerating}
+                      >
+                        <option value="instant">⚡ Instant join</option>
+                        <option value="approval">✋ Admin approval</option>
+                      </FormSelect>
+                    </FormGroup>
+                    <FormGroup label="Expires" style={{ flex: 1, minWidth: '140px' }}>
+                      <FormSelect
+                        value={inviteCode.expiry_type === 'days' ? 'days' : 'never'}
+                        onChange={e => handleUpdateCodeSettings({
+                          expiry_type: e.target.value,
+                          expiry_days: e.target.value === 'days' ? 7 : null,
+                        })}
+                        disabled={regenerating}
+                      >
+                        <option value="never">Never</option>
+                        <option value="days">7 days</option>
+                      </FormSelect>
+                    </FormGroup>
+                  </div>
+
+                  {/* Regenerate */}
+                  {showRegenConfirm ? (
+                    <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: '10px', padding: '12px 14px' }}>
+                      <p style={{ fontSize: '13px', color: 'var(--t2)', marginBottom: '10px' }}>
+                        ⚠️ Old code stops working immediately. Anyone with the old link won't be able to join.
+                      </p>
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <Button variant="primary" onClick={handleRegenerate} loading={regenerating}>Yes, regenerate</Button>
+                        <Button variant="ghost" onClick={() => setShowRegenConfirm(false)}>Cancel</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <Button variant="ghost" onClick={() => setShowRegenConfirm(true)}>
+                      🔄 Regenerate code
+                    </Button>
+                  )}
+                </div>
+              )}
+            </FormSection>
+
+            {/* ── Join Requests (approval mode only) ── */}
+            {inviteCode?.join_behavior === 'approval' && (
+              <FormSection title={`Join Requests${joinRequests.length > 0 ? ` (${joinRequests.length})` : ''}`}>
+                {joinRequests.length === 0 ? (
+                  <div style={{ fontSize: '13px', color: 'var(--t3)', padding: '10px 0' }}>No pending requests</div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    {joinRequests.map(req => (
+                      <div key={req.id} style={{
+                        display: 'flex', alignItems: 'center', gap: '12px',
+                        background: 'var(--s3)', border: '1px solid var(--glass)',
+                        borderRadius: '10px', padding: '12px 14px',
+                      }}>
+                        <div style={{
+                          width: 36, height: 36, borderRadius: '50%',
+                          background: 'var(--rose)', color: '#fff',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontWeight: 700, fontSize: '14px', flexShrink: 0,
+                        }}>
+                          #{req.user_id}
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)' }}>User #{req.user_id}</div>
+                          <div style={{ fontSize: '11px', color: 'var(--t3)' }}>
+                            Requested {new Date(req.requested_at).toLocaleDateString()}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          <Button
+                            variant="primary"
+                            loading={reviewingId === req.id}
+                            onClick={() => handleReviewRequest(req.id, 'approve')}
+                          >
+                            Approve
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            loading={reviewingId === req.id}
+                            onClick={() => handleReviewRequest(req.id, 'decline')}
+                          >
+                            Decline
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </FormSection>
             )}
 

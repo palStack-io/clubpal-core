@@ -79,4 +79,27 @@ export const groupsApi = {
 
   getPendingPolls: (userId) =>
     groupsClient.get(`/users/${userId}/polls/pending`).then(r => r.data),
+
+  // Invite codes
+  generateInviteCode: (groupId, data) =>
+    groupsClient.post(`/groups/${groupId}/invite-codes`, data).then(r => r.data),
+
+  getActiveInviteCode: (groupId) =>
+    groupsClient.get(`/groups/${groupId}/invite-codes/active`).then(r => r.data),
+
+  previewInviteCode: (code) =>
+    groupsClient.get(`/invite-codes/${code}`).then(r => r.data),
+
+  joinViaCode: (code) =>
+    groupsClient.post(`/invite-codes/${code}/join`).then(r => r.data),
+
+  // Join requests
+  getJoinRequests: (groupId) =>
+    groupsClient.get(`/groups/${groupId}/join-requests`).then(r => r.data),
+
+  getJoinRequestsCount: (groupId) =>
+    groupsClient.get(`/groups/${groupId}/join-requests/count`).then(r => r.data),
+
+  reviewJoinRequest: (requestId, action) =>
+    groupsClient.patch(`/join-requests/${requestId}`, { action }).then(r => r.data),
 }

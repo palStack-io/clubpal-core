@@ -127,6 +127,45 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_poll_responses_poll ON group_poll_responses(poll_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_poll_responses_user ON group_poll_responses(user_id)")
 
+    # Invite codes table
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS invite_codes (
+            id SERIAL PRIMARY KEY,
+            group_id INTEGER NOT NULL,
+            code TEXT UNIQUE NOT NULL,
+            join_behavior TEXT NOT NULL,
+            expiry_type TEXT NOT NULL DEFAULT 'never',
+            expiry_days INTEGER DEFAULT NULL,
+            expires_at TIMESTAMPTZ DEFAULT NULL,
+            used_count INTEGER DEFAULT 0,
+            created_at TIMESTAMPTZ DEFAULT NOW(),
+            regenerated_at TIMESTAMPTZ DEFAULT NULL,
+            FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
+        )
+    """)
+
+    # Join requests table (approval-mode only)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS join_requests (
+            id SERIAL PRIMARY KEY,
+            group_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            invite_code_id INTEGER NOT NULL,
+            status TEXT DEFAULT 'pending',
+            requested_at TIMESTAMPTZ DEFAULT NOW(),
+            reviewed_at TIMESTAMPTZ DEFAULT NULL,
+            reviewed_by INTEGER DEFAULT NULL,
+            FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE,
+            FOREIGN KEY (invite_code_id) REFERENCES invite_codes(id) ON DELETE CASCADE,
+            UNIQUE(group_id, user_id, invite_code_id)
+        )
+    """)
+
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_invite_codes_group ON invite_codes(group_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_invite_codes_code ON invite_codes(code)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_join_requests_group ON join_requests(group_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_join_requests_status ON join_requests(status)")
+
     conn.commit()
     conn.close()
 
@@ -848,3 +887,177 @@ def auto_close_expired_polls() -> int:
     conn.commit()
     conn.close()
     return count
+
+
+# ===== Invite Code Utilities =====
+
+import re as _re
+
+def _generate_code_str(group_name: str) -> str:
+    """Generate XXX-000 code from group name."""
+    letters = _re.sub(r'[^a-zA-Z]', '', group_name)
+    prefix = (letters[:3] or 'GRP').upper().ljust(3, 'X')
+    suffix = str(random.randint(100, 999))
+    return f"{prefix}-{suffix}"
+
+
+def generate_unique_code(group_name: str) -> str:
+    """Generate a collision-free invite code."""
+    conn = get_db()
+    cursor = conn.cursor()
+    for _ in range(20):
+        code = _generate_code_str(group_name)
+        cursor.execute("SELECT id FROM invite_codes WHERE code = %s", (code,))
+        if not cursor.fetchone():
+            conn.close()
+            return code
+    conn.close()
+    raise ValueError("Could not generate unique invite code")
+
+
+def create_invite_code(group_id: int, group_name: str, join_behavior: str,
+                       expiry_type: str = "never", expiry_days: int = None) -> dict:
+    """Create a new invite code (latest row = active code)."""
+    from datetime import timezone, timedelta
+    conn = get_db()
+    cursor = conn.cursor()
+    code = generate_unique_code(group_name)
+    expires_at = None
+    if expiry_type == "days" and expiry_days:
+        expires_at = datetime.now(timezone.utc) + timedelta(days=expiry_days)
+    cursor.execute("""
+        INSERT INTO invite_codes (group_id, code, join_behavior, expiry_type, expiry_days, expires_at)
+        VALUES (%s, %s, %s, %s, %s, %s) RETURNING *
+    """, (group_id, code, join_behavior, expiry_type, expiry_days, expires_at))
+    row = dict(cursor.fetchone())
+    conn.commit()
+    conn.close()
+    return row
+
+
+def get_active_invite_code(group_id: int) -> Optional[dict]:
+    """Return the most recently created invite code for the group."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM invite_codes WHERE group_id = %s
+        ORDER BY created_at DESC LIMIT 1
+    """, (group_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_invite_code_by_code(code: str) -> Optional[dict]:
+    """Lookup invite code row by code string."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT ic.*, g.name AS group_name, g.activity_type,
+               (SELECT COUNT(*) FROM group_members WHERE group_id = ic.group_id) AS member_count,
+               ic.id = (SELECT id FROM invite_codes WHERE group_id = ic.group_id ORDER BY created_at DESC LIMIT 1) AS is_active
+        FROM invite_codes ic
+        JOIN groups g ON g.id = ic.group_id
+        WHERE ic.code = %s
+    """, (code,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def validate_invite_code(code: str) -> dict:
+    """Returns {valid, error?, row?}."""
+    from datetime import timezone
+    if not code:
+        return {"valid": False, "error": "No code provided"}
+    row = get_invite_code_by_code(code)
+    if not row:
+        return {"valid": False, "error": "Invalid code"}
+    if not row.get("is_active"):
+        return {"valid": False, "error": "This invite link has been replaced"}
+    if row.get("expiry_type") == "days" and row.get("expires_at"):
+        exp = row["expires_at"]
+        if exp.tzinfo is None:
+            from datetime import timezone as _tz
+            exp = exp.replace(tzinfo=_tz.utc)
+        if exp < datetime.now(timezone.utc):
+            return {"valid": False, "error": "This invite has expired"}
+    return {"valid": True, "row": row}
+
+
+def increment_invite_used_count(invite_code_id: int):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE invite_codes SET used_count = used_count + 1 WHERE id = %s", (invite_code_id,))
+    conn.commit()
+    conn.close()
+
+
+# ===== Join Requests =====
+
+def create_join_request(group_id: int, user_id: int, invite_code_id: int) -> dict:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO join_requests (group_id, user_id, invite_code_id)
+        VALUES (%s, %s, %s) RETURNING *
+    """, (group_id, user_id, invite_code_id))
+    row = dict(cursor.fetchone())
+    conn.commit()
+    conn.close()
+    return row
+
+
+def get_pending_join_requests(group_id: int) -> list:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM join_requests WHERE group_id = %s AND status = 'pending'
+        ORDER BY requested_at ASC
+    """, (group_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_join_request(request_id: int) -> Optional[dict]:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM join_requests WHERE id = %s", (request_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_pending_join_request_by_user(group_id: int, user_id: int) -> Optional[dict]:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM join_requests WHERE group_id = %s AND user_id = %s AND status = 'pending'
+    """, (group_id, user_id))
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def update_join_request(request_id: int, status: str, reviewed_by: int) -> Optional[dict]:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE join_requests
+        SET status = %s, reviewed_at = NOW(), reviewed_by = %s
+        WHERE id = %s RETURNING *
+    """, (status, reviewed_by, request_id))
+    row = cursor.fetchone()
+    conn.commit()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_pending_join_requests_count(group_id: int) -> int:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT COUNT(*) AS cnt FROM join_requests WHERE group_id = %s AND status = 'pending'", (group_id,))
+    row = cursor.fetchone()
+    conn.close()
+    return row["cnt"] if row else 0

@@ -8,6 +8,7 @@ import Register from './pages/auth/Register'
 import ForgotPassword from './pages/auth/ForgotPassword'
 import ResetPassword from './pages/auth/ResetPassword'
 import AcceptInvite from './pages/auth/AcceptInvite'
+import JoinGroup from './pages/groups/JoinGroup'
 import VerifyEmail from './pages/auth/VerifyEmail'
 
 import Dashboard from './pages/Dashboard'
@@ -90,6 +91,7 @@ function AppRoutes() {
       <Route path="/forgot-password" element={<GuestRoute><ForgotPassword /></GuestRoute>} />
       <Route path="/reset-password/:token" element={<ResetPassword />} />
       <Route path="/invite/:token" element={<AcceptInvite />} />
+      <Route path="/join/:code" element={<JoinGroup />} />
       <Route path="/verify-email/:token" element={<VerifyEmail />} />
 
       {/* Protected */}

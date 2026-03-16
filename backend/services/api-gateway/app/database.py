@@ -320,8 +320,8 @@ def get_user_count() -> int:
     """Return the total number of registered users."""
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) FROM users")
-    return cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) AS count FROM users")
+    return cursor.fetchone()["count"]
 
 
 def get_user_by_id(user_id: int) -> dict:

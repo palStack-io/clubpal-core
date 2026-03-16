@@ -1,0 +1,12 @@
+CREATE DATABASE clubpal_gateway;
+CREATE DATABASE clubpal_groups;
+CREATE DATABASE clubpal_events;
+CREATE DATABASE clubpal_ratings;
+CREATE DATABASE clubpal_activities;
+CREATE DATABASE clubpal_enrichment;
+GRANT ALL PRIVILEGES ON DATABASE clubpal_gateway TO clubpal;
+GRANT ALL PRIVILEGES ON DATABASE clubpal_groups TO clubpal;
+GRANT ALL PRIVILEGES ON DATABASE clubpal_events TO clubpal;
+GRANT ALL PRIVILEGES ON DATABASE clubpal_ratings TO clubpal;
+GRANT ALL PRIVILEGES ON DATABASE clubpal_activities TO clubpal;
+GRANT ALL PRIVILEGES ON DATABASE clubpal_enrichment TO clubpal;

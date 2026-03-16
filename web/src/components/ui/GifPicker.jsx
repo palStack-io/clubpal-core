@@ -1,10 +1,10 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 
-const TENOR_SEARCH_URL = 'https://tenor.googleapis.com/v2/search'
-const TENOR_FEATURED_URL = 'https://tenor.googleapis.com/v2/featured'
+const GIPHY_SEARCH_URL = 'https://api.giphy.com/v1/gifs/search'
+const GIPHY_TRENDING_URL = 'https://api.giphy.com/v1/gifs/trending'
 
-function getTenorKey() {
-  return localStorage.getItem('tenor_api_key') || import.meta.env.VITE_TENOR_API_KEY || ''
+function getGiphyKey() {
+  return localStorage.getItem('giphy_api_key') || import.meta.env.VITE_GIPHY_API_KEY || ''
 }
 
 // ── Curated fallback GIFs (shown when no Tenor API key) ─────────────────────
@@ -78,7 +78,7 @@ const CURATED = {
 
 const CATEGORIES = Object.keys(CURATED)
 
-const TENOR_CATEGORIES = [
+const GIPHY_CATEGORIES = [
   { label: '🔥 Trending', term: '' },
   { label: '👍 Reactions', term: 'reaction' },
   { label: '😂 LOL', term: 'lol funny' },
@@ -90,7 +90,7 @@ const TENOR_CATEGORIES = [
 ]
 
 export default function GifPicker({ onSelect, onClose }) {
-  const TENOR_API_KEY = getTenorKey()
+  const GIPHY_API_KEY = getGiphyKey()
   const [query, setQuery] = useState('')
   const [activeCategory, setActiveCategory] = useState(CATEGORIES[0])
   const [results, setResults] = useState([])
@@ -109,20 +109,20 @@ export default function GifPicker({ onSelect, onClose }) {
 
   // Load initial category
   useEffect(() => {
-    if (TENOR_API_KEY) {
-      loadTenorCategory('')
+    if (GIPHY_API_KEY) {
+      loadGiphyCategory('')
     }
   }, [])
 
-  const loadTenorCategory = (term) => {
+  const loadGiphyCategory = (term) => {
     setLoading(true)
     setIsSearching(false)
     const url = term
-      ? `${TENOR_SEARCH_URL}?key=${TENOR_API_KEY}&q=${encodeURIComponent(term)}&limit=24&media_filter=tinygif`
-      : `${TENOR_FEATURED_URL}?key=${TENOR_API_KEY}&limit=24&media_filter=tinygif`
+      ? `${GIPHY_SEARCH_URL}?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(term)}&limit=24&rating=g`
+      : `${GIPHY_TRENDING_URL}?api_key=${GIPHY_API_KEY}&limit=24&rating=g`
     fetch(url)
       .then(r => r.json())
-      .then(data => setResults(data.results || []))
+      .then(data => setResults(data.data || []))
       .catch(() => {})
       .finally(() => setLoading(false))
   }
@@ -131,9 +131,9 @@ export default function GifPicker({ onSelect, onClose }) {
     setActiveCategory(cat)
     setQuery('')
     setIsSearching(false)
-    if (TENOR_API_KEY) {
-      const tenorCat = TENOR_CATEGORIES.find(c => c.label === cat)
-      loadTenorCategory(tenorCat?.term || '')
+    if (GIPHY_API_KEY) {
+      const giphyCat = GIPHY_CATEGORIES.find(c => c.label === cat)
+      loadGiphyCategory(giphyCat?.term || '')
     }
   }
 
@@ -150,27 +150,27 @@ export default function GifPicker({ onSelect, onClose }) {
 
     if (!val.trim()) {
       setIsSearching(false)
-      if (TENOR_API_KEY) loadTenorCategory(TENOR_CATEGORIES.find(c => c.label === activeCategory)?.term || '')
+      if (GIPHY_API_KEY) loadGiphyCategory(GIPHY_CATEGORIES.find(c => c.label === activeCategory)?.term || '')
       return
     }
 
     setIsSearching(true)
 
-    if (TENOR_API_KEY) {
+    if (GIPHY_API_KEY) {
       clearTimeout(debounceRef.current)
       debounceRef.current = setTimeout(() => {
         setLoading(true)
-        fetch(`${TENOR_SEARCH_URL}?key=${TENOR_API_KEY}&q=${encodeURIComponent(val)}&limit=24&media_filter=tinygif`)
+        fetch(`${GIPHY_SEARCH_URL}?api_key=${GIPHY_API_KEY}&q=${encodeURIComponent(val)}&limit=24&rating=g`)
           .then(r => r.json())
-          .then(data => setResults(data.results || []))
+          .then(data => setResults(data.data || []))
           .catch(() => {})
           .finally(() => setLoading(false))
       }, 400)
     }
   }
 
-  const handleTenorSelect = (result) => {
-    const url = result.media_formats?.tinygif?.url || result.media_formats?.gif?.url
+  const handleGiphySelect = (result) => {
+    const url = result.images?.fixed_height_small?.url || result.images?.downsized?.url
     if (url) {
       onSelect?.(`[gif:${url}]`)
       onClose?.()
@@ -183,7 +183,7 @@ export default function GifPicker({ onSelect, onClose }) {
   }
 
   // ── What to show in the grid ───────────────────────────────────────────────
-  const showCurated = !TENOR_API_KEY && !isSearching
+  const showCurated = !GIPHY_API_KEY && !isSearching
   const curatedGifs = showCurated ? (CURATED[activeCategory] || []) : []
 
   return (
@@ -207,7 +207,7 @@ export default function GifPicker({ onSelect, onClose }) {
         <input
           value={query}
           onChange={handleInputChange}
-          placeholder={TENOR_API_KEY ? 'Search GIFs…' : 'Paste a GIF URL…'}
+          placeholder={GIPHY_API_KEY ? 'Search GIFs…' : 'Paste a GIF URL…'}
           autoFocus
           style={{
             width: '100%',
@@ -275,16 +275,16 @@ export default function GifPicker({ onSelect, onClose }) {
           </div>
         )}
 
-        {/* Tenor results */}
-        {!loading && TENOR_API_KEY && results.map((r, i) => {
-          const url = r.media_formats?.tinygif?.url
+        {/* Giphy results */}
+        {!loading && GIPHY_API_KEY && results.map((r, i) => {
+          const url = r.images?.fixed_height_small?.url || r.images?.downsized?.url
           if (!url) return null
           return (
             <img
               key={i}
               src={url}
               alt=""
-              onClick={() => handleTenorSelect(r)}
+              onClick={() => handleGiphySelect(r)}
               style={{
                 width: '100%',
                 height: '76px',
@@ -323,10 +323,10 @@ export default function GifPicker({ onSelect, onClose }) {
         ))}
 
         {/* No API key + searching: hint */}
-        {!TENOR_API_KEY && isSearching && (
+        {!GIPHY_API_KEY && isSearching && (
           <div style={{ gridColumn: '1/-1', textAlign: 'center', padding: '20px', fontSize: '12px', color: 'var(--t3)', lineHeight: 1.5 }}>
             Paste the GIF URL above to send it,
-            <br />or add a Tenor key in <strong style={{ color: 'var(--rose-soft)' }}>Settings → Integrations</strong>.
+            <br />or add a Giphy key in <strong style={{ color: 'var(--rose-soft)' }}>Settings → Integrations</strong>.
           </div>
         )}
       </div>
@@ -334,9 +334,9 @@ export default function GifPicker({ onSelect, onClose }) {
       {/* Footer */}
       <div style={{ padding: '4px 10px 6px', borderTop: '1px solid var(--glass)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <span style={{ fontSize: '9px', color: 'var(--t4)' }}>
-          {TENOR_API_KEY ? 'Powered by Tenor' : 'Curated GIFs'}
+          {GIPHY_API_KEY ? 'Powered by GIPHY' : 'Curated GIFs'}
         </span>
-        {!TENOR_API_KEY && (
+        {!GIPHY_API_KEY && (
           <span style={{ fontSize: '9px', color: 'var(--t4)' }}>
             Add key in Settings → Integrations
           </span>

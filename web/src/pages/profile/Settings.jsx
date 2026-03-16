@@ -480,19 +480,19 @@ function IntegrationsSection({ user }) {
   const [savingLimits, setSavingLimits] = useState(false)
   const [approvingBlock, setApprovingBlock] = useState(null)
 
-  // Tenor key is stored client-side in localStorage (used by GifPicker)
-  const [tenorKey, setTenorKey] = useState(() => localStorage.getItem('tenor_api_key') || '')
-  const [tenorSaved, setTenorSaved] = useState(false)
+  // Giphy key is stored client-side in localStorage (used by GifPicker)
+  const [giphyKey, setGiphyKey] = useState(() => localStorage.getItem('giphy_api_key') || '')
+  const [giphySaved, setGiphySaved] = useState(false)
 
-  const handleSaveTenor = () => {
-    const trimmed = tenorKey.trim()
+  const handleSaveGiphy = () => {
+    const trimmed = giphyKey.trim()
     if (trimmed) {
-      localStorage.setItem('tenor_api_key', trimmed)
+      localStorage.setItem('giphy_api_key', trimmed)
     } else {
-      localStorage.removeItem('tenor_api_key')
+      localStorage.removeItem('giphy_api_key')
     }
-    setTenorSaved(true)
-    setTimeout(() => setTenorSaved(false), 2500)
+    setGiphySaved(true)
+    setTimeout(() => setGiphySaved(false), 2500)
   }
 
   const loadUsage = () => {
@@ -585,29 +585,29 @@ function IntegrationsSection({ user }) {
       </p>
 
 
-      {/* Tenor — available to all users, stored in localStorage */}
-      <FormSection title="GIF Search (Tenor)">
+      {/* Giphy — available to all users, stored in localStorage */}
+      <FormSection title="GIF Search (GIPHY)">
         <p style={{ fontSize: '12px', color: 'var(--t3)', marginBottom: '14px' }}>
-          Add a free Tenor API key to enable GIF search in comments. Without a key you can still browse curated GIFs or paste a URL.{' '}
-          <a href="https://developers.google.com/tenor/guides/quickstart" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--rose-soft)', textDecoration: 'none' }}>
+          Add a free GIPHY API key to enable GIF search in comments. Without a key you can still browse curated GIFs or paste a URL.{' '}
+          <a href="https://developers.giphy.com/docs/api/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--rose-soft)', textDecoration: 'none' }}>
             Get a free key →
           </a>
         </p>
         <div style={{ marginBottom: '14px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '6px' }}>
-            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--t2)' }}>Tenor API Key</label>
-            <StatusBadge configured={!!localStorage.getItem('tenor_api_key')} />
+            <label style={{ fontSize: '12px', fontWeight: 600, color: 'var(--t2)' }}>GIPHY API Key</label>
+            <StatusBadge configured={!!localStorage.getItem('giphy_api_key')} />
           </div>
           <FormInput
             type="password"
-            placeholder={localStorage.getItem('tenor_api_key') ? '••••••••••••••••' : 'AIza…'}
-            value={tenorKey}
-            onChange={e => setTenorKey(e.target.value)}
+            placeholder={localStorage.getItem('giphy_api_key') ? '••••••••••••••••' : 'Your GIPHY API key…'}
+            value={giphyKey}
+            onChange={e => setGiphyKey(e.target.value)}
             autoComplete="off"
           />
-          {localStorage.getItem('tenor_api_key') && (
+          {localStorage.getItem('giphy_api_key') && (
             <button
-              onClick={() => { localStorage.removeItem('tenor_api_key'); setTenorKey(''); setTenorSaved(true); setTimeout(() => setTenorSaved(false), 2500) }}
+              onClick={() => { localStorage.removeItem('giphy_api_key'); setGiphyKey(''); setGiphySaved(true); setTimeout(() => setGiphySaved(false), 2500) }}
               style={{ background: 'none', border: 'none', fontSize: '11px', fontWeight: 600, color: '#f87171', cursor: 'pointer', marginTop: '6px', padding: 0 }}
             >
               Remove key
@@ -615,8 +615,8 @@ function IntegrationsSection({ user }) {
           )}
         </div>
         <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-          <Button variant="primary" size="sm" onClick={handleSaveTenor}>
-            {tenorSaved ? '✓ Saved!' : 'Save Key'}
+          <Button variant="primary" size="sm" onClick={handleSaveGiphy}>
+            {giphySaved ? '✓ Saved!' : 'Save Key'}
           </Button>
         </div>
       </FormSection>

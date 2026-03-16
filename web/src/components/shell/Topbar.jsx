@@ -1,6 +1,7 @@
 import BackButton from '../ui/BackButton'
+import NotificationsDropdown from '../ui/NotificationsDropdown'
 
-export default function Topbar({ title, onBack, showSearch = false, onSearch, notifCount = 0, children }) {
+export default function Topbar({ title, onBack, showSearch = false, onSearch, children }) {
   return (
     <header className="cp-topbar">
       {onBack && <BackButton onClick={onBack} />}
@@ -42,40 +43,7 @@ export default function Topbar({ title, onBack, showSearch = false, onSearch, no
         </>
       )}
 
-      <div style={{ position: 'relative', display: 'inline-flex' }}>
-        <button
-          style={{
-            width: '32px',
-            height: '32px',
-            background: 'var(--s3)',
-            border: '1px solid var(--glass)',
-            borderRadius: '10px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            fontSize: '15px',
-            color: 'var(--t2)',
-          }}
-          title="Notifications"
-        >
-          🔔
-        </button>
-        {notifCount > 0 && (
-          <div
-            style={{
-              position: 'absolute',
-              top: '4px',
-              right: '4px',
-              width: '6px',
-              height: '6px',
-              borderRadius: '50%',
-              background: 'var(--rose)',
-              boxShadow: '0 0 6px var(--rose)',
-            }}
-          />
-        )}
-      </div>
+      <NotificationsDropdown />
     </header>
   )
 }

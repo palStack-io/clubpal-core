@@ -195,7 +195,7 @@ export default function EditGroupModal({
       setForm({
         name: group.name || '',
         description: group.description || '',
-        rotation_mode: group.rotation_mode || group.rotation_type || 'sequential',
+        rotation_mode: { round_robin: 'sequential', random: 'random', none: 'manual' }[group.rotation_type] || group.rotation_mode || 'sequential',
         activity_type: (group.activity_type || 'dining').toLowerCase(),
         bg_type: group.bg_type || 'default',
         bg_value: group.bg_value || '',
@@ -281,10 +281,11 @@ export default function EditGroupModal({
     setError('')
     setLoading(true)
     try {
+      const ROTATION_TYPE_MAP = { sequential: 'round_robin', random: 'random', manual: 'none' }
       await groupsApi.update(group.id, {
         name: form.name.trim(),
         description: form.description.trim() || null,
-        rotation_mode: form.rotation_mode,
+        rotation_type: ROTATION_TYPE_MAP[form.rotation_mode] || 'round_robin',
         activity_type: form.activity_type,
         bg_type: form.bg_type,
         bg_value: form.bg_value,

@@ -68,6 +68,7 @@ class MemberResponse(BaseModel):
     user_id: int
     group_id: int
     role: MemberRole
+    rotation_order: Optional[int] = None
     joined_at: datetime
 
 

@@ -331,7 +331,7 @@ def get_members(group_id: int) -> List[dict]:
     cursor = conn.cursor()
 
     cursor.execute(
-        "SELECT * FROM group_members WHERE group_id = %s ORDER BY joined_at ASC",
+        "SELECT * FROM group_members WHERE group_id = %s ORDER BY rotation_order ASC NULLS LAST, joined_at ASC",
         (group_id,)
     )
 

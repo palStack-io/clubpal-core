@@ -1,5 +1,6 @@
 import os
 import io
+import json
 from datetime import timedelta
 from minio import Minio
 from minio.error import S3Error
@@ -7,7 +8,7 @@ from minio.error import S3Error
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "clubpal")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "clubpalpassword")
-MINIO_PUBLIC_URL = os.getenv("MINIO_PUBLIC_URL", "http://localhost:9000/storage")
+MINIO_PUBLIC_URL = os.getenv("MINIO_PUBLIC_URL", "/storage")
 MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
 
 BUCKET_AVATARS = "clubpal-avatars"
@@ -20,13 +21,32 @@ client = Minio(
     secure=MINIO_SECURE,
 )
 
+_PUBLIC_READ_POLICY = json.dumps({
+    "Version": "2012-10-17",
+    "Statement": [{
+        "Effect": "Allow",
+        "Principal": {"AWS": ["*"]},
+        "Action": ["s3:GetObject"],
+        "Resource": ["arn:aws:s3:::{bucket}/*"],
+    }]
+})
+
+
+def _set_public_read(bucket: str):
+    try:
+        policy = _PUBLIC_READ_POLICY.replace("{bucket}", bucket)
+        client.set_bucket_policy(bucket, policy)
+    except S3Error as e:
+        print(f"Warning: Could not set public-read policy on {bucket}: {e}")
+
 
 def ensure_buckets():
-    """Ensure required storage buckets exist."""
+    """Ensure required storage buckets exist with public-read policy."""
     for bucket in [BUCKET_AVATARS, BUCKET_EVENTS]:
         try:
             if not client.bucket_exists(bucket):
                 client.make_bucket(bucket)
+            _set_public_read(bucket)
         except S3Error as e:
             print(f"Warning: Could not create bucket {bucket}: {e}")
 

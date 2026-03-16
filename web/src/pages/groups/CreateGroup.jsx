@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppShell from '../../components/shell/AppShell'
 import Topbar from '../../components/shell/Topbar'
@@ -9,6 +9,9 @@ import ActivityTypePicker from '../../components/groups/ActivityTypePicker'
 import InviteRow from '../../components/groups/InviteRow'
 import { groupsApi } from '../../api/groups'
 import { gatewayClient } from '../../api/client'
+
+// Map frontend rotation labels to backend rotation_type values
+const ROTATION_TYPE_MAP = { sequential: 'round_robin', random: 'random', manual: 'none' }
 
 async function uploadBanner(groupId, file) {
   const urlData = await groupsApi.getBannerUploadUrl(groupId, file.name, file.type)
@@ -35,6 +38,8 @@ export default function CreateGroup() {
   const [invites, setInvites] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const dragItem = useRef(null)
+  const dragOver = useRef(null)
 
   const set = (k, v) => setForm(f => ({ ...f, [k]: v }))
 
@@ -52,6 +57,20 @@ export default function CreateGroup() {
 
   const handleRemoveInvite = (email) => setInvites(prev => prev.filter(i => i.email !== email))
 
+  const handleDragStart = (index) => { dragItem.current = index }
+  const handleDragEnter = (index) => { dragOver.current = index }
+  const handleDragEnd = () => {
+    if (dragItem.current === null || dragOver.current === null) return
+    setInvites(prev => {
+      const copy = [...prev]
+      const [moved] = copy.splice(dragItem.current, 1)
+      copy.splice(dragOver.current, 0, moved)
+      return copy
+    })
+    dragItem.current = null
+    dragOver.current = null
+  }
+
   const handleSubmit = async () => {
     if (!form.name.trim()) { setError('Group name is required.'); return }
     setError('')
@@ -60,7 +79,7 @@ export default function CreateGroup() {
       const group = await groupsApi.create({
         name: form.name,
         description: form.description,
-        rotation_mode: form.rotation_mode,
+        rotation_type: ROTATION_TYPE_MAP[form.rotation_mode] || 'round_robin',
         activity_type: form.activity_type,
       })
 
@@ -151,8 +170,43 @@ export default function CreateGroup() {
             />
             <Button variant="primary" onClick={handleAddInvite}>Send Invite</Button>
           </div>
-          {invites.map(inv => (
-            <InviteRow key={inv.email} invite={inv} onRemove={handleRemoveInvite} />
+          {form.rotation_mode === 'sequential' && invites.length > 1 && (
+            <div style={{ fontSize: '11px', color: 'var(--t3)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+              ↕ Drag to set turn order — first in list picks first
+            </div>
+          )}
+          {form.rotation_mode === 'manual' && (
+            <div style={{ fontSize: '11px', color: 'var(--amber)', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '8px', padding: '8px 10px', marginBottom: '10px' }}>
+              ✉️ Manual mode — all members will be emailed to vote for the next picker when rotation advances
+            </div>
+          )}
+          {invites.map((inv, index) => (
+            <div
+              key={inv.email}
+              draggable={form.rotation_mode === 'sequential'}
+              onDragStart={() => handleDragStart(index)}
+              onDragEnter={() => handleDragEnter(index)}
+              onDragEnd={handleDragEnd}
+              onDragOver={e => e.preventDefault()}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                cursor: form.rotation_mode === 'sequential' ? 'grab' : 'default',
+              }}
+            >
+              {form.rotation_mode === 'sequential' && (
+                <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t4)', minWidth: '18px', textAlign: 'center' }}>
+                  {index + 1}
+                </span>
+              )}
+              <div style={{ flex: 1 }}>
+                <InviteRow invite={inv} onRemove={handleRemoveInvite} />
+              </div>
+              {form.rotation_mode === 'sequential' && (
+                <span style={{ fontSize: '14px', color: 'var(--t4)', cursor: 'grab', padding: '0 4px' }}>⠿</span>
+              )}
+            </div>
           ))}
         </FormSection>
       </div>

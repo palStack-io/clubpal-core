@@ -5,11 +5,12 @@ const ACTIVITIES = [
   { id: 'gaming',  emoji: '🎮', label: 'Gaming' },
   { id: 'arts',    emoji: '🎨', label: 'Arts' },
   { id: 'hiking',  emoji: '🥾', label: 'Hiking' },
+  { id: 'other',   emoji: '✨', label: 'Other' },
 ]
 
 export default function ActivityTypePicker({ value, onChange }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '8px' }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(80px, 1fr))', gap: '8px' }}>
       {ACTIVITIES.map(a => {
         const selected = value === a.id
         return (

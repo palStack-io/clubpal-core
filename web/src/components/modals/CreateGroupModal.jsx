@@ -101,10 +101,11 @@ export default function CreateGroupModal({ isOpen, onClose, onCreated }) {
     }
     setLoading(true)
     try {
+      const ROTATION_TYPE_MAP = { sequential: 'round_robin', random: 'random', manual: 'none' }
       const group = await groupsApi.create({
         name: form.name.trim(),
         description: form.description.trim() || null,
-        rotation_mode: form.rotation_mode,
+        rotation_type: ROTATION_TYPE_MAP[form.rotation_mode] || 'round_robin',
         activity_type: form.activity_type,
       })
       // Upload banner if selected

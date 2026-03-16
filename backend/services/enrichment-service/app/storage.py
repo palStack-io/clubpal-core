@@ -8,7 +8,7 @@ from minio.error import S3Error
 MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
 MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "clubpal")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "clubpalpassword")
-MINIO_PUBLIC_URL = os.getenv("MINIO_PUBLIC_URL", "http://localhost:9000/storage")
+MINIO_PUBLIC_URL = os.getenv("MINIO_PUBLIC_URL", "/storage")
 MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
 
 BUCKET_CACHE = "clubpal-cache"
@@ -21,10 +21,24 @@ client = Minio(
 )
 
 
+import json as _json
+
+_PUBLIC_READ_POLICY = _json.dumps({
+    "Version": "2012-10-17",
+    "Statement": [{
+        "Effect": "Allow",
+        "Principal": {"AWS": ["*"]},
+        "Action": ["s3:GetObject"],
+        "Resource": [f"arn:aws:s3:::{BUCKET_CACHE}/*"],
+    }]
+})
+
+
 def ensure_buckets():
     try:
         if not client.bucket_exists(BUCKET_CACHE):
             client.make_bucket(BUCKET_CACHE)
+        client.set_bucket_policy(BUCKET_CACHE, _PUBLIC_READ_POLICY)
     except S3Error as e:
         print(f"Warning: Could not create bucket {BUCKET_CACHE}: {e}")
 

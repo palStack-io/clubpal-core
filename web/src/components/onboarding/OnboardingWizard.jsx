@@ -7,6 +7,7 @@ import { enrichApi } from '../../api/enrich'
 const ACTIVITIES = [
   { id: 'dining',  emoji: '🍽️', label: 'Dining' },
   { id: 'movies',  emoji: '🎬', label: 'Movies' },
+  { id: 'shows',   emoji: '📺', label: 'Shows' },
   { id: 'books',   emoji: '📚', label: 'Books' },
   { id: 'hiking',  emoji: '🥾', label: 'Hiking' },
   { id: 'gaming',  emoji: '🎮', label: 'Gaming' },
@@ -16,6 +17,7 @@ const ACTIVITIES = [
 const LOCATION_ACTIVITIES = new Set(['dining', 'hiking', 'arts'])
 
 const MOVIE_GENRES = ['Action', 'Comedy', 'Drama', 'Thriller', 'Horror', 'Sci-Fi', 'Animation', 'Romance']
+const SHOW_GENRES  = ['Drama', 'Comedy', 'Crime', 'Sci-Fi', 'Reality', 'Documentary', 'Animation', 'Thriller']
 const BOOK_GENRES  = ['Fiction', 'Non-Fiction', 'Sci-Fi', 'Mystery', 'Fantasy', 'History', 'Biography']
 const GAME_TYPES   = [
   { id: 'video_game', label: 'Video Games' },
@@ -60,15 +62,15 @@ function RadiusPills({ label, value, onChange, options }) {
   )
 }
 
-const ACTIVITY_LABELS = { dining: 'Restaurants', movies: 'Movies', books: 'Books', hiking: 'Trails', gaming: 'Games', arts: 'Arts & Culture' }
-const ACTIVITY_EMOJIS_MAP = { dining: '🍽️', movies: '🎬', books: '📚', hiking: '🥾', gaming: '🎮', arts: '🎨' }
+const ACTIVITY_LABELS = { dining: 'Restaurants', movies: 'Movies', shows: 'Shows', books: 'Books', hiking: 'Trails', gaming: 'Games', arts: 'Arts & Culture' }
+const ACTIVITY_EMOJIS_MAP = { dining: '🍽️', movies: '🎬', shows: '📺', books: '📚', hiking: '🥾', gaming: '🎮', arts: '🎨' }
 
 export default function OnboardingWizard() {
   const navigate = useNavigate()
   const { user, updateUser } = useAuth()
 
   const [step, setStep] = useState(1)
-  const [activities, setActivities] = useState(['dining', 'movies', 'books', 'hiking', 'gaming', 'arts'])
+  const [activities, setActivities] = useState(['dining', 'movies', 'shows', 'books', 'hiking', 'gaming', 'arts'])
   const [locationAddress, setLocationAddress] = useState('')
   const [locationLat, setLocationLat] = useState(null)
   const [locationLng, setLocationLng] = useState(null)
@@ -77,6 +79,7 @@ export default function OnboardingWizard() {
   const [radiusHiking, setRadiusHiking] = useState(25)
   const [radiusArts, setRadiusArts] = useState(10)
   const [movieGenres, setMovieGenres] = useState([])
+  const [showGenres, setShowGenres] = useState([])
   const [bookGenres, setBookGenres] = useState([])
   const [gameTypes, setGameTypes] = useState(['video_game', 'board_game'])
   const [loading, setLoading] = useState(false)
@@ -92,7 +95,7 @@ export default function OnboardingWizard() {
   }
 
   const needsLocation = activities.some(a => LOCATION_ACTIVITIES.has(a))
-  const needsGenres   = activities.some(a => ['movies', 'books', 'gaming'].includes(a))
+  const needsGenres   = activities.some(a => ['movies', 'shows', 'books', 'gaming'].includes(a))
 
   // Total steps depend on selected activities
   const totalSteps = needsGenres ? 5 : 4
@@ -166,6 +169,7 @@ export default function OnboardingWizard() {
         activities,
         book_genres: bookGenres.map(g => g.toLowerCase()),
         movie_genres: movieGenres.map(g => g.toLowerCase()),
+        show_genres: showGenres.map(g => g.toLowerCase()),
         game_types: gameTypes,
       }
       const result = await authApi.updatePreferences(prefs)
@@ -418,6 +422,15 @@ export default function OnboardingWizard() {
             <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--t2)', marginBottom: '10px' }}>🎬 Movie Genres</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
               {MOVIE_GENRES.map(g => chip(g, movieGenres.includes(g), () => toggleList(movieGenres, setMovieGenres, g)))}
+            </div>
+          </div>
+        )}
+
+        {activities.includes('shows') && (
+          <div style={{ marginBottom: '20px' }}>
+            <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--t2)', marginBottom: '10px' }}>📺 Show Genres</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {SHOW_GENRES.map(g => chip(g, showGenres.includes(g), () => toggleList(showGenres, setShowGenres, g)))}
             </div>
           </div>
         )}

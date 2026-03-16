@@ -59,7 +59,7 @@ function MetaRow({ icon, label, children, last }) {
   )
 }
 
-export default function EventMetaCard({ event, groupName }) {
+export default function EventMetaCard({ event, groupName, hostName }) {
   if (!event) return null
 
   const actType = event.activity_type?.toLowerCase() || 'dining'
@@ -109,7 +109,7 @@ export default function EventMetaCard({ event, groupName }) {
   rows.push({
     icon: '🎯',
     label: 'Picked by',
-    content: event.picker_name || 'Host',
+    content: event.picker_name || hostName || 'Host',
   })
 
   rows.push({

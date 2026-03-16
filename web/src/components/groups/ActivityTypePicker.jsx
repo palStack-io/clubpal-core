@@ -1,6 +1,7 @@
 const ACTIVITIES = [
   { id: 'dining',  emoji: '🍽️', label: 'Dining' },
   { id: 'movies',  emoji: '🎬', label: 'Movies' },
+  { id: 'shows',   emoji: '📺', label: 'Shows' },
   { id: 'books',   emoji: '📚', label: 'Books' },
   { id: 'gaming',  emoji: '🎮', label: 'Gaming' },
   { id: 'arts',    emoji: '🎨', label: 'Arts' },

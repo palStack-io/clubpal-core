@@ -1259,12 +1259,14 @@ function SecuritySection() {
 const ACTIVITY_OPTIONS = [
   { id: 'dining',  emoji: '🍽️', label: 'Dining' },
   { id: 'movies',  emoji: '🎬', label: 'Movies' },
+  { id: 'shows',   emoji: '📺', label: 'Shows' },
   { id: 'books',   emoji: '📚', label: 'Books' },
   { id: 'hiking',  emoji: '🥾', label: 'Hiking' },
   { id: 'gaming',  emoji: '🎮', label: 'Gaming' },
   { id: 'arts',    emoji: '🎨', label: 'Arts' },
 ]
 const MOVIE_GENRES_LIST = ['Action', 'Comedy', 'Drama', 'Thriller', 'Horror', 'Sci-Fi', 'Animation', 'Romance']
+const SHOW_GENRES_LIST  = ['Drama', 'Comedy', 'Crime', 'Sci-Fi', 'Reality', 'Documentary', 'Animation', 'Thriller']
 const BOOK_GENRES_LIST  = ['Fiction', 'Non-Fiction', 'Sci-Fi', 'Mystery', 'Fantasy', 'History', 'Biography']
 const RADIUS_STD  = [5, 10, 25, 50]
 const RADIUS_HIKE = [10, 25, 50, 100]
@@ -1495,6 +1497,20 @@ function DiscoverSection({ user }) {
               <button key={g} type="button"
                 onClick={() => toggleGenre('movie_genres', g.toLowerCase())}
                 style={chipStyle(prefs.movie_genres?.includes(g.toLowerCase()))}
+              >{g}</button>
+            ))}
+          </div>
+        </FormSection>
+      )}
+
+      {/* Show Genres */}
+      {prefs?.activities?.includes('shows') && (
+        <FormSection title="Show Genres">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+            {SHOW_GENRES_LIST.map(g => (
+              <button key={g} type="button"
+                onClick={() => toggleGenre('show_genres', g.toLowerCase())}
+                style={chipStyle(prefs.show_genres?.includes(g.toLowerCase()))}
               >{g}</button>
             ))}
           </div>

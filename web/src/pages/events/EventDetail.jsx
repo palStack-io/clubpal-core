@@ -10,7 +10,7 @@ import EventMetaCard from '../../components/events/EventMetaCard'
 import EditEventModal from '../../components/modals/EditEventModal'
 import RateEventModal from '../../components/events/RateEventModal'
 import AnimatedBackground from '../../components/ui/AnimatedBackground'
-import BillSplitSection from '../../components/billsplit/BillSplitSection'
+import BillSplitModal from '../../components/modals/BillSplitModal'
 import { eventsApi } from '../../api/events'
 import { ratingsClient, gatewayClient } from '../../api/client'
 import { useAuth } from '../../contexts/AuthContext'
@@ -44,6 +44,7 @@ export default function EventDetail() {
   const [rsvpLoading, setRsvpLoading] = useState(false)
   const [showEditEvent, setShowEditEvent] = useState(false)
   const [showRateModal, setShowRateModal] = useState(false)
+  const [showBillSplit, setShowBillSplit] = useState(false)
 
   const fetchAll = async () => {
     try {
@@ -176,6 +177,7 @@ export default function EventDetail() {
   }
 
   const isHost = user?.id != null && event.host_user_id != null && String(user.id) === String(event.host_user_id)
+  const hostName = attendees.find(a => String(a.user_id) === String(event.host_user_id))?.full_name || null
   const isScheduled = event.status === 'scheduled' || event.status === 'in_progress'
   const myAttendee = attendees.find(a => String(a.user_id) === String(user?.id))
 
@@ -195,6 +197,7 @@ export default function EventDetail() {
   const heroActions = [
     ...(event.status === 'scheduled' && isHost ? [{ label: '✏️ Edit', onClick: () => setShowEditEvent(true) }] : []),
     ...((event.status === 'completed' || (event.scheduled_date && new Date(event.scheduled_date) < new Date())) ? [{ label: '⭐ Rate', onClick: () => setShowRateModal(true) }] : []),
+    { label: '💳 Split', onClick: () => setShowBillSplit(true) },
     ...(isScheduled && myAttendee?.status !== 'going' ? [{ label: '✓ RSVP', onClick: () => handleRsvp('going'), loading: rsvpLoading }] : []),
   ]
 
@@ -296,21 +299,20 @@ export default function EventDetail() {
             <EventMetaCard
               event={event}
               groupName={event.group_name || ''}
+              hostName={hostName}
             />
           </div>
         </div>
 
-        {event?.status !== 'cancelled' && (
-          <div style={{ marginTop: '14px' }}>
-            <BillSplitSection
-              event={event}
-              attendees={attendees}
-              currentUser={user}
-            />
-          </div>
-        )}
       </div>
 
+      <BillSplitModal
+        isOpen={showBillSplit}
+        onClose={() => setShowBillSplit(false)}
+        event={event}
+        attendees={attendees}
+        currentUser={user}
+      />
       <EditEventModal
         isOpen={showEditEvent}
         onClose={() => setShowEditEvent(false)}

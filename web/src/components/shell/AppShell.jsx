@@ -36,6 +36,7 @@ export default function AppShell({ children, activeRoute, user: userProp, groupC
           borderTop: '1px solid var(--glass)',
           display: 'flex',
           alignItems: 'center',
+          justifyContent: 'center',
           gap: '6px',
         }}>
           <img src="/palStack.png" alt="palStack" style={{ height: '12px', objectFit: 'contain', opacity: 0.5 }} />

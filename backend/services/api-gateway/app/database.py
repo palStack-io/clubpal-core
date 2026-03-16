@@ -209,6 +209,21 @@ def init_db():
         )
     """)
 
+    # Saved / wishlist items
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS saved_items (
+            id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            item_type TEXT NOT NULL,
+            item_id TEXT NOT NULL,
+            item_name TEXT NOT NULL,
+            item_meta JSONB DEFAULT '{}',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(user_id, item_type, item_id),
+            FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+        )
+    """)
+
     # Indexes
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
@@ -221,6 +236,8 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_push_tokens_user ON user_push_tokens(user_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_notifications_user ON user_notifications(user_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_notifications_read ON user_notifications(user_id, read)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_saved_items_user ON saved_items(user_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_saved_items_lookup ON saved_items(user_id, item_type, item_id)")
 
     conn.commit()
     conn.close()
@@ -1054,3 +1071,65 @@ def create_oidc_user(email: str, full_name: str, oidc_sub: str, avatar_url: str 
         raise ValueError(f"OIDC user creation failed: {e}")
     finally:
         conn.close()
+
+
+# ── Saved items (wishlist) ────────────────────────────────────────────────────
+
+def get_saved_items(user_id: int, item_type: str = None) -> list:
+    conn = get_db()
+    cursor = conn.cursor()
+    if item_type:
+        cursor.execute(
+            "SELECT * FROM saved_items WHERE user_id = %s AND item_type = %s ORDER BY created_at DESC",
+            (user_id, item_type)
+        )
+    else:
+        cursor.execute(
+            "SELECT * FROM saved_items WHERE user_id = %s ORDER BY created_at DESC",
+            (user_id,)
+        )
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def get_saved_item(user_id: int, item_type: str, item_id: str) -> dict | None:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT * FROM saved_items WHERE user_id = %s AND item_type = %s AND item_id = %s",
+        (user_id, item_type, item_id)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def save_item(user_id: int, item_type: str, item_id: str, item_name: str, item_meta: dict = None) -> dict:
+    import json
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        """INSERT INTO saved_items (user_id, item_type, item_id, item_name, item_meta)
+           VALUES (%s, %s, %s, %s, %s)
+           ON CONFLICT (user_id, item_type, item_id) DO UPDATE SET item_name = EXCLUDED.item_name, item_meta = EXCLUDED.item_meta
+           RETURNING *""",
+        (user_id, item_type, item_id, item_name, json.dumps(item_meta or {}))
+    )
+    row = dict(cursor.fetchone())
+    conn.commit()
+    conn.close()
+    return row
+
+
+def delete_saved_item(user_id: int, item_type: str, item_id: str) -> bool:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "DELETE FROM saved_items WHERE user_id = %s AND item_type = %s AND item_id = %s",
+        (user_id, item_type, item_id)
+    )
+    deleted = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return deleted

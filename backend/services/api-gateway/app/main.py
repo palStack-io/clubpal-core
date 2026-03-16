@@ -37,6 +37,7 @@ from app.database import (
     get_user_preferences, upsert_user_preferences,
     get_user_by_oidc_sub, link_oidc_sub, create_oidc_user, unlink_oidc_sub,
     create_pending_link, consume_pending_link,
+    get_saved_items, get_saved_item, save_item, delete_saved_item,
 )
 from app.email_service import email_service
 from app import storage
@@ -1438,6 +1439,76 @@ async def internal_admin_email(x_internal_secret: Optional[str] = Header(None)):
         return {"emails": [ADMIN_EMAIL]}
     emails = get_admin_emails()
     return {"emails": emails}
+
+
+# ===== Saved Items (Wishlist) =====
+
+class SaveItemRequest(BaseModel):
+    item_type: str
+    item_id: str
+    item_name: str
+    item_meta: Optional[dict] = None
+
+
+class SavedItemResponse(BaseModel):
+    id: int
+    user_id: int
+    item_type: str
+    item_id: str
+    item_name: str
+    item_meta: Optional[dict] = None
+    created_at: datetime
+
+
+@app.get("/users/me/saved", response_model=List[SavedItemResponse])
+async def list_saved_items(
+    item_type: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """List the current user's saved/bookmarked items, optionally filtered by type."""
+    items = get_saved_items(current_user["id"], item_type)
+    return [SavedItemResponse(**i) for i in items]
+
+
+@app.get("/users/me/saved/{item_type}/{item_id}", response_model=SavedItemResponse)
+async def check_saved_item(
+    item_type: str,
+    item_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Check if a specific item is saved. Returns 404 if not saved."""
+    item = get_saved_item(current_user["id"], item_type, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Not saved")
+    return SavedItemResponse(**item)
+
+
+@app.post("/users/me/saved", response_model=SavedItemResponse, status_code=201)
+async def create_saved_item(
+    body: SaveItemRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """Save/bookmark an item."""
+    item = save_item(
+        user_id=current_user["id"],
+        item_type=body.item_type,
+        item_id=body.item_id,
+        item_name=body.item_name,
+        item_meta=body.item_meta or {},
+    )
+    return SavedItemResponse(**item)
+
+
+@app.delete("/users/me/saved/{item_type}/{item_id}", status_code=204)
+async def remove_saved_item(
+    item_type: str,
+    item_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Remove a saved/bookmarked item."""
+    deleted = delete_saved_item(current_user["id"], item_type, item_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Saved item not found")
 
 
 if __name__ == "__main__":

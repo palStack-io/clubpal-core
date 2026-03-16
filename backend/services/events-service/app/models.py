@@ -99,6 +99,7 @@ class EventResponse(BaseModel):
     updated_at: datetime
     rsvp_deadline: Optional[datetime] = None
     max_attendees: Optional[int] = None
+    my_rsvp_status: Optional[str] = None
 
 
 class EventDetailResponse(EventResponse):

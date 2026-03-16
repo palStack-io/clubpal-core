@@ -80,6 +80,9 @@ export const groupsApi = {
   getPendingPolls: (userId) =>
     groupsClient.get(`/users/${userId}/polls/pending`).then(r => r.data),
 
+  getMyActivePolls: (userId) =>
+    groupsClient.get(`/users/${userId}/polls/created`).then(r => r.data),
+
   // Invite codes
   generateInviteCode: (groupId, data) =>
     groupsClient.post(`/groups/${groupId}/invite-codes`, data).then(r => r.data),

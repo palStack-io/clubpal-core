@@ -785,6 +785,27 @@ def get_polls_for_group(group_id: int) -> List[dict]:
     return [dict(row) for row in rows]
 
 
+def get_my_active_polls(user_id: int) -> List[dict]:
+    """Get open polls created by the user, with response counts."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        """SELECT gp.*,
+                  COUNT(gpr.id) AS responded_count,
+                  COUNT(gm.user_id) AS member_count
+           FROM group_polls gp
+           JOIN group_members gm ON gp.group_id = gm.group_id
+           LEFT JOIN group_poll_responses gpr ON gpr.poll_id = gp.id
+           WHERE gp.created_by = %s AND gp.status = 'open'
+           GROUP BY gp.id
+           ORDER BY gp.created_at DESC""",
+        (user_id,)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
 def get_pending_polls_for_user(user_id: int) -> List[dict]:
     """Get open polls in user's groups where user hasn't responded and isn't creator."""
     conn = get_db()

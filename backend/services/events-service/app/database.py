@@ -312,13 +312,13 @@ def get_events_by_group(group_id: int, status: str = None) -> List[dict]:
 
 
 def get_events_by_user(user_id: int, status: str = None) -> List[dict]:
-    """Get all events a user is attending."""
+    """Get all events a user is attending, including their RSVP status."""
     conn = get_db()
     cursor = conn.cursor()
 
     if status:
         cursor.execute(
-            """SELECT e.* FROM events e
+            """SELECT e.*, ea.status AS my_rsvp_status FROM events e
                JOIN event_attendees ea ON e.id = ea.event_id
                WHERE ea.user_id = %s AND e.status = %s
                ORDER BY e.scheduled_date ASC""",
@@ -326,7 +326,7 @@ def get_events_by_user(user_id: int, status: str = None) -> List[dict]:
         )
     else:
         cursor.execute(
-            """SELECT e.* FROM events e
+            """SELECT e.*, ea.status AS my_rsvp_status FROM events e
                JOIN event_attendees ea ON e.id = ea.event_id
                WHERE ea.user_id = %s
                ORDER BY e.scheduled_date ASC""",

@@ -22,7 +22,7 @@ from app.database import (
     is_member, is_admin_or_owner, get_rotation_state, advance_rotation,
     reset_rotation, set_rotation_turn, skip_rotation, reorder_rotation,
     add_group_comment, get_group_comments, get_group_comment, delete_group_comment,
-    create_poll, get_poll, get_polls_for_group, get_pending_polls_for_user,
+    create_poll, get_poll, get_polls_for_group, get_pending_polls_for_user, get_my_active_polls,
     upsert_poll_response, get_poll_responses, get_poll_response,
     close_poll, convert_poll, auto_close_expired_polls,
     create_invite_code, get_active_invite_code, get_invite_code_by_code,
@@ -694,6 +694,19 @@ async def get_pending_polls(user_id: int):
     for p in polls:
         group = get_group(p['group_id'])
         member_count = group['member_count'] if group else 0
+        summary = _build_poll_summary(p['id'], user_id, member_count)
+        result.append(_poll_to_model(p, summary))
+    return result
+
+
+@app.get("/users/{user_id}/polls/created", response_model=List[PollResponseModel])
+async def get_my_polls(user_id: int):
+    """Get open polls created by the user, with response progress."""
+    auto_close_expired_polls()
+    polls = get_my_active_polls(user_id)
+    result = []
+    for p in polls:
+        member_count = p.get('member_count', 0)
         summary = _build_poll_summary(p['id'], user_id, member_count)
         result.append(_poll_to_model(p, summary))
     return result

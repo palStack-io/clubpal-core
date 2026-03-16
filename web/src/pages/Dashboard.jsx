@@ -12,6 +12,7 @@ import PendingPollsCard from '../components/dashboard/PendingPollsCard'
 import UpcomingEventsCard from '../components/dashboard/UpcomingEventsCard'
 import TurnQueueCard from '../components/dashboard/TurnQueueCard'
 import ActivityFeedCard from '../components/dashboard/ActivityFeedCard'
+import RsvpNeededCard from '../components/dashboard/RsvpNeededCard'
 import CreateGroupModal from '../components/modals/CreateGroupModal'
 import CreateEventModal from '../components/modals/CreateEventModal'
 
@@ -49,6 +50,8 @@ export default function Dashboard() {
   const [primaryGroupId, setPrimaryGroupId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [pendingPolls, setPendingPolls] = useState([])
+  const [myPolls, setMyPolls] = useState([])
+  const [rsvpNeeded, setRsvpNeeded] = useState([])
   const [activityItems, setActivityItems] = useState([])
   const [activityLoading, setActivityLoading] = useState(true)
   const [showCreateGroup, setShowCreateGroup] = useState(false)
@@ -70,19 +73,34 @@ export default function Dashboard() {
       const g = groupsData || []
       const e = eventsData || []
       setGroups(g)
-      setEvents(e.filter(ev => ev.status === 'scheduled' || ev.status === 'in_progress'))
 
+      const upcoming = e.filter(ev => ev.status === 'scheduled' || ev.status === 'in_progress')
+      setEvents(upcoming)
+
+      // Events where user hasn't responded yet
+      setRsvpNeeded(upcoming.filter(ev =>
+        !ev.my_rsvp_status || ev.my_rsvp_status === 'pending'
+      ))
+
+      // Check ALL groups for whose turn it is — use the first group where it's your turn
       if (g.length > 0) {
-        const firstId = g[0].id
-        const rot = await groupsApi.getRotation(firstId).catch(() => null)
-        setRotation(rot)
-        setPrimaryGroupId(firstId)
+        const rotations = await Promise.all(
+          g.map(grp => groupsApi.getRotation(grp.id).catch(() => null))
+        )
+        const myTurnIdx = rotations.findIndex(r => r?.current_user_id === user?.id)
+        const activeIdx = myTurnIdx >= 0 ? myTurnIdx : 0
+        setRotation(rotations[activeIdx])
+        setPrimaryGroupId(g[activeIdx].id)
       }
 
-      // Pending polls (non-blocking)
-      groupsApi.getPendingPolls(user.id)
-        .then(polls => setPendingPolls(Array.isArray(polls) ? polls : []))
-        .catch(() => setPendingPolls([]))
+      // Pending polls + my active polls (non-blocking, parallel)
+      Promise.all([
+        groupsApi.getPendingPolls(user.id).catch(() => []),
+        groupsApi.getMyActivePolls(user.id).catch(() => []),
+      ]).then(([pending, mine]) => {
+        setPendingPolls(Array.isArray(pending) ? pending : [])
+        setMyPolls(Array.isArray(mine) ? mine : [])
+      })
 
       // Activity feed: recent comments from each group (up to 5 groups)
       loadActivityFeed(g.slice(0, 5))
@@ -138,6 +156,10 @@ export default function Dashboard() {
       await groupsApi.respondToPoll(pollId, user.id, response)
       setPendingPolls(prev => prev.filter(p => p.id !== pollId))
     } catch {}
+  }
+
+  function handleRsvpResponded(eventId) {
+    setRsvpNeeded(prev => prev.filter(e => e.id !== eventId))
   }
 
   const activeTurn =
@@ -235,15 +257,23 @@ export default function Dashboard() {
               />
             )}
 
-            {/* 2. Pending polls */}
+            {/* 2. RSVP needed */}
+            <RsvpNeededCard
+              events={rsvpNeeded}
+              userId={user?.id}
+              onResponded={handleRsvpResponded}
+            />
+
+            {/* 3. Pending polls + my active polls */}
             <PendingPollsCard
               polls={pendingPolls}
+              myPolls={myPolls}
               groups={groups}
               loading={loading}
               onRespond={handlePollRespond}
             />
 
-            {/* 3. Upcoming events */}
+            {/* 4. Upcoming events */}
             <UpcomingEventsCard events={events} loading={loading} />
           </div>
 

@@ -71,6 +71,7 @@ function CommentItem({ comment, currentUser, onDelete }) {
       <Avatar
         user={{
           full_name: comment.author_name || comment.full_name,
+          username: comment.username,
           avatar_url: comment.avatar_url,
         }}
         size="sm"
@@ -79,7 +80,7 @@ function CommentItem({ comment, currentUser, onDelete }) {
         {/* Header row */}
         <div style={{ display: 'flex', alignItems: 'center' }}>
           <span style={{ flex: 1, fontSize: '12px', fontWeight: 700, color: 'var(--t1)' }}>
-            {comment.author_name || comment.full_name || 'Unknown'}
+            {comment.author_name || comment.full_name || comment.username || 'Unknown'}
           </span>
           <span style={{ fontSize: '10px', color: 'var(--t4)' }}>
             {comment.created_at ? timeAgo(comment.created_at) : ''}

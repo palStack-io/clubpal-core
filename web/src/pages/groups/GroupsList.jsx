@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppShell from '../../components/shell/AppShell'
 import PageHero from '../../components/shell/PageHero'
@@ -39,6 +39,9 @@ export default function GroupsList() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('all')
   const [showCreate, setShowCreate] = useState(false)
+  const [showJoin, setShowJoin] = useState(false)
+  const [joinCode, setJoinCode] = useState('')
+  const joinInputRef = useRef(null)
 
   useEffect(() => {
     if (!user?.id) return
@@ -74,7 +77,7 @@ export default function GroupsList() {
         subtitle="Manage your clubs and rotations"
         hasStats
       >
-        <Button variant="ghost" size="sm" onClick={() => navigate('/groups/join')}>🔗 Join</Button>
+        <Button variant="ghost" size="sm" onClick={() => { setShowJoin(true); setTimeout(() => joinInputRef.current?.focus(), 80) }}>🔗 Join</Button>
         <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>+ New</Button>
       </PageHero>
 
@@ -169,6 +172,67 @@ export default function GroupsList() {
       <style>{`
         @keyframes pulse { 0%,100% { opacity:0.4; } 50% { opacity:0.7; } }
       `}</style>
+
+      {/* Join by code modal */}
+      {showJoin && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}
+          onClick={() => { setShowJoin(false); setJoinCode('') }}
+        >
+          <div
+            style={{ width: '100%', maxWidth: '360px', background: 'var(--s2)', border: '1px solid var(--s4)', borderRadius: '20px', padding: '28px 24px', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--t1)', marginBottom: '6px' }}>Join a Group</div>
+            <div style={{ fontSize: '13px', color: 'var(--t3)', marginBottom: '20px', lineHeight: 1.5 }}>
+              Enter the invite code shared by your group admin.
+            </div>
+            <input
+              ref={joinInputRef}
+              value={joinCode}
+              onChange={e => setJoinCode(e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, ''))}
+              placeholder="e.g. ABC123"
+              maxLength={10}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && joinCode.trim().length >= 4) {
+                  const code = joinCode.trim()
+                  setShowJoin(false); setJoinCode('')
+                  navigate(`/join/${code}`)
+                }
+              }}
+              style={{
+                width: '100%', boxSizing: 'border-box',
+                background: 'var(--s3)', border: '1px solid var(--rose-border)',
+                borderRadius: '12px', padding: '14px 16px',
+                fontSize: '22px', fontWeight: 800, color: 'var(--t1)',
+                textAlign: 'center', letterSpacing: '4px', outline: 'none',
+                marginBottom: '16px',
+              }}
+            />
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => { setShowJoin(false); setJoinCode('') }}
+                style={{ flex: 1, padding: '11px', borderRadius: '10px', background: 'var(--s3)', border: '1px solid var(--s4)', color: 'var(--t2)', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (joinCode.trim().length >= 4) {
+                    const code = joinCode.trim()
+                    setShowJoin(false); setJoinCode('')
+                    navigate(`/join/${code}`)
+                  }
+                }}
+                disabled={joinCode.trim().length < 4}
+                style={{ flex: 1, padding: '11px', borderRadius: '10px', background: joinCode.trim().length >= 4 ? 'var(--rose)' : 'var(--s3)', border: 'none', color: joinCode.trim().length >= 4 ? '#fff' : 'var(--t3)', fontWeight: 700, fontSize: '13px', cursor: joinCode.trim().length >= 4 ? 'pointer' : 'default' }}
+              >
+                Join
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <CreateGroupModal
         isOpen={showCreate}

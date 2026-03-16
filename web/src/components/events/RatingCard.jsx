@@ -94,7 +94,8 @@ function ReviewItem({ rating }) {
       >
         <Avatar
           user={{
-            full_name: reviewerName,
+            full_name: rating.reviewer_name || rating.rater_name,
+            username: rating.username,
             avatar_url: rating.reviewer_avatar || rating.rater_avatar,
           }}
           size="sm"
@@ -152,6 +153,11 @@ export default function RatingCard({
   eventId,
   onAddRating,
 }) {
+  const isCompleted = eventStatus === 'completed'
+  const myRating = ratings.find(
+    (r) => String(r.reviewer_id || r.rater_id || r.user_id) === String(currentUserId)
+  )
+
   const sorted = [...ratings].sort(
     (a, b) => new Date(b.created_at) - new Date(a.created_at)
   )
@@ -169,20 +175,22 @@ export default function RatingCard({
   }))
   const maxDist = Math.max(...dist.map((d) => d.count), 1)
 
+  const rateLabel = myRating ? '✏️ Edit Rating' : '⭐ Rate Event'
+
   return (
     <Card>
       <Card.Header
-        title="Ratings"
+        title={`Ratings${ratings.length > 0 ? ` (${ratings.length})` : ''}`}
         action={
-          eventStatus === 'completed' ? (
+          isCompleted ? (
             <Button variant="primary" size="sm" onClick={onAddRating}>
-              + Add Rating
+              {rateLabel}
             </Button>
           ) : null
         }
       />
       <Card.Body>
-        {eventStatus === 'upcoming' ? (
+        {!isCompleted ? (
           <div
             style={{
               background: 'var(--s3)',
@@ -196,14 +204,17 @@ export default function RatingCard({
             </span>
           </div>
         ) : ratings.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '32px' }}>
+          <div style={{ textAlign: 'center', padding: '28px 20px' }}>
             <div style={{ fontSize: '40px', marginBottom: '8px' }}>⭐</div>
             <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t2)', marginBottom: '4px' }}>
               No ratings yet
             </div>
-            <div style={{ fontSize: '13px', color: 'var(--t3)' }}>
-              Be the first to rate this event
+            <div style={{ fontSize: '13px', color: 'var(--t3)', marginBottom: '16px' }}>
+              Be the first to share how it went
             </div>
+            <Button variant="primary" size="sm" onClick={onAddRating}>
+              ⭐ Rate this Event
+            </Button>
           </div>
         ) : (
           <>

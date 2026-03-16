@@ -22,7 +22,10 @@ async function enrichWithProfiles(items, uidField) {
     uids.map(uid => gatewayClient.get(`/users/${uid}/profile`).then(r => r.data).catch(() => ({ id: uid })))
   )
   const profileMap = Object.fromEntries(profiles.map(p => [p.id, p]))
-  return items.map(item => ({ ...item, ...(profileMap[fn(item)] || {}) }))
+  return items.map(item => {
+    const { id: _pid, ...profileFields } = profileMap[fn(item)] || {}
+    return { ...item, ...profileFields }
+  })
 }
 
 export default function EventDetail() {

@@ -64,6 +64,7 @@ export default function CreateGroupModal({ isOpen, onClose, onCreated }) {
     description: '',
     rotation_mode: 'sequential',
     activity_type: 'dining',
+    join_behavior: 'instant',
   })
   const [inviteEmail, setInviteEmail] = useState('')
   const [invites, setInvites] = useState([])
@@ -108,6 +109,7 @@ export default function CreateGroupModal({ isOpen, onClose, onCreated }) {
         description: form.description.trim() || null,
         rotation_type: ROTATION_TYPE_MAP[form.rotation_mode] || 'round_robin',
         activity_type: form.activity_type,
+        join_behavior: form.join_behavior,
       })
       // Upload banner if selected
       if (bannerFile) {
@@ -209,6 +211,40 @@ export default function CreateGroupModal({ isOpen, onClose, onCreated }) {
               </button>
             )
           })}
+        </div>
+
+        {/* Join behavior */}
+        <div style={{ marginTop: '14px' }}>
+          <label style={labelStyle}>Join Behavior</label>
+          <div style={{ display: 'flex', background: 'var(--s4)', borderRadius: '10px', padding: '3px' }}>
+            {[
+              { value: 'instant', label: '⚡ Instant Join' },
+              { value: 'approval', label: '✋ Approval Required' },
+            ].map((opt) => {
+              const isActive = form.join_behavior === opt.value
+              return (
+                <button
+                  key={opt.value}
+                  onClick={() => setField('join_behavior', opt.value)}
+                  style={{
+                    flex: 1, padding: '7px', borderRadius: '8px', textAlign: 'center',
+                    fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none',
+                    transition: 'all 0.15s',
+                    background: isActive ? 'var(--s2)' : 'transparent',
+                    color: isActive ? 'var(--t1)' : 'var(--t3)',
+                    boxShadow: isActive ? '0 1px 4px rgba(0,0,0,0.3)' : 'none',
+                  }}
+                >
+                  {opt.label}
+                </button>
+              )
+            })}
+          </div>
+          <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '5px' }}>
+            {form.join_behavior === 'instant'
+              ? 'Anyone with the invite code joins automatically.'
+              : 'You approve each join request before they can access the group.'}
+          </div>
         </div>
       </div>
 

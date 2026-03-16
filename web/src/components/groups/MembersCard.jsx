@@ -153,7 +153,7 @@ function MemberRow({ member, canManage, currentUserId, onRoleChange, onRemove })
     >
       {/* Avatar */}
       <Avatar
-        user={{ full_name: member.full_name, avatar_url: member.avatar_url }}
+        user={{ full_name: member.full_name, username: member.username, avatar_url: member.avatar_url }}
         size="md"
       />
 
@@ -169,7 +169,7 @@ function MemberRow({ member, canManage, currentUserId, onRoleChange, onRemove })
             whiteSpace: 'nowrap',
           }}
         >
-          {member.full_name || 'Unknown'}
+          {member.full_name || member.username || 'Unknown'}
           {isCurrentUser && (
             <span style={{ fontSize: '10px', color: 'var(--t3)', fontWeight: 500, marginLeft: '6px' }}>
               (you)
@@ -290,9 +290,9 @@ export default function MembersCard({ members = [], pendingInvites = [], canMana
   )
 
   return (
-    <Card>
+    <Card style={{ overflow: 'visible' }}>
       <Card.Header title={`Members (${totalCount})`} action={headerAction} />
-      <Card.Body>
+      <Card.Body style={{ overflow: 'visible' }}>
         {members.length === 0 && pendingInvites.length === 0 ? (
           <div style={{ fontSize: '12px', color: 'var(--t3)', textAlign: 'center', padding: '16px' }}>
             No members yet

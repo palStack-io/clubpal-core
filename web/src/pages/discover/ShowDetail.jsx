@@ -1,18 +1,24 @@
 import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
+import AppShell from '../../components/shell/AppShell'
 import BackButton from '../../components/ui/BackButton'
 import { enrichApi } from '../../api/enrich'
 import PickModal from '../../components/discover/PickModal'
 import CreatePollModal from '../../components/modals/CreatePollModal'
-import Layout from '../../components/layout/Layout'
-import Button from '../../components/ui/Button'
-import { PageLoader } from '../../components/ui/LoadingSpinner'
 
 const ACCENT = '#6366f1'
 
+function Spinner() {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', paddingTop: '80px' }}>
+      <div style={{ width: '32px', height: '32px', border: '3px solid var(--glass)', borderTopColor: ACCENT, borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+    </div>
+  )
+}
+
 export default function ShowDetail() {
   const { tmdbId } = useParams()
-  const navigate = useNavigate()
   const [show, setShow] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showPick, setShowPick] = useState(false)
@@ -30,115 +36,141 @@ export default function ShowDetail() {
       .catch(() => {})
   }, [tmdbId])
 
-  if (loading) return <Layout><PageLoader /></Layout>
-  if (!show) return <Layout><div className="p-6 text-gray-500">Show not found.</div></Layout>
+  if (loading) return <AppShell><Spinner /></AppShell>
+  if (!show) return (
+    <AppShell>
+      <div style={{ padding: '40px 24px', textAlign: 'center', color: 'var(--t3)' }}>
+        <div style={{ fontSize: '40px', marginBottom: '12px' }}>📺</div>
+        <div style={{ fontWeight: 700, color: 'var(--t2)' }}>Show not found</div>
+      </div>
+    </AppShell>
+  )
 
   return (
-    <Layout>
-      <main className="flex-1 overflow-y-auto">
-        {/* Backdrop */}
-        <div className="relative w-full h-52 bg-gray-900">
-          {show.backdrop_url ? (
-            <img src={show.backdrop_url} alt="" className="w-full h-full object-cover opacity-70" />
-          ) : show.poster_url ? (
-            <img src={show.poster_url} alt="" className="w-full h-full object-cover object-top opacity-70" />
-          ) : (
-            <div className="flex items-center justify-center h-full">
-              <span style={{ fontSize: '64px' }}>📺</span>
-            </div>
-          )}
+    <AppShell>
+      {/* Backdrop hero */}
+      <div style={{ position: 'relative', width: '100%', height: '220px', background: '#000', overflow: 'hidden' }}>
+        {show.backdrop_url ? (
+          <img src={show.backdrop_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: 0.7 }} />
+        ) : show.poster_url ? (
+          <img src={show.poster_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', opacity: 0.5 }} />
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+            <span style={{ fontSize: '64px' }}>📺</span>
+          </div>
+        )}
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, transparent 40%, rgba(8,8,10,0.92) 100%)' }} />
+      </div>
+
+      <div style={{ padding: '20px', maxWidth: '720px' }}>
+        <div style={{ marginBottom: '16px' }}>
+          <BackButton />
         </div>
 
-        <div className="p-5 space-y-4">
-          <BackButton />
-
-          <div className="flex gap-4">
-            {show.poster_url && (
-              <div style={{ position: 'relative', flexShrink: 0 }}>
-                <img src={show.poster_url} alt={show.title} className="w-20 h-28 object-cover rounded-lg shadow" />
-                {inLibrary && (
-                  <div style={{
-                    position: 'absolute', top: '6px', right: '6px',
-                    background: '#22d3a0', color: '#000', fontSize: '8px', fontWeight: 800,
-                    padding: '2px 6px', borderRadius: '100px', letterSpacing: '0.5px',
-                  }}>
-                    IN LIBRARY
-                  </div>
-                )}
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <h1 className="text-xl font-bold text-gray-900">{show.title}</h1>
-              <div className="flex flex-wrap items-center gap-2 mt-1">
-                {show.rating && (
-                  <span className="text-sm font-medium text-amber-500">★ {show.rating.toFixed(1)}</span>
-                )}
-                {show.first_air_date && (
-                  <span className="text-sm text-gray-500">{show.first_air_date.slice(0, 4)}</span>
-                )}
-                {show.number_of_seasons != null && (
-                  <span className="text-sm text-gray-500">{show.number_of_seasons} season{show.number_of_seasons !== 1 ? 's' : ''}</span>
-                )}
-                {show.number_of_episodes != null && (
-                  <span className="text-sm text-gray-500">{show.number_of_episodes} episodes</span>
-                )}
-              </div>
-              {show.genres?.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-2">
-                  {show.genres.map(g => (
-                    <span key={g} className="text-xs px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">{g}</span>
-                  ))}
+        {/* Poster + title */}
+        <div style={{ display: 'flex', gap: '16px', marginBottom: '20px' }}>
+          {show.poster_url && (
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <img
+                src={show.poster_url}
+                alt={show.title}
+                style={{ width: '88px', height: '124px', objectFit: 'cover', borderRadius: '10px', boxShadow: '0 4px 20px rgba(0,0,0,0.4)' }}
+              />
+              {inLibrary && (
+                <div style={{
+                  position: 'absolute', top: '6px', right: '6px',
+                  background: 'var(--green)', color: '#000', fontSize: '8px', fontWeight: 800,
+                  padding: '2px 6px', borderRadius: '100px', letterSpacing: '0.5px',
+                }}>
+                  IN LIBRARY
                 </div>
               )}
             </div>
-          </div>
-
-          {show.overview && (
-            <p className="text-sm text-gray-600 leading-relaxed">{show.overview}</p>
           )}
-
-          {/* Trailer */}
-          {show.trailer_key && (
-            <div className="rounded-xl overflow-hidden aspect-video">
-              <iframe
-                title="trailer"
-                width="100%"
-                height="100%"
-                src={`https://www.youtube.com/embed/${show.trailer_key}`}
-                allowFullScreen
-                style={{ border: 0 }}
-              />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <h1 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--t1)', margin: '0 0 6px' }}>{show.title}</h1>
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '8px', marginBottom: '8px' }}>
+              {show.rating && (
+                <span style={{ fontSize: '13px', fontWeight: 700, color: '#f59e0b' }}>★ {show.rating.toFixed(1)}</span>
+              )}
+              {show.first_air_date && (
+                <span style={{ fontSize: '12px', color: 'var(--t3)' }}>{show.first_air_date.slice(0, 4)}</span>
+              )}
+              {show.number_of_seasons != null && (
+                <span style={{ fontSize: '12px', color: 'var(--t3)' }}>{show.number_of_seasons} season{show.number_of_seasons !== 1 ? 's' : ''}</span>
+              )}
+              {show.number_of_episodes != null && (
+                <span style={{ fontSize: '12px', color: 'var(--t3)' }}>{show.number_of_episodes} ep</span>
+              )}
             </div>
-          )}
-
-          {/* Cast */}
-          {show.cast_list?.length > 0 && (
-            <div>
-              <h3 className="text-sm font-semibold text-gray-900 mb-2">Cast</h3>
-              <div className="space-y-1">
-                {show.cast_list.slice(0, 6).map((c, i) => (
-                  <p key={i} className="text-sm text-gray-600">
-                    <span className="font-medium">{c.name}</span>
-                    {c.character && <span className="text-gray-400"> as {c.character}</span>}
-                  </p>
+            {show.genres?.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+                {show.genres.map(g => (
+                  <span key={g} style={{ fontSize: '11px', padding: '2px 8px', borderRadius: '100px', background: 'rgba(99,102,241,0.15)', color: '#818cf8', fontWeight: 600 }}>{g}</span>
                 ))}
               </div>
-            </div>
-          )}
-
-          <div style={{ display: 'flex', gap: '8px' }}>
-            <Button style={{ flex: 1, backgroundColor: ACCENT, borderColor: ACCENT }} size="lg" onClick={() => setShowPick(true)}>
-              Pick This Show
-            </Button>
-            <Button variant="ghost" size="lg" onClick={() => setShowPoll(true)}>💬 Poll Group</Button>
+            )}
           </div>
         </div>
-      </main>
+
+        {/* Overview */}
+        {show.overview && (
+          <div style={{ background: 'var(--s2)', border: '1px solid var(--glass)', borderRadius: '14px', padding: '16px', marginBottom: '16px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '8px' }}>Overview</div>
+            <p style={{ fontSize: '13px', color: 'var(--t2)', lineHeight: 1.65, margin: 0 }}>{show.overview}</p>
+          </div>
+        )}
+
+        {/* Trailer */}
+        {show.trailer_key && (
+          <div style={{ borderRadius: '14px', overflow: 'hidden', aspectRatio: '16/9', marginBottom: '16px' }}>
+            <iframe
+              title="trailer"
+              width="100%"
+              height="100%"
+              src={`https://www.youtube.com/embed/${show.trailer_key}`}
+              allowFullScreen
+              style={{ border: 0, display: 'block' }}
+            />
+          </div>
+        )}
+
+        {/* Cast */}
+        {show.cast_list?.length > 0 && (
+          <div style={{ background: 'var(--s2)', border: '1px solid var(--glass)', borderRadius: '14px', padding: '16px', marginBottom: '20px' }}>
+            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '10px' }}>Cast</div>
+            <div style={{ display: 'grid', gap: '6px' }}>
+              {show.cast_list.slice(0, 6).map((c, i) => (
+                <div key={i} style={{ fontSize: '13px', color: 'var(--t2)' }}>
+                  <span style={{ fontWeight: 600, color: 'var(--t1)' }}>{c.name}</span>
+                  {c.character && <span style={{ color: 'var(--t3)' }}> as {c.character}</span>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* CTAs */}
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button
+            onClick={() => setShowPick(true)}
+            style={{ flex: 1, background: ACCENT, color: '#fff', border: 'none', borderRadius: '12px', padding: '14px', fontSize: '15px', fontWeight: 700, cursor: 'pointer' }}
+          >
+            Pick This Show
+          </button>
+          <button
+            onClick={() => setShowPoll(true)}
+            style={{ padding: '14px 18px', background: 'var(--s3)', color: 'var(--t2)', border: '1px solid var(--glass)', borderRadius: '12px', fontSize: '14px', fontWeight: 700, cursor: 'pointer', whiteSpace: 'nowrap' }}
+          >
+            💬 Poll Group
+          </button>
+        </div>
+      </div>
 
       {showPick && (
         <PickModal title={show.title} location={null} activityType="movies" onClose={() => setShowPick(false)} onPollGroup={() => { setShowPick(false); setShowPoll(true) }} />
       )}
       <CreatePollModal isOpen={showPoll} onClose={() => setShowPoll(false)} activityName={show?.title} activityType="movies" onCreated={() => setShowPoll(false)} />
-    </Layout>
+    </AppShell>
   )
 }

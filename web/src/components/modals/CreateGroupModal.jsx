@@ -13,6 +13,7 @@ const ACTIVITY_OPTIONS = [
   { key: 'hiking',  emoji: '🥾', label: 'Hiking',  rgb: '20,184,166' },
   { key: 'gaming',  emoji: '🎮', label: 'Gaming',  rgb: '34,211,160' },
   { key: 'arts',    emoji: '🎨', label: 'Arts',    rgb: '245,158,11' },
+  { key: 'other',   emoji: '✨', label: 'Other',   rgb: '100,116,139' },
 ]
 
 const ROTATION_MODES = [

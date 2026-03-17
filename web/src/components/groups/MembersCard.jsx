@@ -274,9 +274,10 @@ function PendingInviteRow({ email }) {
   )
 }
 
-export default function MembersCard({ members = [], pendingInvites = [], canManage, currentUserId, onRoleChange, onRemove, onInvite, rotation }) {
+export default function MembersCard({ members = [], pendingInvites = [], canManage, currentUserId, onRoleChange, onRemove, onInvite, rotation, rotationType }) {
   const totalCount = members.length + pendingInvites.length
-  const hasRotation = !!(rotation?.current_user_id)
+  const isManual = rotationType === 'none'
+  const hasRotation = !isManual && !!(rotation?.current_user_id)
 
   // Sort by rotation_order when rotation is active
   const sortedMembers = hasRotation

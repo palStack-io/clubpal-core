@@ -314,6 +314,7 @@ export default function GroupDetail() {
               onRemove={uid => setRemoveTarget(uid)}
               onInvite={() => setShowInvite(true)}
               rotation={rotation}
+              rotationType={group?.rotation_type}
             />
           </div>
         </div>

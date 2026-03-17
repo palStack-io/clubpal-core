@@ -87,14 +87,17 @@ export default function Dashboard() {
         !ev.my_rsvp_status || ev.my_rsvp_status === 'pending' || ev.my_rsvp_status === 'maybe'
       ))
 
-      // Check ALL groups for whose turn it is — use the first group where it's your turn
+      // Check ALL groups for whose turn it is — skip manual-rotation groups
       if (g.length > 0) {
         const rotations = await Promise.all(
           g.map(grp => groupsApi.getRotation(grp.id).catch(() => null))
         )
         setAllRotations(rotations)
-        const myTurnIdx = rotations.findIndex(r => String(r?.user_id) === String(user?.id))
-        const activeIdx = myTurnIdx >= 0 ? myTurnIdx : 0
+        const myTurnIdx = rotations.findIndex((r, i) =>
+          String(r?.user_id) === String(user?.id) && g[i]?.rotation_type !== 'none'
+        )
+        const firstNonManualIdx = g.findIndex(grp => grp.rotation_type !== 'none')
+        const activeIdx = myTurnIdx >= 0 ? myTurnIdx : (firstNonManualIdx >= 0 ? firstNonManualIdx : 0)
         setRotation(rotations[activeIdx])
         setPrimaryGroupId(g[activeIdx].id)
       }
@@ -168,13 +171,15 @@ export default function Dashboard() {
     setRsvpNeeded(prev => prev.filter(e => e.id !== eventId))
   }
 
+  const primaryGroupObj = groups.find(g => g.id === primaryGroupId)
   const activeTurn =
-    String(rotation?.user_id) === String(user?.id) && primaryGroupId
+    String(rotation?.user_id) === String(user?.id) && primaryGroupId &&
+    primaryGroupObj?.rotation_type !== 'none'
       ? {
           groupId: primaryGroupId,
-          groupName: groups.find(g => g.id === primaryGroupId)?.name || 'Your Group',
-          activityEmoji: rotation?.activity_emoji || '🔄',
-          activityType: rotation?.activity_type || 'dining',
+          groupName: primaryGroupObj?.name || 'Your Group',
+          activityEmoji: rotation?.activity_emoji || primaryGroupObj?.activity_emoji || '🔄',
+          activityType: rotation?.activity_type || primaryGroupObj?.activity_type || '',
           dueDate: rotation?.due_date || null,
           memberCount: rotation?.members?.length || 0,
         }
@@ -185,7 +190,6 @@ export default function Dashboard() {
 
   const turnPosition = activeTurn ? '1st 🔄' : (rotation?.turn_index != null ? ordinal(rotation.turn_index + 1) : '—')
 
-  const primaryGroup = groups.find(g => g.id === primaryGroupId)
   const greeting = `${getGreeting()}, ${user?.full_name?.split(' ')[0] || user?.username} 👋`
 
   const stats = [

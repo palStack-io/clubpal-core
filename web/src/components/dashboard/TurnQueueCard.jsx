@@ -32,9 +32,10 @@ export default function TurnQueueCard({ groups = [], rotations = [], currentUser
     })
   }, [groups.map(g => g.id).join(',')])
 
-  // Build one row per group that has rotation data
+  // Build one row per group that has rotation data (skip manual-rotation groups)
   const rows = groups
     .map((g, i) => {
+      if (g.rotation_type === 'none') return null
       const rot = rotations[i]
       if (!rot) return null
       const members = membersMap[g.id] || []

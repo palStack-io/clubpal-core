@@ -80,7 +80,7 @@ export default function GroupDetail() {
       ])
       setGroup(g)
       setUpcoming(u || [])
-      setRotation(r)
+      setRotation(r ? { ...r, current_user_id: r.user_id } : null)
       setMembers(await enrichWithProfiles(m || [], 'user_id'))
     } catch {}
     finally { setLoading(false) }
@@ -306,7 +306,10 @@ export default function GroupDetail() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <RotationQueueCard rotation={rotation} currentUserId={user?.id} />
+            <RotationQueueCard
+              rotation={rotation ? { ...rotation, members } : null}
+              currentUserId={user?.id}
+            />
             <MembersCard
               members={members}
               pendingInvites={pendingInvites}

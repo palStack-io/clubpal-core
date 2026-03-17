@@ -1,6 +1,54 @@
 import { format } from 'date-fns'
 import Card from '../ui/Card'
 
+function fmtIcal(d) {
+  return d.toISOString().replace(/[-:]/g, '').split('.')[0] + 'Z'
+}
+
+function googleCalUrl(event, date) {
+  const end = new Date(date.getTime() + 2 * 60 * 60 * 1000)
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: event.title || event.venue_name || 'Event',
+    dates: `${fmtIcal(date)}/${fmtIcal(end)}`,
+    ...(event.location ? { location: event.location } : {}),
+  })
+  return `https://calendar.google.com/calendar/render?${params}`
+}
+
+function outlookCalUrl(event, date) {
+  const end = new Date(date.getTime() + 2 * 60 * 60 * 1000)
+  const params = new URLSearchParams({
+    path: '/calendar/action/compose',
+    rru: 'addevent',
+    subject: event.title || event.venue_name || 'Event',
+    startdt: date.toISOString(),
+    enddt: end.toISOString(),
+    ...(event.location ? { location: event.location } : {}),
+  })
+  return `https://outlook.live.com/calendar/0/deeplink/compose?${params}`
+}
+
+function downloadIcs(event, date) {
+  const end = new Date(date.getTime() + 2 * 60 * 60 * 1000)
+  const lines = [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'CALSCALE:GREGORIAN',
+    'BEGIN:VEVENT',
+    `DTSTART:${fmtIcal(date)}`,
+    `DTEND:${fmtIcal(end)}`,
+    `SUMMARY:${(event.title || event.venue_name || 'Event').replace(/,/g, '\\,')}`,
+    event.location ? `LOCATION:${event.location.replace(/,/g, '\\,')}` : '',
+    'END:VEVENT', 'END:VCALENDAR',
+  ].filter(Boolean).join('\r\n')
+  const blob = new Blob([lines], { type: 'text/calendar;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${(event.title || 'event').replace(/\s+/g, '-')}.ics`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
 const ACTIVITY = {
   dining: { emoji: '🍽️', color: '#f43f5e' },
   movies: { emoji: '🎬', color: '#6366f1' },
@@ -68,17 +116,39 @@ export default function EventMetaCard({ event, groupName, hostName }) {
   // Build visible rows
   const rows = []
 
-  if (event.scheduled_date) {
+  const rawDate = event.scheduled_date || event.event_date
+  const parsedDate = rawDate ? (() => { try { return new Date(rawDate) } catch { return null } })() : null
+
+  if (parsedDate) {
     rows.push({
       icon: '📅',
       label: 'Date & Time',
-      content: (() => {
-        try {
-          return format(new Date(event.scheduled_date), "EEEE, MMM d · h:mm a")
-        } catch {
-          return event.scheduled_date
-        }
-      })(),
+      content: format(parsedDate, "EEEE, MMM d · h:mm a"),
+    })
+
+    const calPillStyle = {
+      display: 'inline-flex', alignItems: 'center', gap: '4px',
+      padding: '4px 10px', borderRadius: '100px',
+      fontSize: '11px', fontWeight: 600,
+      background: 'var(--s3)', border: '1px solid var(--glass)',
+      color: 'var(--t2)', cursor: 'pointer', textDecoration: 'none',
+    }
+    rows.push({
+      icon: '🗓️',
+      label: 'Add to Calendar',
+      content: (
+        <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginTop: '2px' }}>
+          <a href={googleCalUrl(event, parsedDate)} target="_blank" rel="noreferrer" style={calPillStyle}>
+            Google
+          </a>
+          <a href={outlookCalUrl(event, parsedDate)} target="_blank" rel="noreferrer" style={calPillStyle}>
+            Outlook
+          </a>
+          <span style={calPillStyle} onClick={() => downloadIcs(event, parsedDate)}>
+            Apple / iCal
+          </span>
+        </div>
+      ),
     })
   }
 

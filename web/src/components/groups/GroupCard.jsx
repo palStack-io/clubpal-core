@@ -23,7 +23,7 @@ export default function GroupCard({ group, currentUserId }) {
   const memberCount = group.member_count || group.members?.length || 0
   const members = group.members || []
 
-  const hasCardBg = group.bg_scope === 'cards_hero' && group.bg_type && group.bg_type !== 'default'
+  const hasCardBg = group.bg_type && group.bg_type !== 'default'
 
   const isYourTurn = group.rotation?.current_user_id === currentUserId
   const currentTurnName = isYourTurn
@@ -57,12 +57,10 @@ export default function GroupCard({ group, currentUserId }) {
           position: 'relative',
           overflow: 'hidden',
           borderBottom: '1px solid var(--glass)',
-          background: (group.bg_type === 'cards_hero' || group.bg_scope === 'cards_hero') && group.bg_type !== 'default'
-            ? '#0a0a0f'
-            : group.banner_url ? '#000' : getBannerBg(type),
+          background: hasCardBg ? '#0a0a0f' : group.banner_url ? '#000' : getBannerBg(type),
         }}
       >
-        {group.bg_scope === 'cards_hero' && group.bg_type && group.bg_type !== 'default' ? (
+        {hasCardBg ? (
           <AnimatedBackground bgType={group.bg_type} bgValue={group.bg_value} />
         ) : group.banner_url ? (
           <>

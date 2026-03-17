@@ -24,8 +24,9 @@ export default function EventListRow({ event }) {
   const navigate = useNavigate()
   const type = event.activity_type?.toLowerCase() || 'dining'
   const meta = activityMeta[type] || activityMeta.dining
-  const dateStr = event.event_date
-    ? format(new Date(event.event_date), 'MMM d · h:mm a')
+  const rawDate = event.event_date || event.scheduled_date
+  const dateStr = rawDate
+    ? format(new Date(rawDate), 'MMM d · h:mm a')
     : 'TBD'
 
   return (

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { authApi } from '../../api/auth'
 import { enrichApi } from '../../api/enrich'
+import { gatewayClient } from '../../api/client'
 
 const ACTIVITIES = [
   { id: 'dining',  emoji: '🍽️', label: 'Dining' },
@@ -26,6 +27,12 @@ const GAME_TYPES   = [
 
 const RADIUS_OPTS_STD   = [5, 10, 25, 50]
 const RADIUS_OPTS_HIKE  = [10, 25, 50, 100]
+
+const AVATAR_EMOJIS = [
+  '😀','😎','🤩','🥳','😄','🤓','🧑‍💻','🧙','🦸','🧝','🧜','🎭',
+  '🦊','🐱','🐶','🐻','🦁','🐯','🦋','🦄','🐸','🐼','🐨','🦖',
+  '🌟','⚡','🔥','💎','🌈','🎯','👾','🎪','🚀','🌊','🍀','🎸',
+]
 
 function chip(label, active, onClick) {
   return (
@@ -82,6 +89,7 @@ export default function OnboardingWizard() {
   const [showGenres, setShowGenres] = useState([])
   const [bookGenres, setBookGenres] = useState([])
   const [gameTypes, setGameTypes] = useState(['video_game', 'board_game'])
+  const [selectedEmoji, setSelectedEmoji] = useState(null)
   const [loading, setLoading] = useState(false)
   const [loadResult, setLoadResult] = useState(null)
   const [loadError, setLoadError] = useState('')
@@ -97,8 +105,8 @@ export default function OnboardingWizard() {
   const needsLocation = activities.some(a => LOCATION_ACTIVITIES.has(a))
   const needsGenres   = activities.some(a => ['movies', 'shows', 'books', 'gaming'].includes(a))
 
-  // Total steps depend on selected activities
-  const totalSteps = needsGenres ? 5 : 4
+  // Total steps depend on selected activities (+1 for emoji step)
+  const totalSteps = needsGenres ? 6 : 5
 
   const toggleActivity = (id) => {
     setActivities(prev =>
@@ -176,9 +184,18 @@ export default function OnboardingWizard() {
       setLoadResult(result)
       clearInterval(loadIntervalRef.current)
       setActiveLoadIdx(activities.length)
-      // Update user in context to mark onboarding complete
-      updateUser({ onboarding_complete: true })
-      setStep(6)
+      // Save emoji if chosen
+      if (selectedEmoji) {
+        try {
+          const r = await gatewayClient.patch('/users/me', { avatar_url: selectedEmoji })
+          updateUser({ ...r.data, onboarding_complete: true })
+        } catch {
+          updateUser({ onboarding_complete: true })
+        }
+      } else {
+        updateUser({ onboarding_complete: true })
+      }
+      setStep(7)
     } catch (e) {
       clearInterval(loadIntervalRef.current)
       setLoadError(e?.response?.data?.detail || 'Something went wrong. Please try again.')
@@ -261,7 +278,7 @@ export default function OnboardingWizard() {
         <div style={{ fontSize: '48px', marginBottom: '16px' }}>👋</div>
         <div style={h2}>Welcome to clubPal, {user?.full_name?.split(' ')[0] || user?.username}!</div>
         <div style={sub}>
-          Let's personalize your discover feed so you see restaurants, movies, books, and more that match your taste and location.
+          Let's set up your profile and personalize your discover feed so you see restaurants, movies, books, and more that match your taste.
           Takes about 30 seconds.
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -278,8 +295,89 @@ export default function OnboardingWizard() {
     </div>
   )
 
-  // ── Step 2: Activities ─────────────────────────────────────────────────────
-  if (step === 2) return (
+  // ── Step 2: Pick your emoji ────────────────────────────────────────────────
+  if (step === 2) {
+    return (
+      <div style={overlay} onClick={handleSkip}>
+        <div style={card} onClick={stopProp}>
+          {progressDots()}
+          <div style={h2}>Pick your vibe</div>
+          <div style={sub}>Choose an emoji that represents you — it'll show on your profile and in groups.</div>
+
+          {/* Preview */}
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '16px',
+            background: 'var(--s2)', border: '1px solid var(--glass)',
+            borderRadius: '16px', padding: '16px 20px', marginBottom: '24px',
+          }}>
+            <div style={{
+              width: '56px', height: '56px', borderRadius: '50%',
+              background: selectedEmoji ? 'rgba(244,63,94,0.12)' : 'var(--s3)',
+              border: `2px solid ${selectedEmoji ? 'rgba(244,63,94,0.3)' : 'var(--glass)'}`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: selectedEmoji ? '30px' : '22px',
+              flexShrink: 0, transition: 'all 0.2s',
+            }}>
+              {selectedEmoji || (user?.full_name ? user.full_name.charAt(0).toUpperCase() : '?')}
+            </div>
+            <div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--t1)' }}>
+                {user?.full_name || user?.username}
+              </div>
+              <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>
+                {selectedEmoji ? 'Looking good! 🎉' : 'Pick an emoji below'}
+              </div>
+            </div>
+          </div>
+
+          {/* Emoji grid */}
+          <div style={{
+            display: 'grid', gridTemplateColumns: 'repeat(9, 1fr)', gap: '6px',
+            marginBottom: '28px',
+          }}>
+            {AVATAR_EMOJIS.map(emoji => (
+              <button
+                key={emoji}
+                type="button"
+                onClick={() => setSelectedEmoji(prev => prev === emoji ? null : emoji)}
+                style={{
+                  aspectRatio: '1', borderRadius: '10px', fontSize: '22px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  border: `1px solid ${selectedEmoji === emoji ? 'rgba(244,63,94,0.4)' : 'transparent'}`,
+                  background: selectedEmoji === emoji ? 'rgba(244,63,94,0.12)' : 'transparent',
+                  cursor: 'pointer', transition: 'all 0.1s', padding: 0,
+                  boxShadow: selectedEmoji === emoji ? '0 0 0 2px rgba(244,63,94,0.2)' : 'none',
+                }}
+                onMouseEnter={e => { if (selectedEmoji !== emoji) e.currentTarget.style.background = 'var(--s3)' }}
+                onMouseLeave={e => { if (selectedEmoji !== emoji) e.currentTarget.style.background = 'transparent' }}
+              >
+                {emoji}
+              </button>
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <button type="button" onClick={() => setStep(1)}
+              style={{ background: 'none', border: 'none', fontSize: '13px', color: 'var(--t3)', cursor: 'pointer' }}>
+              ← Back
+            </button>
+            <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+              {!selectedEmoji && (
+                <button type="button" onClick={() => setStep(3)}
+                  style={{ background: 'none', border: 'none', fontSize: '13px', color: 'var(--t4)', cursor: 'pointer', textDecoration: 'underline' }}>
+                  Skip
+                </button>
+              )}
+              {btnPrimary(() => setStep(3), selectedEmoji ? 'Next →' : 'Skip →')}
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Step 3: Activities ─────────────────────────────────────────────────────
+  if (step === 3) return (
     <div style={overlay} onClick={handleSkip}>
       <div style={card} onClick={stopProp}>
         {progressDots()}
@@ -311,15 +409,19 @@ export default function OnboardingWizard() {
             </button>
           ))}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          {btnPrimary(() => setStep(3), 'Next →', !canProceedStep2)}
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <button type="button" onClick={() => setStep(2)}
+            style={{ background: 'none', border: 'none', fontSize: '13px', color: 'var(--t3)', cursor: 'pointer' }}>
+            ← Back
+          </button>
+          {btnPrimary(() => setStep(4), 'Next →', !canProceedStep2)}
         </div>
       </div>
     </div>
   )
 
-  // ── Step 3: Location ───────────────────────────────────────────────────────
-  if (step === 3) return (
+  // ── Step 4: Location ───────────────────────────────────────────────────────
+  if (step === 4) return (
     <div style={overlay} onClick={handleSkip}>
       <div style={card} onClick={stopProp}>
         {progressDots()}
@@ -387,7 +489,7 @@ export default function OnboardingWizard() {
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
           <button
             type="button"
-            onClick={() => setStep(2)}
+            onClick={() => setStep(3)}
             style={{ background: 'none', border: 'none', fontSize: '13px', color: 'var(--t3)', cursor: 'pointer' }}
           >
             ← Back
@@ -396,21 +498,21 @@ export default function OnboardingWizard() {
             {needsLocation && !canProceedStep3 && (
               <button
                 type="button"
-                onClick={() => setStep(needsGenres ? 4 : 5)}
+                onClick={() => setStep(needsGenres ? 5 : 6)}
                 style={{ background: 'none', border: 'none', fontSize: '12px', color: 'var(--t3)', cursor: 'pointer' }}
               >
                 Skip for now
               </button>
             )}
-            {btnPrimary(() => setStep(needsGenres ? 4 : 5), 'Next →', needsLocation && !canProceedStep3 && false)}
+            {btnPrimary(() => setStep(needsGenres ? 5 : 6), 'Next →', needsLocation && !canProceedStep3 && false)}
           </div>
         </div>
       </div>
     </div>
   )
 
-  // ── Step 4: Genres ─────────────────────────────────────────────────────────
-  if (step === 4 && needsGenres) return (
+  // ── Step 5: Genres ─────────────────────────────────────────────────────────
+  if (step === 5 && needsGenres) return (
     <div style={overlay} onClick={handleSkip}>
       <div style={card} onClick={stopProp}>
         {progressDots()}
@@ -456,19 +558,19 @@ export default function OnboardingWizard() {
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '20px' }}>
           <button
             type="button"
-            onClick={() => setStep(3)}
+            onClick={() => setStep(4)}
             style={{ background: 'none', border: 'none', fontSize: '13px', color: 'var(--t3)', cursor: 'pointer' }}
           >
             ← Back
           </button>
-          {btnPrimary(() => setStep(5), 'Next →')}
+          {btnPrimary(() => setStep(6), 'Next →')}
         </div>
       </div>
     </div>
   )
 
-  // ── Step 5: Loading ────────────────────────────────────────────────────────
-  if (step === 5) {
+  // ── Step 6: Loading ────────────────────────────────────────────────────────
+  if (step === 6) {
     const counts = loadResult || {}
     return (
       <div style={overlay} onClick={loading ? undefined : handleSkip}>
@@ -530,7 +632,7 @@ export default function OnboardingWizard() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <button
                 type="button"
-                onClick={() => setStep(needsGenres ? 4 : 3)}
+                onClick={() => setStep(needsGenres ? 5 : 4)}
                 style={{ background: 'none', border: 'none', fontSize: '13px', color: 'var(--t3)', cursor: 'pointer' }}
               >
                 ← Back
@@ -577,8 +679,8 @@ export default function OnboardingWizard() {
     )
   }
 
-  // ── Step 6: Done ───────────────────────────────────────────────────────────
-  if (step === 6) {
+  // ── Step 7: Done ───────────────────────────────────────────────────────────
+  if (step === 7) {
     const loaded = loadResult || {}
     const summary = Object.entries(loaded).map(([k, v]) => `${v} ${k}`).join(' · ')
 

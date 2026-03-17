@@ -10,6 +10,7 @@ import MembersCard from '../../components/groups/MembersCard'
 import CommentsCard from '../../components/events/CommentsCard'
 import AnimatedBackground from '../../components/ui/AnimatedBackground'
 import InviteMemberModal from '../../components/modals/InviteMemberModal'
+import InviteLinkModal from '../../components/modals/InviteLinkModal'
 import ConfirmDeleteModal from '../../components/modals/ConfirmDeleteModal'
 import EditGroupModal from '../../components/modals/EditGroupModal'
 import CreateEventModal from '../../components/modals/CreateEventModal'
@@ -53,6 +54,7 @@ export default function GroupDetail() {
   const [rotation, setRotation] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showInvite, setShowInvite] = useState(false)
+  const [showInviteLink, setShowInviteLink] = useState(false)
   const [inviteLoading, setInviteLoading] = useState(false)
   const [removeTarget, setRemoveTarget] = useState(null)
   const [removeLoading, setRemoveLoading] = useState(false)
@@ -177,6 +179,7 @@ export default function GroupDetail() {
   ]
 
   const heroActions = [
+    { label: '🔗 Invite Link', onClick: () => setShowInviteLink(true) },
     { label: '✉️ Invite', onClick: () => setShowInvite(true) },
     { label: '💬 Poll', onClick: () => setShowCreatePoll(true) },
     ...(isAdmin ? [{ label: '⚙️ Edit', onClick: () => setShowEdit(true) }] : []),
@@ -319,6 +322,13 @@ export default function GroupDetail() {
         </div>
       </div>
 
+      <InviteLinkModal
+        isOpen={showInviteLink}
+        onClose={() => setShowInviteLink(false)}
+        groupId={id}
+        groupName={group?.name}
+        isAdmin={isAdmin}
+      />
       <InviteMemberModal
         isOpen={showInvite}
         onClose={() => { setShowInvite(false); setInviteSuccess(null) }}

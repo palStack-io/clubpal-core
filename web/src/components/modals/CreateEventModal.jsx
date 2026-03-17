@@ -72,10 +72,13 @@ export default function CreateEventModal({
   groupName,
   activityType,
   onCreated,
+  initialTitle,
+  initialLocation,
+  onPollGroup,
 }) {
   const { user } = useAuth()
-  const [title, setTitle] = useState('')
-  const [location, setLocation] = useState('')
+  const [title, setTitle] = useState(initialTitle || '')
+  const [location, setLocation] = useState(initialLocation || '')
   const [scheduledDate, setScheduledDate] = useState('')
   const [scheduledTime, setScheduledTime] = useState('')
   const [notes, setNotes] = useState('')
@@ -189,6 +192,29 @@ export default function CreateEventModal({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Plan Your Pick" size="lg">
+      {/* Selected item chip — shown when pre-filled from Discover */}
+      {initialTitle && (
+        <div style={{
+          background: 'rgba(244,63,94,0.08)',
+          border: '1px solid var(--rose-border)',
+          borderRadius: '12px',
+          padding: '12px 16px',
+          marginBottom: '16px',
+        }}>
+          <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--rose-soft)', textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '4px' }}>
+            Selected
+          </div>
+          <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--t1)', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {initialTitle}
+          </div>
+          {initialLocation && (
+            <div style={{ fontSize: '12px', color: 'var(--t3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              📍 {initialLocation}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Subtitle */}
       {(groupName || resolvedGroupId) && (
         <div style={{ fontSize: '11px', fontWeight: 500, color: 'var(--t3)', marginBottom: '16px', marginTop: '-8px' }}>
@@ -508,6 +534,17 @@ export default function CreateEventModal({
         <Button variant="ghost" onClick={onClose}>
           Cancel
         </Button>
+        {onPollGroup && (
+          <Button
+            variant="ghost"
+            onClick={() => {
+              onClose()
+              onPollGroup({ title: title || initialTitle, activityType: resolvedActivity })
+            }}
+          >
+            💬 Poll Group First
+          </Button>
+        )}
         <Button variant="primary" loading={loading} onClick={handleSubmit}>
           Confirm Pick →
         </Button>

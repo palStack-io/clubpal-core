@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { BookmarkIcon } from '@heroicons/react/24/outline'
 import { BookmarkIcon as BookmarkSolid } from '@heroicons/react/24/solid'
 import AppShell from '../shell/AppShell'
 import BackButton from '../ui/BackButton'
-import PickModal from '../discover/PickModal'
+import CreateEventModal from '../modals/CreateEventModal'
 import CreatePollModal from '../modals/CreatePollModal'
 import { PhotoCarouselImage, CarouselArrow, CarouselDots } from './PhotoCarousel'
 import InfoCard from './InfoCard'
@@ -362,6 +363,7 @@ export default function DetailPage({ type, itemId, data: rawData, extra = {}, lo
   const cfg = TYPE_CONFIG[type] || TYPE_CONFIG.dining
   const data = rawData ? cfg.normalize(rawData, extra) : null
   const { user } = useAuth()
+  const navigate = useNavigate()
 
   const [photoIdx, setPhotoIdx] = useState(0)
   const [saved, setSaved]       = useState(false)
@@ -850,11 +852,13 @@ export default function DetailPage({ type, itemId, data: rawData, extra = {}, lo
 
         {/* Modals */}
         {showPick && (
-          <PickModal
-            title={data.title}
-            location={data.address || null}
+          <CreateEventModal
+            isOpen={true}
+            initialTitle={data.title}
+            initialLocation={data.address || null}
             activityType={cfg.activityType}
             onClose={() => setShowPick(false)}
+            onCreated={(id) => { setShowPick(false); navigate(`/events/${id}`) }}
             onPollGroup={() => { setShowPick(false); setShowPoll(true) }}
           />
         )}

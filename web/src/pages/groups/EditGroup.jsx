@@ -321,15 +321,17 @@ export default function EditGroup() {
                     </FormGroup>
                     <FormGroup label="Expires" style={{ flex: 1, minWidth: '140px' }}>
                       <FormSelect
-                        value={inviteCode.expiry_type === 'days' ? 'days' : 'never'}
+                        value={inviteCode.expiry_type === 'days' ? String(inviteCode.expiry_days || 7) : 'never'}
                         onChange={e => handleUpdateCodeSettings({
-                          expiry_type: e.target.value,
-                          expiry_days: e.target.value === 'days' ? 7 : null,
+                          expiry_type: e.target.value === 'never' ? 'never' : 'days',
+                          expiry_days: e.target.value === 'never' ? null : parseInt(e.target.value),
                         })}
                         disabled={regenerating}
                       >
                         <option value="never">Never</option>
-                        <option value="days">7 days</option>
+                        <option value="1">24 hours</option>
+                        <option value="3">3 days</option>
+                        <option value="7">7 days</option>
                       </FormSelect>
                     </FormGroup>
                   </div>

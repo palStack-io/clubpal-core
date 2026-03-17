@@ -4,7 +4,7 @@ import AppShell from '../../components/shell/AppShell'
 import Topbar from '../../components/shell/Topbar'
 import ActivityPill from '../../components/ui/ActivityPill'
 import ResultCard from '../../components/discover/ResultCard'
-import PickModal from '../../components/discover/PickModal'
+import CreateEventModal from '../../components/modals/CreateEventModal'
 import CreatePollModal from '../../components/modals/CreatePollModal'
 import SearchHero from '../../components/discover/SearchHero'
 import { enrichApi } from '../../api/enrich'
@@ -200,11 +200,13 @@ export default function DiscoverGames() {
       </div>
 
       {pickItem && (
-        <PickModal
-          title={pickItem.title}
-          location={pickItem.location}
+        <CreateEventModal
+          isOpen={true}
+          initialTitle={pickItem.title}
+          initialLocation={pickItem.location}
           activityType="gaming"
           onClose={() => setPickItem(null)}
+          onCreated={(id) => { setPickItem(null); navigate(`/events/${id}`) }}
           onPollGroup={({ title }) => { setPickItem(null); setPollItem({ title, location: null }) }}
         />
       )}

@@ -8,7 +8,7 @@ import ActivityTypePicker from '../../components/groups/ActivityTypePicker'
 import ConfirmDeleteModal from '../../components/modals/ConfirmDeleteModal'
 import { groupsApi } from '../../api/groups'
 
-const JOIN_SITE = 'clubpal.io'
+const JOIN_SITE = 'clubapp.palstack.io'
 
 const ROTATION_TYPE_MAP = { sequential: 'round_robin', random: 'random', manual: 'none' }
 const ROTATION_MODE_MAP = { round_robin: 'sequential', random: 'random', none: 'manual' }

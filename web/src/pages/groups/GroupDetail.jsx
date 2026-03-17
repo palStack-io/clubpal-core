@@ -180,8 +180,6 @@ export default function GroupDetail() {
 
   const heroActions = [
     { label: '🔗 Invite Link', onClick: () => setShowInviteLink(true) },
-    { label: '✉️ Invite', onClick: () => setShowInvite(true) },
-    { label: '💬 Poll', onClick: () => setShowCreatePoll(true) },
     ...(isAdmin ? [{ label: '⚙️ Edit', onClick: () => setShowEdit(true) }] : []),
   ]
 

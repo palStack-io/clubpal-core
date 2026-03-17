@@ -3,7 +3,7 @@ import Modal from '../ui/Modal'
 import Button from '../ui/Button'
 import { groupsApi } from '../../api/groups'
 
-const JOIN_SITE = 'clubpal.io'
+const JOIN_SITE = 'clubapp.palstack.io'
 
 const inputStyle = {
   background: 'var(--s2)',

@@ -1295,21 +1295,27 @@ function DiscoverSection({ user }) {
   const updatePref = (key, val) => setPrefs(p => ({ ...p, [key]: val }))
 
   const toggleActivity = (id) => {
-    setPrefs(p => ({
-      ...p,
-      activities: p.activities.includes(id)
-        ? p.activities.filter(a => a !== id)
-        : [...p.activities, id],
-    }))
+    setPrefs(p => {
+      const current = Array.isArray(p?.activities) ? p.activities : []
+      return {
+        ...p,
+        activities: current.includes(id)
+          ? current.filter(a => a !== id)
+          : [...current, id],
+      }
+    })
   }
 
   const toggleGenre = (field, val) => {
-    setPrefs(p => ({
-      ...p,
-      [field]: p[field].includes(val)
-        ? p[field].filter(v => v !== val)
-        : [...p[field], val],
-    }))
+    setPrefs(p => {
+      const current = Array.isArray(p?.[field]) ? p[field] : []
+      return {
+        ...p,
+        [field]: current.includes(val)
+          ? current.filter(v => v !== val)
+          : [...current, val],
+      }
+    })
   }
 
   const handleAddressChange = (val) => {

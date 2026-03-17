@@ -379,6 +379,14 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(
         except Exception as e:
             logger.error(f"Failed to create recurring schedule for event {event_id}: {e}")
 
+    # Auto-RSVP the creator and host as "going" so the event appears in their list
+    try:
+        upsert_attendee(event_id, creator_id, "going")
+        if host_user_id and host_user_id != creator_id:
+            upsert_attendee(event_id, host_user_id, "going")
+    except Exception as e:
+        logger.warning(f"Could not auto-RSVP creator for event {event_id}: {e}")
+
     event = get_event(event_id)
     return EventResponse(**event)
 

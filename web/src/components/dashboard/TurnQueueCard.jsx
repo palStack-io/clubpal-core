@@ -3,17 +3,31 @@ import { useNavigate } from 'react-router-dom'
 import Card from '../ui/Card'
 import Avatar from '../ui/Avatar'
 import { groupsApi } from '../../api/groups'
+import { gatewayClient } from '../../api/client'
 
 export default function TurnQueueCard({ groups = [], rotations = [], currentUserId, currentUser }) {
   const navigate = useNavigate()
-  // membersMap: { [groupId]: member[] }
+  // membersMap: { [groupId]: member[] } — enriched with profile data
   const [membersMap, setMembersMap] = useState({})
 
   useEffect(() => {
     if (!groups.length) return
     groups.forEach(g => {
       groupsApi.getMembers(g.id)
-        .then(mems => setMembersMap(prev => ({ ...prev, [g.id]: Array.isArray(mems) ? mems : [] })))
+        .then(async mems => {
+          const list = Array.isArray(mems) ? mems : []
+          // Enrich with user profiles (full_name, username, avatar_url)
+          const profiles = await Promise.all(
+            list.map(m =>
+              gatewayClient.get(`/users/${m.user_id}/profile`)
+                .then(r => r.data)
+                .catch(() => ({ id: m.user_id }))
+            )
+          )
+          const profileMap = Object.fromEntries(profiles.map(p => [p.id, p]))
+          const enriched = list.map(m => ({ ...m, ...profileMap[m.user_id] }))
+          setMembersMap(prev => ({ ...prev, [g.id]: enriched }))
+        })
         .catch(() => {})
     })
   }, [groups.map(g => g.id).join(',')])

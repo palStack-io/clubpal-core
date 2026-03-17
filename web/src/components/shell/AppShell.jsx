@@ -28,6 +28,23 @@ export default function AppShell({ children, activeRoute, user: userProp, groupC
           minHeight: '100vh',
         }}
       >
+        {/* Beta banner */}
+        <div style={{
+          background: 'rgba(99,102,241,0.10)',
+          borderBottom: '1px solid rgba(99,102,241,0.20)',
+          padding: '7px 16px',
+          textAlign: 'center',
+          fontSize: '12px',
+          color: 'var(--t2)',
+        }}>
+          🚧 ClubPal is in beta — for feedback or issues, email{' '}
+          <a
+            href="mailto:support@palstack.io"
+            style={{ color: '#818cf8', fontWeight: 600, textDecoration: 'none' }}
+          >
+            support@palstack.io
+          </a>
+        </div>
         {children}
         {/* Footer */}
         <div style={{

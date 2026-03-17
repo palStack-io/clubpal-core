@@ -248,17 +248,18 @@ def get_recurring_schedule_by_id(schedule_id: int):
 def create_event(group_id: int, activity_id: Optional[int], title: str, scheduled_date,
                 created_by: int, host_user_id: int, description: str = None,
                 location: str = None, rsvp_deadline=None, parent_recurring_id: int = None,
-                activity_type: str = None, max_attendees: int = None) -> int:
+                activity_type: str = None, max_attendees: int = None,
+                cover_url: str = None) -> int:
     """Create a new event."""
     conn = get_db()
     cursor = conn.cursor()
 
     cursor.execute(
         """INSERT INTO events (group_id, activity_id, activity_type, title, description, scheduled_date,
-                              location, host_user_id, created_by, rsvp_deadline, parent_recurring_id, max_attendees)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                              location, host_user_id, created_by, rsvp_deadline, parent_recurring_id, max_attendees, cover_url)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
         (group_id, activity_id, activity_type, title, description, scheduled_date, location,
-         host_user_id, created_by, rsvp_deadline, parent_recurring_id, max_attendees)
+         host_user_id, created_by, rsvp_deadline, parent_recurring_id, max_attendees, cover_url)
     )
 
     event_id = cursor.fetchone()['id']

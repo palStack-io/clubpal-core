@@ -856,6 +856,7 @@ export default function DetailPage({ type, itemId, data: rawData, extra = {}, lo
             isOpen={true}
             initialTitle={data.title}
             initialLocation={data.address || null}
+            initialImageUrl={data.photos?.[0] || null}
             activityType={cfg.activityType}
             onClose={() => setShowPick(false)}
             onCreated={(id) => { setShowPick(false); navigate(`/events/${id}`) }}

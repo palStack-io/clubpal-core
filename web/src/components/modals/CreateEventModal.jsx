@@ -74,6 +74,7 @@ export default function CreateEventModal({
   onCreated,
   initialTitle,
   initialLocation,
+  initialImageUrl,
   onPollGroup,
 }) {
   const { user } = useAuth()
@@ -86,7 +87,9 @@ export default function CreateEventModal({
   const [selectedActivity, setSelectedActivity] = useState(activityType || '')
   const [userGroups, setUserGroups] = useState([])
   const [coverFile, setCoverFile] = useState(null)
-  const [coverPreview, setCoverPreview] = useState(null)
+  // Pre-populate with discover item's first photo; user can override by picking a file
+  const [coverPreview, setCoverPreview] = useState(initialImageUrl || null)
+  const [coverUrlOverride, setCoverUrlOverride] = useState(initialImageUrl || null)
   const [maxAttendees, setMaxAttendees] = useState('')
   const [pulseCheck, setPulseCheck] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -118,6 +121,7 @@ export default function CreateEventModal({
     if (!file) return
     setCoverFile(file)
     setCoverPreview(URL.createObjectURL(file))
+    setCoverUrlOverride(null) // user chose a file — discard the discover image URL
     e.target.value = ''
   }
 
@@ -152,6 +156,8 @@ export default function CreateEventModal({
         activity_type: resolvedActivity || null,
         rsvp_deadline: rsvpDeadlineISO,
         max_attendees: maxAttendees ? parseInt(maxAttendees, 10) : null,
+        // Pass discover item image as default banner (user may have kept or cleared it)
+        banner_url: coverUrlOverride || null,
         ...(isRecurring && recurrence.end_date ? {
           is_recurring: true,
           recurrence_rule: recurrence.rule,
@@ -160,7 +166,7 @@ export default function CreateEventModal({
           recurrence_end_date: recurrence.end_date,
         } : {}),
       })
-      // Upload cover if selected
+      // Upload cover file if user picked one (overrides the discover image)
       if (coverFile) {
         try {
           const urlData = await eventsApi.getCoverUploadUrl(event.id, coverFile.name, coverFile.type)
@@ -469,7 +475,12 @@ export default function CreateEventModal({
         {coverPreview ? (
           <div style={{ position: 'relative', height: '120px', borderRadius: '10px', overflow: 'hidden', cursor: 'pointer' }} onClick={() => coverRef.current?.click()}>
             <img src={coverPreview} alt="Cover" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-            <button onClick={e => { e.stopPropagation(); setCoverFile(null); setCoverPreview(null) }}
+            {coverUrlOverride && !coverFile && (
+              <div style={{ position: 'absolute', bottom: '6px', left: '8px', background: 'rgba(0,0,0,0.6)', borderRadius: '6px', padding: '2px 7px', fontSize: '10px', color: 'rgba(255,255,255,0.85)', pointerEvents: 'none' }}>
+                Auto-filled from item · click to replace
+              </div>
+            )}
+            <button onClick={e => { e.stopPropagation(); setCoverFile(null); setCoverPreview(null); setCoverUrlOverride(null) }}
               style={{ position: 'absolute', top: '6px', right: '6px', width: '22px', height: '22px', borderRadius: '50%', background: 'rgba(0,0,0,0.6)', border: 'none', color: '#fff', fontSize: '13px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>×</button>
           </div>
         ) : (

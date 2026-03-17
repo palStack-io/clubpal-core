@@ -24,6 +24,8 @@ class EventCreate(BaseModel):
     created_by: Optional[int] = None    # Passed explicitly from web UI
     rsvp_deadline: Optional[datetime] = None
     max_attendees: Optional[int] = Field(None, ge=1)
+    # Pre-populated banner from discover item (restaurant photo, movie backdrop, etc.)
+    banner_url: Optional[str] = None
     # Link to an existing recurring schedule (poll → recurring event conversion)
     parent_recurring_id: Optional[int] = None
     # Recurring fields (only used when is_recurring=True)

@@ -1,9 +1,23 @@
 import { useState, useRef } from 'react'
 import { billSplitApi } from '../../api/billSplit'
+import { eventsApi } from '../../api/events'
 import Card from '../ui/Card'
 import Button from '../ui/Button'
 
-export default function ReceiptUpload({ onOCRComplete, onManualEntry, onBack }) {
+async function uploadReceiptAsEventPhoto(eventId, file) {
+  const { upload_url, public_url, object_name } = await eventsApi.getPhotoUploadUrl(
+    eventId, file.name, file.type
+  )
+  const res = await fetch(upload_url, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.type },
+    body: file,
+  })
+  if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
+  await eventsApi.confirmPhoto(eventId, { object_key: object_name, public_url })
+}
+
+export default function ReceiptUpload({ eventId, onOCRComplete, onManualEntry, onBack }) {
   const [dragOver, setDragOver] = useState(false)
   const [preview, setPreview] = useState(null)
   const [uploading, setUploading] = useState(false)
@@ -27,7 +41,10 @@ export default function ReceiptUpload({ onOCRComplete, onManualEntry, onBack }) 
     })
     setUploading(true)
     try {
-      const result = await billSplitApi.uploadReceipt(file)
+      const [result] = await Promise.all([
+        billSplitApi.uploadReceipt(file),
+        eventId ? uploadReceiptAsEventPhoto(eventId, file).catch(() => {}) : Promise.resolve(),
+      ])
       onOCRComplete(result)
     } catch (e) {
       setError('Scan failed — you can enter items manually below.')

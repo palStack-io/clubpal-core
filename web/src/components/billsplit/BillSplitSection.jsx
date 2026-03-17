@@ -90,6 +90,7 @@ export default function BillSplitSection({ event, attendees, currentUser }) {
 
   if (step === 'upload') return (
     <ReceiptUpload
+      eventId={event.id}
       onOCRComplete={handleOCRComplete}
       onManualEntry={handleManualEntry}
       onBack={() => setStep('cta')}

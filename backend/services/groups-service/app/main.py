@@ -327,6 +327,21 @@ async def advance_rotation_endpoint(group_id: int, user_id: int = Depends(get_cu
     return RotationTurnResponse(**result)
 
 
+@app.post("/groups/{group_id}/rotation/complete-turn", response_model=RotationTurnResponse)
+async def complete_turn_endpoint(group_id: int, user_id: int = Depends(get_current_user_id)):
+    """Called by the current picker after creating an event — advances to the next person."""
+    state = get_rotation_state(group_id)
+    if not state:
+        raise HTTPException(status_code=404, detail="Rotation state not found")
+    if str(state.get("current_user_id")) != str(user_id):
+        raise HTTPException(status_code=403, detail="Not your turn")
+
+    result = advance_rotation(group_id)
+    if not result:
+        raise HTTPException(status_code=404, detail="Group not found or has no members")
+    return RotationTurnResponse(**result)
+
+
 @app.post("/groups/{group_id}/rotation/reset", response_model=RotationTurnResponse)
 async def reset_rotation_endpoint(group_id: int, user_id: int = Depends(get_current_user_id)):
     """Reset rotation to the first member."""

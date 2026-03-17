@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { groupsApi } from '../../api/groups'
 
 const ACTIVITY_MAP = {
   dining:       { emoji: '🍽️', label: 'a restaurant',  route: '/discover/restaurants' },
@@ -15,7 +16,7 @@ const ACTIVITY_MAP = {
   arts_culture: { emoji: '🎨', label: 'an arts outing', route: '/discover/arts' },
 }
 
-export default function PickCTACard({ turn, groupId, onSkip }) {
+export default function PickCTACard({ turn, groupId, onSkip, onAlreadyPicked }) {
   const navigate = useNavigate()
   if (!turn) return null
 
@@ -108,6 +109,15 @@ export default function PickCTACard({ turn, groupId, onSkip }) {
             Skip turn
           </button>
         )}
+        <button
+          onClick={onAlreadyPicked}
+          style={{
+            fontSize: '10px', fontWeight: 600, color: 'var(--t3)',
+            background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0',
+          }}
+        >
+          Already picked ✓
+        </button>
       </div>
     </div>
   )

@@ -254,6 +254,7 @@ export default function Dashboard() {
                   turn={activeTurn}
                   groupId={primaryGroupId}
                   onSkip={() => groupsApi.skipRotation(primaryGroupId).then(load)}
+                  onAlreadyPicked={() => groupsApi.completeTurn(primaryGroupId).then(load).catch(load)}
                 />
               ) : !loading && (
                 <div style={{

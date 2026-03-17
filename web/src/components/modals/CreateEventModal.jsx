@@ -179,6 +179,10 @@ export default function CreateEventModal({
           note: notes.trim() || null,
         }).catch(() => {})
       }
+      // Advance rotation if it was the user's turn — silently ignore errors
+      if (resolvedGroupId) {
+        groupsApi.completeTurn(resolvedGroupId).catch(() => {})
+      }
       onCreated && onCreated(event.id)
     } catch (err) {
       setError(err?.response?.data?.detail || 'Failed to create event. Please try again.')

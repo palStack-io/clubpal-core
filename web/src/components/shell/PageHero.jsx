@@ -1,3 +1,5 @@
+import ThemeToggle from '../ui/ThemeToggle'
+
 export default function PageHero({ title, subtitle, label, notifCount = 0, hasStats = false, children }) {
   return (
     <div
@@ -71,6 +73,8 @@ export default function PageHero({ title, subtitle, label, notifCount = 0, hasSt
             </div>
           </>
         )}
+
+        <ThemeToggle />
 
         {/* Notification bell */}
         <div style={{ position: 'relative', display: 'inline-flex', flexShrink: 0 }}>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
 import Avatar from '../ui/Avatar'
@@ -171,6 +171,53 @@ function MemberManageRow({ member, canManage, onRoleChange, onRemove }) {
 }
 
 // ── Main component ───────────────────────────────────────────────────────────
+// ── Drag-and-drop turn order ──────────────────────────────────────────────────
+function TurnOrderRow({ member, index, isDragging, onDragStart, onDragOver, onDragEnd }) {
+  return (
+    <div
+      draggable
+      onDragStart={() => onDragStart(index)}
+      onDragOver={(e) => { e.preventDefault(); onDragOver(index) }}
+      onDragEnd={onDragEnd}
+      style={{
+        display: 'flex', alignItems: 'center', gap: '10px',
+        padding: '9px 12px',
+        background: isDragging ? 'var(--rose-glow)' : 'var(--s2)',
+        borderRadius: '10px',
+        border: `1px solid ${isDragging ? 'var(--rose-border)' : 'var(--glass)'}`,
+        marginBottom: '6px',
+        cursor: 'grab',
+        opacity: isDragging ? 0.7 : 1,
+        transition: 'background 0.1s, border-color 0.1s',
+        userSelect: 'none',
+      }}
+    >
+      {/* Position */}
+      <div style={{
+        width: '20px', height: '20px', borderRadius: '50%', flexShrink: 0,
+        background: index === 0 ? 'var(--rose)' : 'var(--s4)',
+        color: index === 0 ? '#fff' : 'var(--t3)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: '10px', fontWeight: 700,
+        boxShadow: index === 0 ? '0 0 8px rgba(244,63,94,0.4)' : 'none',
+      }}>
+        {index + 1}
+      </div>
+      <Avatar user={member} size="sm" />
+      <span style={{ flex: 1, fontSize: '13px', fontWeight: 600, color: 'var(--t1)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        {member.full_name || member.username || `User #${member.user_id}`}
+      </span>
+      {index === 0 && (
+        <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--rose-soft)', background: 'var(--rose-glow)', padding: '2px 7px', borderRadius: '100px', flexShrink: 0 }}>
+          Picks first
+        </span>
+      )}
+      {/* Drag handle */}
+      <span style={{ color: 'var(--t4)', fontSize: '16px', cursor: 'grab', flexShrink: 0 }}>⠿</span>
+    </div>
+  )
+}
+
 export default function EditGroupModal({
   isOpen,
   onClose,
@@ -188,6 +235,8 @@ export default function EditGroupModal({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState(false)
+  const [memberOrder, setMemberOrder] = useState([])
+  const dragIndexRef = useRef(null)
   const fileRef = useRef()
 
   // Pre-populate on open
@@ -207,6 +256,27 @@ export default function EditGroupModal({
       setDeleteConfirm(false)
     }
   }, [group, isOpen])
+
+  // Initialise turn order from members sorted by rotation_order
+  useEffect(() => {
+    if (isOpen && members.length > 0) {
+      setMemberOrder([...members].sort((a, b) => (a.rotation_order ?? 999) - (b.rotation_order ?? 999)))
+    }
+  }, [isOpen, members])
+
+  // Drag handlers
+  const handleDragStart = useCallback((index) => { dragIndexRef.current = index }, [])
+  const handleDragOver = useCallback((index) => {
+    if (dragIndexRef.current === null || dragIndexRef.current === index) return
+    setMemberOrder(prev => {
+      const copy = [...prev]
+      const [item] = copy.splice(dragIndexRef.current, 1)
+      copy.splice(index, 0, item)
+      dragIndexRef.current = index
+      return copy
+    })
+  }, [])
+  const handleDragEnd = useCallback(() => { dragIndexRef.current = null }, [])
 
   const setField = (key, val) => setForm(f => ({ ...f, [key]: val }))
 
@@ -292,6 +362,10 @@ export default function EditGroupModal({
         bg_value: form.bg_value,
         bg_scope: form.bg_scope,
       })
+      // Persist turn order when sequential
+      if (form.rotation_mode === 'sequential' && memberOrder.length > 0) {
+        await groupsApi.reorderRotation(group.id, memberOrder.map(m => m.user_id))
+      }
       onSaved?.()
       onClose()
     } catch (err) {
@@ -369,7 +443,28 @@ export default function EditGroupModal({
         </div>
       </div>
 
-      {/* Section 2 – Background */}
+      {/* Section 2 – Turn Order (sequential only) */}
+      {form.rotation_mode === 'sequential' && memberOrder.length > 0 && (
+        <div style={sectionStyle}>
+          <div style={sectionTitleStyle}>Turn Order</div>
+          <p style={{ fontSize: '11px', color: 'var(--t3)', marginBottom: '12px', marginTop: '-8px' }}>
+            Drag to reorder — the top member picks first.
+          </p>
+          {memberOrder.map((member, index) => (
+            <TurnOrderRow
+              key={member.user_id}
+              member={member}
+              index={index}
+              isDragging={dragIndexRef.current === index}
+              onDragStart={handleDragStart}
+              onDragOver={handleDragOver}
+              onDragEnd={handleDragEnd}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Section 3 – Background */}
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Background</div>
         <BackgroundPicker
@@ -382,7 +477,7 @@ export default function EditGroupModal({
         />
       </div>
 
-      {/* Section 3 – Activity Type */}
+      {/* Section 4 – Activity Type */}
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Activity Type</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
@@ -410,7 +505,7 @@ export default function EditGroupModal({
         </div>
       </div>
 
-      {/* Section 4 – Members */}
+      {/* Section 5 – Members */}
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Members ({members.length})</div>
         {members.map(m => (
@@ -438,7 +533,7 @@ export default function EditGroupModal({
         </div>
       </div>
 
-      {/* Section 5 – Danger Zone */}
+      {/* Section 6 – Danger Zone */}
       <div style={{
         background: 'rgba(248,113,113,0.05)',
         border: '1px solid rgba(248,113,113,0.15)',

@@ -220,6 +220,34 @@
   transition: background 0.15s, border-color 0.15s;
 }
 
+/* Sidebar scrollbar — themed to match rose design system */
+.cp-sidebar-nav {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(244, 63, 94, 0.22) transparent;
+}
+.cp-sidebar-nav::-webkit-scrollbar {
+  width: 4px;
+}
+.cp-sidebar-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+.cp-sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(244, 63, 94, 0.22);
+  border-radius: 999px;
+}
+.cp-sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(244, 63, 94, 0.45);
+}
+.dark .cp-sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(244, 63, 94, 0.18);
+}
+.dark .cp-sidebar-nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(244, 63, 94, 0.40);
+}
+.dark .cp-sidebar-nav {
+  scrollbar-color: rgba(244, 63, 94, 0.18) transparent;
+}
+
 .cp-topbar {
   height: 56px;
   padding: 0 24px;

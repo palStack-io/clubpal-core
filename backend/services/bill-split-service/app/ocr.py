@@ -109,21 +109,41 @@ def parse_receipt_text(text: str) -> dict:
     tax = 0.0
     tip = 0.0
 
+    # Merge continuation lines: lines that start with à/@/x or a bare price
+    # (e.g. Vision sometimes splits "Item Name\nà 4.50  9.00" across two lines)
+    continuation_re = re.compile(r'^[\s]*([àx@]|\d+\.\d{2})', re.IGNORECASE)
+    merged: list[str] = []
+    for line in lines:
+        if merged and continuation_re.match(line.strip()):
+            merged[-1] = merged[-1].rstrip() + ' ' + line.strip()
+        else:
+            merged.append(line)
+    lines = merged
+
+    # Find ALL dollar amounts on a line — the LAST one is the line total
     amount_re = re.compile(r'\$?\s*(\d+\.\d{2})')
     skip_kw = {
         "subtotal", "sub total", "total", "balance", "change",
         "cash", "credit", "amount due",
     }
-    tax_kw = {"tax", "vat", "gst", "hst", "pst"}
+    tax_kw = {"tax", "vat", "gst", "hst", "pst", "mwst"}
     tip_kw = {"tip", "gratuity", "service charge", "service fee"}
 
     for line in lines:
         ll = line.lower().strip()
-        m = amount_re.search(line)
-        if not m:
+        matches = list(amount_re.finditer(line))
+        if not matches:
             continue
-        amount = float(m.group(1))
-        name = line[: m.start()].strip().rstrip(".:").strip()
+
+        # Use the LAST amount on the line as the price (line total, not unit price)
+        last_match = matches[-1]
+        amount = float(last_match.group(1))
+
+        # For tax lines that have multiple amounts (e.g. "MwSt 54.50 CHF: 3.85"),
+        # the actual tax is the last (smallest) amount
+        name = line[: matches[0].start()].strip().rstrip(".:,àx@ ").strip()
+        # Clean trailing unit-price separators like "à", "@", "x"
+        name = re.sub(r'\s+[àx@]\s*$', '', name, flags=re.IGNORECASE).strip()
 
         if any(k in ll for k in tax_kw):
             tax = amount

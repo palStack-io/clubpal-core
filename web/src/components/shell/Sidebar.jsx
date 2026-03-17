@@ -95,7 +95,7 @@ export default function Sidebar({ user: userProp, groupCount = 0, notifCount = 0
       </div>
 
       {/* Nav */}
-      <nav style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
+      <nav className="cp-sidebar-nav" style={{ flex: 1, padding: '10px', overflowY: 'auto' }}>
         {/* Main */}
         <div className="cp-nav-label">Main</div>
         {MAIN_NAV.map(item => (

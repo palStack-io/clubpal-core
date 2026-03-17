@@ -185,7 +185,7 @@ function MemberRow({ member, canManage, currentUserId, onRoleChange, onRemove, t
               borderRadius: '100px',
             }}
           >
-            Now
+            Your turn
           </span>
         )}
         {(member.role === 'owner' || member.role === 'admin') && (

@@ -315,6 +315,7 @@ export default function Dashboard() {
                 groups={groups}
                 rotations={allRotations}
                 currentUserId={user?.id}
+                currentUser={user}
               />
             </div>
             {/* 4. Upcoming events — under turn queue */}

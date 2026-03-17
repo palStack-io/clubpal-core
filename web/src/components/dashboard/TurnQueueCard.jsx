@@ -4,7 +4,7 @@ import Card from '../ui/Card'
 import Avatar from '../ui/Avatar'
 import { groupsApi } from '../../api/groups'
 
-export default function TurnQueueCard({ groups = [], rotations = [], currentUserId }) {
+export default function TurnQueueCard({ groups = [], rotations = [], currentUserId, currentUser }) {
   const navigate = useNavigate()
   // membersMap: { [groupId]: member[] }
   const [membersMap, setMembersMap] = useState({})
@@ -55,7 +55,7 @@ export default function TurnQueueCard({ groups = [], rotations = [], currentUser
                 onMouseLeave={e => e.currentTarget.style.opacity = '1'}
               >
                 <Avatar
-                  user={picker || { username: '?' }}
+                  user={isYou ? (currentUser || picker) : (picker || {})}
                   size="sm"
                 />
                 <div style={{ flex: 1, minWidth: 0 }}>

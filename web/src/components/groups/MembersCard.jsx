@@ -71,18 +71,7 @@ function ContextMenu({ member, onRoleChange, onRemove, onClose }) {
       {member.role === 'member' && (
         <button
           onClick={() => { onRoleChange(member.user_id, 'admin'); onClose() }}
-          style={{
-            display: 'block',
-            width: '100%',
-            textAlign: 'left',
-            padding: '10px 14px',
-            fontSize: '12px',
-            fontWeight: 500,
-            color: 'var(--t2)',
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-          }}
+          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', fontSize: '12px', fontWeight: 500, color: 'var(--t2)', background: 'transparent', border: 'none', cursor: 'pointer' }}
           onMouseEnter={e => e.currentTarget.style.background = 'var(--glass)'}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         >
@@ -92,41 +81,17 @@ function ContextMenu({ member, onRoleChange, onRemove, onClose }) {
       {member.role === 'admin' && (
         <button
           onClick={() => { onRoleChange(member.user_id, 'member'); onClose() }}
-          style={{
-            display: 'block',
-            width: '100%',
-            textAlign: 'left',
-            padding: '10px 14px',
-            fontSize: '12px',
-            fontWeight: 500,
-            color: 'var(--t2)',
-            background: 'transparent',
-            border: 'none',
-            cursor: 'pointer',
-          }}
+          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', fontSize: '12px', fontWeight: 500, color: 'var(--t2)', background: 'transparent', border: 'none', cursor: 'pointer' }}
           onMouseEnter={e => e.currentTarget.style.background = 'var(--glass)'}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
         >
           Make Member
         </button>
       )}
-
-      <div style={{ height: '1px', background: 'var(--glass)', margin: '0' }} />
-
+      <div style={{ height: '1px', background: 'var(--glass)' }} />
       <button
         onClick={() => { onRemove(member.user_id); onClose() }}
-        style={{
-          display: 'block',
-          width: '100%',
-          textAlign: 'left',
-          padding: '10px 14px',
-          fontSize: '12px',
-          fontWeight: 500,
-          color: '#f87171',
-          background: 'transparent',
-          border: 'none',
-          cursor: 'pointer',
-        }}
+        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', fontSize: '12px', fontWeight: 500, color: '#f87171', background: 'transparent', border: 'none', cursor: 'pointer' }}
         onMouseEnter={e => e.currentTarget.style.background = 'rgba(248,113,113,0.06)'}
         onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
       >
@@ -136,7 +101,7 @@ function ContextMenu({ member, onRoleChange, onRemove, onClose }) {
   )
 }
 
-function MemberRow({ member, canManage, currentUserId, onRoleChange, onRemove }) {
+function MemberRow({ member, canManage, currentUserId, onRoleChange, onRemove, turnPosition, isCurrent }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const isCurrentUser = member.user_id === currentUserId
 
@@ -145,12 +110,38 @@ function MemberRow({ member, canManage, currentUserId, onRoleChange, onRemove })
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: '12px',
+        gap: '10px',
         padding: '10px 0',
         borderBottom: '1px solid rgba(255,255,255,0.04)',
         position: 'relative',
+        background: isCurrent ? 'rgba(244,63,94,0.04)' : 'transparent',
+        borderRadius: isCurrent ? '8px' : 0,
+        margin: isCurrent ? '2px -4px' : 0,
+        padding: isCurrent ? '10px 4px' : '10px 0',
       }}
     >
+      {/* Turn position circle */}
+      {turnPosition != null && (
+        <div
+          style={{
+            width: '20px',
+            height: '20px',
+            borderRadius: '50%',
+            background: isCurrent ? 'var(--rose)' : 'var(--s4)',
+            color: isCurrent ? '#fff' : 'var(--t4)',
+            fontSize: '10px',
+            fontWeight: 700,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+            boxShadow: isCurrent ? '0 0 8px rgba(244,63,94,0.4)' : 'none',
+          }}
+        >
+          {turnPosition}
+        </div>
+      )}
+
       {/* Avatar */}
       <Avatar
         user={{ full_name: member.full_name, username: member.username, avatar_url: member.avatar_url }}
@@ -181,43 +172,57 @@ function MemberRow({ member, canManage, currentUserId, onRoleChange, onRemove })
         </div>
       </div>
 
-      {/* Role badge */}
-      {(member.role === 'owner' || member.role === 'admin') && (
-        <RoleBadge role={member.role} />
-      )}
-
-      {/* Context menu trigger */}
-      {canManage && !isCurrentUser && (
-        <div style={{ position: 'relative' }}>
-          <button
-            onClick={() => setMenuOpen(v => !v)}
+      {/* Badges row */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+        {isCurrent && (
+          <span
             style={{
-              width: '28px',
-              height: '28px',
-              background: 'var(--s3)',
-              border: '1px solid var(--glass)',
-              borderRadius: '8px',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: '14px',
-              color: 'var(--t3)',
-              flexShrink: 0,
+              fontSize: '10px',
+              fontWeight: 700,
+              color: 'var(--rose-soft)',
+              background: 'rgba(244,63,94,0.12)',
+              padding: '2px 7px',
+              borderRadius: '100px',
             }}
           >
-            ⋯
-          </button>
-          {menuOpen && (
-            <ContextMenu
-              member={member}
-              onRoleChange={onRoleChange}
-              onRemove={onRemove}
-              onClose={() => setMenuOpen(false)}
-            />
-          )}
-        </div>
-      )}
+            Now
+          </span>
+        )}
+        {(member.role === 'owner' || member.role === 'admin') && (
+          <RoleBadge role={member.role} />
+        )}
+        {canManage && !isCurrentUser && (
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setMenuOpen(v => !v)}
+              style={{
+                width: '28px',
+                height: '28px',
+                background: 'var(--s3)',
+                border: '1px solid var(--glass)',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '14px',
+                color: 'var(--t3)',
+                flexShrink: 0,
+              }}
+            >
+              ⋯
+            </button>
+            {menuOpen && (
+              <ContextMenu
+                member={member}
+                onRoleChange={onRoleChange}
+                onRemove={onRemove}
+                onClose={() => setMenuOpen(false)}
+              />
+            )}
+          </div>
+        )}
+      </div>
     </div>
   )
 }
@@ -269,8 +274,26 @@ function PendingInviteRow({ email }) {
   )
 }
 
-export default function MembersCard({ members = [], pendingInvites = [], canManage, currentUserId, onRoleChange, onRemove, onInvite }) {
+export default function MembersCard({ members = [], pendingInvites = [], canManage, currentUserId, onRoleChange, onRemove, onInvite, rotation }) {
   const totalCount = members.length + pendingInvites.length
+  const hasRotation = !!(rotation?.current_user_id)
+
+  // Sort by rotation_order when rotation is active
+  const sortedMembers = hasRotation
+    ? [...members].sort((a, b) => (a.rotation_order ?? 9999) - (b.rotation_order ?? 9999))
+    : members
+
+  // Assign 1-based positions only to members that have a rotation_order
+  const rotationPositions = {}
+  if (hasRotation) {
+    let pos = 1
+    sortedMembers.forEach(m => {
+      if (m.rotation_order != null) {
+        rotationPositions[m.user_id] = pos++
+      }
+    })
+  }
+
   const headerAction = (
     <button
       onClick={onInvite}
@@ -291,18 +314,28 @@ export default function MembersCard({ members = [], pendingInvites = [], canMana
 
   return (
     <Card style={{ overflow: 'visible' }}>
-      <Card.Header title={`Members (${totalCount})`} action={headerAction} />
+      <Card.Header
+        title={`Members (${totalCount})`}
+        action={headerAction}
+      />
+      {hasRotation && (
+        <div style={{ padding: '6px 16px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+          <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
+            🔄 Turn order active
+          </span>
+        </div>
+      )}
       <Card.Body style={{ overflow: 'visible' }}>
-        {members.length === 0 && pendingInvites.length === 0 ? (
+        {sortedMembers.length === 0 && pendingInvites.length === 0 ? (
           <div style={{ fontSize: '12px', color: 'var(--t3)', textAlign: 'center', padding: '16px' }}>
             No members yet
           </div>
         ) : (
           <div>
-            {members.map((member, i) => (
+            {sortedMembers.map((member, i) => (
               <div
                 key={member.user_id}
-                style={(i === members.length - 1 && pendingInvites.length === 0) ? { borderBottom: 'none' } : {}}
+                style={(i === sortedMembers.length - 1 && pendingInvites.length === 0) ? { borderBottom: 'none' } : {}}
               >
                 <MemberRow
                   member={member}
@@ -310,6 +343,8 @@ export default function MembersCard({ members = [], pendingInvites = [], canMana
                   currentUserId={currentUserId}
                   onRoleChange={onRoleChange}
                   onRemove={onRemove}
+                  turnPosition={hasRotation ? (rotationPositions[member.user_id] ?? null) : null}
+                  isCurrent={hasRotation && member.user_id === rotation.current_user_id}
                 />
               </div>
             ))}

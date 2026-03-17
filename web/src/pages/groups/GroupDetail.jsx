@@ -5,7 +5,6 @@ import AppShell from '../../components/shell/AppShell'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import GroupHeroCard from '../../components/groups/GroupHeroCard'
 import GroupEventsCard from '../../components/groups/GroupEventsCard'
-import RotationQueueCard from '../../components/groups/RotationQueueCard'
 import MembersCard from '../../components/groups/MembersCard'
 import CommentsCard from '../../components/events/CommentsCard'
 import AnimatedBackground from '../../components/ui/AnimatedBackground'
@@ -306,10 +305,6 @@ export default function GroupDetail() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <RotationQueueCard
-              rotation={rotation ? { ...rotation, members } : null}
-              currentUserId={user?.id}
-            />
             <MembersCard
               members={members}
               pendingInvites={pendingInvites}
@@ -318,6 +313,7 @@ export default function GroupDetail() {
               onRoleChange={handleRoleChange}
               onRemove={uid => setRemoveTarget(uid)}
               onInvite={() => setShowInvite(true)}
+              rotation={rotation}
             />
           </div>
         </div>

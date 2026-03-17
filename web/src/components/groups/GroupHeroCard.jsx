@@ -22,7 +22,7 @@ export default function GroupHeroCard({ group, members = [], rotation, currentUs
     : null
   const isMyTurn = rotation?.current_user_id === currentUserId
 
-  const avatarUsers = members.map(m => ({ id: m.user_id, full_name: m.full_name, avatar_url: m.avatar_url }))
+  const avatarUsers = members.map(m => ({ id: m.user_id, full_name: m.full_name, username: m.username, avatar_url: m.avatar_url }))
 
   const btnStyle = {
     display: 'inline-flex',

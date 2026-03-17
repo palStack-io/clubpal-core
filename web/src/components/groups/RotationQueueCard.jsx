@@ -39,7 +39,7 @@ function QueueItem({ member, position, isYou, isCurrent }) {
 
       {/* Avatar */}
       <Avatar
-        user={{ full_name: member.full_name, avatar_url: member.avatar_url }}
+        user={{ full_name: member.full_name, username: member.username, avatar_url: member.avatar_url }}
         size="sm"
       />
 

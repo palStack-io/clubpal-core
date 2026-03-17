@@ -162,7 +162,7 @@ export default function GroupCard({ group, currentUserId }) {
 
       {/* Footer */}
       <div style={{ padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <AvatarStack users={members.map(m => ({ id: m.user_id, full_name: m.full_name, avatar_url: m.avatar_url }))} maxVisible={3} size="sm" />
+        <AvatarStack users={members.map(m => ({ id: m.user_id, full_name: m.full_name, username: m.username, avatar_url: m.avatar_url }))} maxVisible={3} size="sm" />
         <span
           style={{ fontSize: '11px', fontWeight: 600, color: meta.color, cursor: 'pointer' }}
         >

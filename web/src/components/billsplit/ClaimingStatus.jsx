@@ -79,7 +79,7 @@ export default function ClaimingStatus({ splitId, claimUrl, currentUser, onFinal
         <div style={{ marginBottom: 16 }}>
           {status?.members.map(m => (
             <div key={m.user_id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid var(--sidebar-border)' }}>
-              <Avatar user={{ full_name: m.full_name, avatar_url: m.avatar_url }} size="sm" />
+              <Avatar user={{ full_name: m.full_name, username: m.username, avatar_url: m.avatar_url }} size="sm" />
               <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: 'var(--t1)' }}>{m.full_name}</span>
               {m.submitted ? (
                 <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)', background: 'rgba(34,211,160,0.1)', padding: '2px 8px', borderRadius: 6 }}>

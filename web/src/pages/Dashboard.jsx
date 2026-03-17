@@ -50,6 +50,7 @@ export default function Dashboard() {
   const [groups, setGroups] = useState([])
   const [events, setEvents] = useState([])
   const [rotation, setRotation] = useState(null)
+  const [allRotations, setAllRotations] = useState([])
   const [primaryGroupId, setPrimaryGroupId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [pendingPolls, setPendingPolls] = useState([])
@@ -81,9 +82,9 @@ export default function Dashboard() {
       const upcoming = e.filter(ev => ev.status === 'scheduled' || ev.status === 'in_progress')
       setEvents(upcoming)
 
-      // Events where user hasn't responded yet
+      // Events where user hasn't responded yet (include maybe — they haven't committed)
       setRsvpNeeded(upcoming.filter(ev =>
-        !ev.my_rsvp_status || ev.my_rsvp_status === 'pending'
+        !ev.my_rsvp_status || ev.my_rsvp_status === 'pending' || ev.my_rsvp_status === 'maybe'
       ))
 
       // Check ALL groups for whose turn it is — use the first group where it's your turn
@@ -91,7 +92,8 @@ export default function Dashboard() {
         const rotations = await Promise.all(
           g.map(grp => groupsApi.getRotation(grp.id).catch(() => null))
         )
-        const myTurnIdx = rotations.findIndex(r => r?.current_user_id === user?.id)
+        setAllRotations(rotations)
+        const myTurnIdx = rotations.findIndex(r => String(r?.user_id) === String(user?.id))
         const activeIdx = myTurnIdx >= 0 ? myTurnIdx : 0
         setRotation(rotations[activeIdx])
         setPrimaryGroupId(g[activeIdx].id)
@@ -167,7 +169,7 @@ export default function Dashboard() {
   }
 
   const activeTurn =
-    rotation?.current_user_id === user?.id && primaryGroupId
+    String(rotation?.user_id) === String(user?.id) && primaryGroupId
       ? {
           groupId: primaryGroupId,
           groupName: groups.find(g => g.id === primaryGroupId)?.name || 'Your Group',
@@ -181,14 +183,7 @@ export default function Dashboard() {
   const monthEvents = eventsThisMonth(events)
   const activeGroups = groups.length
 
-  let turnPosition = '—'
-  if (rotation?.members?.length) {
-    const idx = rotation.members.findIndex(m => (m.user_id || m.id) === user?.id)
-    if (idx >= 0) {
-      const pos = (idx - (rotation.current_turn_index ?? 0) + rotation.members.length) % rotation.members.length
-      turnPosition = pos === 0 ? '1st 🔄' : ordinal(pos + 1)
-    }
-  }
+  const turnPosition = activeTurn ? '1st 🔄' : (rotation?.turn_index != null ? ordinal(rotation.turn_index + 1) : '—')
 
   const primaryGroup = groups.find(g => g.id === primaryGroupId)
   const greeting = `${getGreeting()}, ${user?.full_name?.split(' ')[0] || user?.username} 👋`
@@ -317,8 +312,8 @@ export default function Dashboard() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <div id="tour-queue">
               <TurnQueueCard
-                groupId={primaryGroupId}
-                groupName={primaryGroup?.name}
+                groups={groups}
+                rotations={allRotations}
                 currentUserId={user?.id}
               />
             </div>

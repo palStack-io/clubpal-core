@@ -58,7 +58,16 @@ function RsvpRow({ event, userId, onResponded }) {
       </div>
 
       {/* RSVP buttons */}
-      <div style={{ display: 'flex', gap: '5px', flexShrink: 0 }}>
+      <div style={{ display: 'flex', gap: '5px', flexShrink: 0, alignItems: 'center' }}>
+        {event.my_rsvp_status === 'maybe' && !loading && (
+          <span style={{
+            fontSize: '10px', fontWeight: 700, color: 'var(--amber)',
+            background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.25)',
+            borderRadius: '8px', padding: '3px 7px', marginRight: '2px',
+          }}>
+            Maybe
+          </span>
+        )}
         <button
           onClick={() => rsvp('going')}
           disabled={!!loading}
@@ -113,7 +122,9 @@ export default function RsvpNeededCard({ events = [], userId, onResponded }) {
             </span>
           </span>
         }
-        action={<span style={{ fontSize: '11px', color: 'var(--t3)' }}>Quick respond</span>}
+        action={<span style={{ fontSize: '11px', color: 'var(--t3)' }}>
+          {events.some(e => e.my_rsvp_status === 'maybe') ? 'Includes maybe replies' : 'Quick respond'}
+        </span>}
       />
       <Card.Body>
         {events.length === 0 ? (

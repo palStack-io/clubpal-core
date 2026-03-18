@@ -76,8 +76,18 @@ export default function Login() {
         </div>
 
         {error && (
-          <div style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.3)', borderRadius: '10px', padding: '10px 14px', fontSize: '13px', color: '#f87171', marginBottom: '16px' }}>
-            {error}
+          <div style={{ background: 'rgba(248,113,113,0.13)', border: '1px solid rgba(248,113,113,0.5)', borderRadius: '10px', padding: '12px 16px', marginBottom: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+              <span style={{ fontSize: '15px', lineHeight: 1 }}>⚠️</span>
+              <div>
+                <div style={{ fontSize: '13px', fontWeight: 600, color: '#f87171', marginBottom: '2px' }}>{error}</div>
+                {error.toLowerCase().includes('invalid') && (
+                  <div style={{ fontSize: '12px', color: 'rgba(248,113,113,0.8)' }}>
+                    If you recently reset your password, make sure you're using the new one.
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         )}
 

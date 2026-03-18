@@ -63,4 +63,11 @@ export const authApi = {
 
   unlinkOidc: (provider) =>
     gatewayClient.delete(`/auth/link/${provider}`).then(r => r.data),
+
+  // Admin
+  adminListUsers: (limit = 200, offset = 0) =>
+    gatewayClient.get('/users', { params: { limit, offset } }).then(r => r.data),
+
+  adminDeleteUser: (userId) =>
+    gatewayClient.delete(`/users/${userId}`).then(r => r.data),
 }

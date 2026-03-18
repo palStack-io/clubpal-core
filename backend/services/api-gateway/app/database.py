@@ -785,8 +785,14 @@ def admin_update_user(user_id: int, full_name: str = None, is_admin: bool = None
 
 
 def deactivate_user(user_id: int) -> bool:
-    """Admin: deactivate a user account (soft delete)."""
-    return admin_update_user(user_id, is_active=False)
+    """Admin: hard delete a user account."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+    success = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return success
 
 
 # ── Notification preferences ─────────────────────────────────────────────────

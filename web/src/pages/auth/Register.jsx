@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { GoogleLogin } from '@react-oauth/google'
 import { useAuth } from '../../contexts/AuthContext'
 import Button from '../../components/ui/Button'
-import { FormGroup, FormInput } from '../../components/ui/Form'
+import { FormGroup, FormInput, PasswordInput } from '../../components/ui/Form'
 
 const PAGE = {
   minHeight: '100vh',
@@ -75,10 +75,15 @@ export default function Register() {
             <FormInput type="text" required placeholder="janesmith" value={form.username} onChange={set('username')} />
           </FormGroup>
           <FormGroup label="Password" required>
-            <FormInput type="password" required minLength={8} placeholder="••••••••" value={form.password} onChange={set('password')} />
+            <PasswordInput required minLength={8} placeholder="Min. 8 characters" value={form.password} onChange={set('password')} autoComplete="new-password" />
           </FormGroup>
           <FormGroup label="Confirm Password" required>
-            <FormInput type="password" required placeholder="••••••••" value={form.confirmPassword} onChange={set('confirmPassword')} />
+            <PasswordInput required placeholder="••••••••" value={form.confirmPassword} onChange={set('confirmPassword')} autoComplete="new-password" />
+            {form.confirmPassword && (
+              <p style={{ fontSize: '11px', marginTop: '4px', color: form.password === form.confirmPassword ? '#4ade80' : '#f87171' }}>
+                {form.password === form.confirmPassword ? '✓ Passwords match' : '✗ Passwords do not match'}
+              </p>
+            )}
           </FormGroup>
 
           <Button type="submit" loading={loading} size="lg" style={{ width: '100%', marginTop: '4px' }}>

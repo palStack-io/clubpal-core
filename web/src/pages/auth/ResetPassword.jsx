@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { authApi } from '../../api/auth'
 import Button from '../../components/ui/Button'
-import { FormGroup, FormInput } from '../../components/ui/Form'
+import { FormGroup, PasswordInput } from '../../components/ui/Form'
 
 const PAGE_STYLE = {
   minHeight: '100vh',
@@ -81,8 +81,7 @@ export default function ResetPassword() {
             )}
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
               <FormGroup label="New password" required>
-                <FormInput
-                  type="password"
+                <PasswordInput
                   required
                   autoComplete="new-password"
                   placeholder="Min. 8 characters"
@@ -91,14 +90,18 @@ export default function ResetPassword() {
                 />
               </FormGroup>
               <FormGroup label="Confirm password" required>
-                <FormInput
-                  type="password"
+                <PasswordInput
                   required
                   autoComplete="new-password"
                   placeholder="••••••••"
                   value={form.confirm}
                   onChange={e => setForm(f => ({ ...f, confirm: e.target.value }))}
                 />
+                {form.confirm && (
+                  <p style={{ fontSize: '11px', marginTop: '4px', color: form.password === form.confirm ? '#4ade80' : '#f87171' }}>
+                    {form.password === form.confirm ? '✓ Passwords match' : '✗ Passwords do not match'}
+                  </p>
+                )}
               </FormGroup>
               <Button type="submit" loading={loading} size="lg" style={{ width: '100%' }}>
                 Reset Password

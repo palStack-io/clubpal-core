@@ -310,11 +310,14 @@ def create_user(username: str, email: str, password: str, full_name: str = None,
 
 
 def get_user_by_username(username: str) -> dict:
-    """Get user by username."""
+    """Get user by username or email."""
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM users WHERE username = %s", (username.lower(),))
+    cursor.execute(
+        "SELECT * FROM users WHERE username = %s OR email = %s",
+        (username.lower(), username.lower())
+    )
     row = cursor.fetchone()
     conn.close()
 

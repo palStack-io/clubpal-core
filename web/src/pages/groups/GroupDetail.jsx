@@ -307,6 +307,12 @@ export default function GroupDetail() {
         isOpen={showInvite}
         onClose={() => { setShowInvite(false); setInviteSuccess(null) }}
         onInvite={handleInvite}
+        onResend={(inv) => gatewayClient.post('/invites/send', {
+          email: inv.email,
+          group_id: parseInt(id),
+          invited_by: user.id,
+          group_name: group.name,
+        })}
         loading={inviteLoading}
         successEmail={inviteSuccess}
         onInviteAnother={() => setInviteSuccess(null)}

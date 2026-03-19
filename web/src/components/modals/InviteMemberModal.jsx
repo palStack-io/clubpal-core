@@ -3,13 +3,28 @@ import Modal from '../ui/Modal'
 import Button from '../ui/Button'
 import { FormGroup, FormInput } from '../ui/Form'
 
-export default function InviteMemberModal({ isOpen, onClose, onInvite, loading, successEmail, onInviteAnother, pendingInvites = [] }) {
+export default function InviteMemberModal({ isOpen, onClose, onInvite, onResend, loading, successEmail, onInviteAnother, pendingInvites = [] }) {
   const [email, setEmail] = useState('')
+  const [resendingEmail, setResendingEmail] = useState(null)
+  const [resentEmail, setResentEmail] = useState(null)
 
   const handleSubmit = () => {
     if (!email.trim()) return
     onInvite(email.trim())
     setEmail('')
+  }
+
+  const handleResend = async (inv) => {
+    if (!onResend || resendingEmail) return
+    setResendingEmail(inv.email)
+    setResentEmail(null)
+    try {
+      await onResend(inv)
+      setResentEmail(inv.email)
+      setTimeout(() => setResentEmail(null), 2500)
+    } finally {
+      setResendingEmail(null)
+    }
   }
 
   if (successEmail) {
@@ -87,7 +102,28 @@ export default function InviteMemberModal({ isOpen, onClose, onInvite, loading, 
               }}
             >
               <span style={{ fontSize: '10px' }}>⏳</span>
-              {inv.email}
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inv.email}</span>
+              {onResend && (
+                <button
+                  onClick={() => handleResend(inv)}
+                  disabled={!!resendingEmail}
+                  style={{
+                    flexShrink: 0,
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: resentEmail === inv.email ? 'var(--green, #22c55e)' : 'var(--rose-soft)',
+                    background: 'none',
+                    border: 'none',
+                    cursor: resendingEmail ? 'default' : 'pointer',
+                    padding: '2px 6px',
+                    borderRadius: '4px',
+                    opacity: resendingEmail && resendingEmail !== inv.email ? 0.4 : 1,
+                    transition: 'color 0.2s',
+                  }}
+                >
+                  {resendingEmail === inv.email ? '...' : resentEmail === inv.email ? 'Sent!' : 'Resend'}
+                </button>
+              )}
             </div>
           ))}
         </div>

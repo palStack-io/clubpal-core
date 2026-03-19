@@ -1729,6 +1729,7 @@ function AboutSection() {
     <div style={{ padding: '32px', maxWidth: '600px' }}>
       <div style={{ fontSize: '22px', fontWeight: 800, color: 'var(--t1)', marginBottom: '24px' }}>About</div>
 
+      {/* clubPal */}
       <div style={{
         background: 'var(--s2)',
         border: '1px solid var(--glass)',
@@ -1737,51 +1738,36 @@ function AboutSection() {
         marginBottom: '20px',
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
-          <img src="/palStack.png" alt="palStack" style={{ height: '28px', objectFit: 'contain' }} />
-          <span style={{ fontSize: '20px', fontWeight: 800, color: 'var(--t1)', letterSpacing: '-0.5px' }}>palStack</span>
+          <img src="/clubPal.png" alt="clubPal" style={{ height: '36px', width: '36px', borderRadius: '8px', objectFit: 'cover' }} />
+          <span style={{ fontSize: '22px', fontWeight: 800, color: 'var(--t1)', letterSpacing: '-0.5px' }}>clubPal</span>
         </div>
 
         <p style={{ fontSize: '15px', fontWeight: 600, color: 'var(--t1)', marginBottom: '12px', lineHeight: 1.5 }}>
-          Your digital pal for everyday stuff
-        </p>
-        <p style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t2)', marginBottom: '12px', lineHeight: 1.6 }}>
-          Life gets easier when you've got a pal
+          The easiest way to manage your friend group.
         </p>
         <p style={{ fontSize: '13px', color: 'var(--t3)', lineHeight: 1.7, marginBottom: '0' }}>
-          That's what pals do—they show up and help with the everyday stuff. palStack is a collection of privacy-first tools
-          that act like reliable friends: track your pantry to reduce waste, manage home repairs, budget your money, and
-          coordinate group dining. Self-host for complete control or use our managed hosting—either way, no tracking,
-          no data harvesting, just helpful tools that respect you.
+          Keeping a friend group coordinated is harder than it looks — who's picking the spot this week, did everyone RSVP,
+          who still owes who money? clubPal handles all of it. Create groups, schedule outings, rotate who picks the activity,
+          split bills, track attendance, and discover new places to go together. It's built for real friend groups who want
+          to spend less time planning and more time actually hanging out.
         </p>
       </div>
 
-      <a
-        href="https://palstack.io"
-        target="_blank"
-        rel="noopener noreferrer"
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: '8px',
-          padding: '10px 20px',
-          background: 'rgba(244,63,94,0.15)',
-          border: '1px solid rgba(244,63,94,0.22)',
-          borderRadius: '10px',
-          color: 'var(--rose-soft)',
-          fontSize: '13px',
-          fontWeight: 600,
-          textDecoration: 'none',
-        }}
-      >
-        <span>Learn more at palStack.io</span>
-        <span style={{ fontSize: '12px' }}>→</span>
-      </a>
-
-      <div style={{ marginTop: '28px', padding: '16px', background: 'var(--s1)', borderRadius: '10px' }}>
-        <div style={{ fontSize: '11px', color: 'var(--t4)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.8px', marginBottom: '8px' }}>clubPal</div>
-        <div style={{ fontSize: '12px', color: 'var(--t3)', lineHeight: 1.6 }}>
-          Group outing coordination, rotation tracking, and activity discovery — built for friend groups who want to keep things fair and fun.
+      {/* palStack */}
+      <div style={{
+        background: 'var(--s1)',
+        border: '1px solid var(--glass)',
+        borderRadius: '12px',
+        padding: '20px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+          <img src="/palStack.png" alt="palStack" style={{ height: '24px', objectFit: 'contain' }} />
+          <span style={{ fontSize: '16px', fontWeight: 700, color: 'var(--t1)', letterSpacing: '-0.3px' }}>palStack</span>
         </div>
+        <p style={{ fontSize: '13px', color: 'var(--t3)', lineHeight: 1.7, marginBottom: '0' }}>
+          clubPal is part of palStack — a collection of privacy-first tools built to make everyday life a little easier.
+          Self-host for complete control or use our managed hosting. No tracking, no data harvesting.
+        </p>
       </div>
     </div>
   )

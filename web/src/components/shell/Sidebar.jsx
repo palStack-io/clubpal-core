@@ -158,6 +158,15 @@ export default function Sidebar({ user: userProp, groupCount = 0, notifCount = 0
         {SIGNOUT_ICON}
         Sign out
       </button>
+
+      {/* Brand watermark */}
+      <button
+        onClick={() => { navigate('/settings', { state: { scrollTo: 'about' } }); handleNavClick() }}
+        className="cp-sidebar-brand"
+      >
+        <img src="/clubPal.png" alt="clubPal logo" style={{ width: '26px', height: '26px', borderRadius: '6px', objectFit: 'cover', flexShrink: 0 }} />
+        <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--t2)', letterSpacing: '0.01em' }}>clubPal</span>
+      </button>
     </aside>
   )
 

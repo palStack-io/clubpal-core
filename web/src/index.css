@@ -1104,6 +1104,24 @@
   color: #f87171;
   background: rgba(248,113,113,0.06);
 }
+.cp-sidebar-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 12px 12px;
+  padding: 10px 16px;
+  background: var(--s2);
+  border: 1px solid var(--glass);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+  width: calc(100% - 24px);
+  text-align: center;
+}
+.cp-sidebar-brand:hover {
+  background: var(--s3);
+}
 
 .cp-sidebar-close {
   position: absolute;

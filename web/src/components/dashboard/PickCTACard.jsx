@@ -1,11 +1,12 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { groupsApi } from '../../api/groups'
 
 const ACTIVITY_MAP = {
   dining:       { emoji: '🍽️', label: 'a restaurant',  route: '/discover/restaurants' },
   restaurants:  { emoji: '🍽️', label: 'a restaurant',  route: '/discover/restaurants' },
   movies:       { emoji: '🎬', label: 'a movie',        route: '/discover/movies' },
   movie:        { emoji: '🎬', label: 'a movie',        route: '/discover/movies' },
+  shows:        { emoji: '📺', label: 'a show',         route: '/discover/shows' },
   books:        { emoji: '📚', label: 'a book',         route: '/discover/books' },
   book:         { emoji: '📚', label: 'a book',         route: '/discover/books' },
   gaming:       { emoji: '🎮', label: 'a game',         route: '/discover/games' },
@@ -18,10 +19,25 @@ const ACTIVITY_MAP = {
 
 export default function PickCTACard({ turn, groupId, onSkip, onAlreadyPicked }) {
   const navigate = useNavigate()
+  const [busy, setBusy] = useState(null) // 'skip' | 'done' | null
+  const [error, setError] = useState(null)
+
   if (!turn) return null
 
   const key = turn.activityType?.toLowerCase()
   const info = ACTIVITY_MAP[key] || { emoji: '🎯', label: 'something fun', route: '/discover/restaurants' }
+
+  const handleAction = async (action, type) => {
+    setBusy(type)
+    setError(null)
+    try {
+      await action()
+    } catch (err) {
+      const msg = err?.response?.data?.detail || err?.message || 'Something went wrong'
+      setError(msg)
+      setBusy(null)
+    }
+  }
 
   return (
     <div
@@ -74,6 +90,11 @@ export default function PickCTACard({ turn, groupId, onSkip, onAlreadyPicked }) 
             {turn.memberCount} member{turn.memberCount !== 1 ? 's' : ''} waiting
           </div>
         )}
+        {error && (
+          <div style={{ fontSize: '11px', color: 'var(--error, #ef4444)', marginTop: '4px' }}>
+            {error}
+          </div>
+        )}
       </div>
 
       {/* Actions */}
@@ -100,23 +121,27 @@ export default function PickCTACard({ turn, groupId, onSkip, onAlreadyPicked }) 
         </button>
         {onSkip && (
           <button
-            onClick={onSkip}
+            disabled={busy === 'skip'}
+            onClick={() => handleAction(onSkip, 'skip')}
             style={{
               fontSize: '10px', fontWeight: 600, color: 'var(--t3)',
-              background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0',
+              background: 'none', border: 'none', cursor: busy ? 'wait' : 'pointer', padding: '2px 0',
+              opacity: busy && busy !== 'skip' ? 0.4 : 1,
             }}
           >
-            Skip turn
+            {busy === 'skip' ? 'Skipping...' : 'Skip turn'}
           </button>
         )}
         <button
-          onClick={onAlreadyPicked}
+          disabled={busy === 'done'}
+          onClick={() => handleAction(onAlreadyPicked, 'done')}
           style={{
-            fontSize: '10px', fontWeight: 600, color: 'var(--t3)',
-            background: 'none', border: 'none', cursor: 'pointer', padding: '2px 0',
+            fontSize: '10px', fontWeight: 600, color: busy === 'done' ? 'var(--green, #10b981)' : 'var(--t3)',
+            background: 'none', border: 'none', cursor: busy ? 'wait' : 'pointer', padding: '2px 0',
+            opacity: busy && busy !== 'done' ? 0.4 : 1,
           }}
         >
-          Already picked ✓
+          {busy === 'done' ? 'Completing...' : 'Already picked ✓'}
         </button>
       </div>
     </div>

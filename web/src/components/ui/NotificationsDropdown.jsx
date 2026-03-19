@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { gatewayClient } from '../../api/client'
@@ -28,7 +29,10 @@ export default function NotificationsDropdown() {
   const [open, setOpen] = useState(false)
   const [notifications, setNotifications] = useState([])
   const [loading, setLoading] = useState(false)
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 })
   const containerRef = useRef(null)
+  const bellRef = useRef(null)
+  const dropdownRef = useRef(null)
 
   const unreadCount = notifications.filter(n => !n.read).length
 
@@ -51,14 +55,22 @@ export default function NotificationsDropdown() {
     if (open) fetchNotifications()
   }, [open, fetchNotifications])
 
-  // Close on outside click
+  // Close on outside click + Escape key
   useEffect(() => {
     if (!open) return
-    const handler = (e) => {
-      if (containerRef.current && !containerRef.current.contains(e.target)) setOpen(false)
+    const handleClick = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target) &&
+          dropdownRef.current && !dropdownRef.current.contains(e.target)) setOpen(false)
     }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
+    const handleKey = (e) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
+    document.addEventListener('mousedown', handleClick)
+    document.addEventListener('keydown', handleKey)
+    return () => {
+      document.removeEventListener('mousedown', handleClick)
+      document.removeEventListener('keydown', handleKey)
+    }
   }, [open])
 
   const handleNotifClick = async (notif) => {
@@ -89,7 +101,19 @@ export default function NotificationsDropdown() {
     <div ref={containerRef} style={{ position: 'relative' }}>
       {/* Bell button */}
       <button
-        onClick={() => setOpen(v => !v)}
+        ref={bellRef}
+        onClick={() => {
+          if (!open && bellRef.current) {
+            const rect = bellRef.current.getBoundingClientRect()
+            const isMobile = window.innerWidth < 480
+            setDropdownPos({
+              top: rect.bottom + 8,
+              right: isMobile ? null : window.innerWidth - rect.right,
+              isMobile,
+            })
+          }
+          setOpen(v => !v)
+        }}
         style={{
           width: '32px',
           height: '32px',
@@ -106,6 +130,9 @@ export default function NotificationsDropdown() {
           transition: 'all 0.15s',
         }}
         title="Notifications"
+        aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
+        aria-expanded={open}
+        aria-haspopup="true"
       >
         🔔
         {unreadCount > 0 && (
@@ -132,19 +159,23 @@ export default function NotificationsDropdown() {
         )}
       </button>
 
-      {/* Dropdown panel */}
-      {open && (
-        <div style={{
-          position: 'absolute',
-          top: 'calc(100% + 8px)',
-          right: 0,
-          width: '340px',
+      {/* Dropdown panel — rendered via portal to escape stacking contexts */}
+      {open && createPortal(
+        <div ref={dropdownRef} style={{
+          position: 'fixed',
+          top: dropdownPos.top,
+          ...(dropdownPos.isMobile
+            ? { left: '12px', right: '12px', width: 'auto' }
+            : { right: dropdownPos.right, width: '340px' }),
+          maxHeight: 'calc(100dvh - ' + (dropdownPos.top + 12) + 'px)',
           background: 'var(--s2)',
           border: '1px solid var(--glass)',
           borderRadius: '16px',
           boxShadow: '0 16px 48px rgba(0,0,0,0.4)',
-          zIndex: 1000,
+          zIndex: 9999,
           overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
         }}>
           {/* Header */}
           <div style={{
@@ -240,7 +271,8 @@ export default function NotificationsDropdown() {
               ))
             )}
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   )

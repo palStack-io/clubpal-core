@@ -36,8 +36,6 @@ services:
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-clubpalpassword}
     volumes:
       - minio_data:/data
-    ports:
-      - "9001:9001"
     networks:
       - clubpal-network
     restart: unless-stopped
@@ -80,6 +78,8 @@ services:
     build:
       context: .
       dockerfile: nginx/Dockerfile
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
     container_name: clubpal-nginx
     ports:
       - "9000:80"

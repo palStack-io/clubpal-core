@@ -2,43 +2,6 @@ import { useState, useRef, useEffect } from 'react'
 import Card from '../ui/Card'
 import Avatar from '../ui/Avatar'
 
-function RoleBadge({ role }) {
-  if (role === 'owner') {
-    return (
-      <span
-        style={{
-          background: 'var(--rose)',
-          color: '#fff',
-          fontSize: '10px',
-          fontWeight: 700,
-          padding: '3px 8px',
-          borderRadius: '100px',
-        }}
-      >
-        Owner
-      </span>
-    )
-  }
-  if (role === 'admin') {
-    return (
-      <span
-        style={{
-          background: 'rgba(245,158,11,0.12)',
-          color: '#f59e0b',
-          border: '1px solid rgba(245,158,11,0.25)',
-          fontSize: '10px',
-          fontWeight: 700,
-          padding: '3px 8px',
-          borderRadius: '100px',
-        }}
-      >
-        Admin
-      </span>
-    )
-  }
-  return null
-}
-
 function ContextMenu({ member, onRoleChange, onRemove, onClose }) {
   const ref = useRef(null)
 
@@ -57,17 +20,22 @@ function ContextMenu({ member, onRoleChange, onRemove, onClose }) {
       ref={ref}
       style={{
         position: 'absolute',
-        right: 0,
-        top: '32px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        top: 'calc(100% + 8px)',
         background: 'var(--s1)',
         border: '1px solid var(--glass)',
         borderRadius: '10px',
         boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-        zIndex: 20,
+        zIndex: 30,
         minWidth: '160px',
         overflow: 'hidden',
       }}
     >
+      {/* Name header */}
+      <div style={{ padding: '8px 14px 6px', fontSize: '12px', fontWeight: 700, color: 'var(--t1)', borderBottom: '1px solid var(--glass)' }}>
+        {member.full_name || member.username || 'Unknown'}
+      </div>
       {member.role === 'member' && (
         <button
           onClick={() => { onRoleChange(member.user_id, 'admin'); onClose() }}
@@ -101,175 +69,204 @@ function ContextMenu({ member, onRoleChange, onRemove, onClose }) {
   )
 }
 
-function MemberRow({ member, canManage, currentUserId, onRoleChange, onRemove, turnPosition, isCurrent }) {
+function MemberBubble({ member, isCurrent, isCurrentUser, canManage, onRoleChange, onRemove, turnPosition, hasRotation }) {
   const [menuOpen, setMenuOpen] = useState(false)
-  const isCurrentUser = member.user_id === currentUserId
+  const [hovered, setHovered] = useState(false)
+
+  const displayName = member.full_name || member.username || '?'
+  const roleBadge = member.role === 'owner' ? 'Owner' : member.role === 'admin' ? 'Admin' : null
 
   return (
     <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        padding: '10px 0',
-        borderBottom: '1px solid rgba(255,255,255,0.04)',
-        position: 'relative',
-        background: isCurrent ? 'rgba(244,63,94,0.04)' : 'transparent',
-        borderRadius: isCurrent ? '8px' : 0,
-        margin: isCurrent ? '2px -4px' : 0,
-        padding: isCurrent ? '10px 4px' : '10px 0',
-      }}
+      style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
-      {/* Turn position circle */}
-      {turnPosition != null && (
-        <div
-          style={{
-            width: '20px',
-            height: '20px',
+      {/* Avatar ring */}
+      <button
+        type="button"
+        onClick={canManage && !isCurrentUser ? () => setMenuOpen(v => !v) : undefined}
+        style={{
+          position: 'relative',
+          padding: '3px',
+          borderRadius: '50%',
+          border: 'none',
+          cursor: canManage && !isCurrentUser ? 'pointer' : 'default',
+          background: isCurrent
+            ? 'linear-gradient(135deg, var(--rose), var(--rose-soft))'
+            : 'transparent',
+          boxShadow: isCurrent
+            ? '0 0 12px rgba(244,63,94,0.5), 0 0 24px rgba(244,63,94,0.2)'
+            : 'none',
+          transition: 'box-shadow 0.2s, background 0.2s',
+        }}
+      >
+        <div style={{
+          borderRadius: '50%',
+          border: isCurrent ? '2px solid var(--s2)' : '2px solid transparent',
+          overflow: 'hidden',
+        }}>
+          <Avatar
+            user={{ full_name: member.full_name, username: member.username, avatar_url: member.avatar_url }}
+            size="lg"
+            style={{ width: '40px', height: '40px', fontSize: '14px' }}
+          />
+        </div>
+
+        {/* Turn position badge */}
+        {hasRotation && turnPosition != null && (
+          <div style={{
+            position: 'absolute',
+            bottom: '-2px',
+            right: '-2px',
+            width: '18px',
+            height: '18px',
             borderRadius: '50%',
             background: isCurrent ? 'var(--rose)' : 'var(--s4)',
-            color: isCurrent ? '#fff' : 'var(--t4)',
-            fontSize: '10px',
-            fontWeight: 700,
+            border: '2px solid var(--s2)',
+            color: isCurrent ? '#fff' : 'var(--t3)',
+            fontSize: '9px',
+            fontWeight: 800,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            flexShrink: 0,
-            boxShadow: isCurrent ? '0 0 8px rgba(244,63,94,0.4)' : 'none',
-          }}
-        >
-          {turnPosition}
+          }}>
+            {turnPosition}
+          </div>
+        )}
+      </button>
+
+      {/* Tooltip on hover */}
+      {hovered && (
+        <div style={{
+          position: 'absolute',
+          bottom: 'calc(100% + 6px)',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'var(--s1)',
+          border: '1px solid var(--glass)',
+          borderRadius: '8px',
+          padding: '6px 10px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+          zIndex: 20,
+          whiteSpace: 'nowrap',
+          pointerEvents: 'none',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '2px',
+        }}>
+          <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t1)' }}>
+            {displayName}
+            {isCurrentUser && <span style={{ fontWeight: 500, color: 'var(--t3)' }}> (you)</span>}
+          </span>
+          <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+            {roleBadge && (
+              <span style={{
+                fontSize: '9px',
+                fontWeight: 700,
+                color: member.role === 'owner' ? '#fff' : '#f59e0b',
+                background: member.role === 'owner' ? 'var(--rose)' : 'rgba(245,158,11,0.12)',
+                borderRadius: '100px',
+                padding: '1px 6px',
+              }}>
+                {roleBadge}
+              </span>
+            )}
+            {isCurrent && (
+              <span style={{
+                fontSize: '9px',
+                fontWeight: 700,
+                color: 'var(--rose-soft)',
+                background: 'rgba(244,63,94,0.12)',
+                borderRadius: '100px',
+                padding: '1px 6px',
+              }}>
+                Their turn
+              </span>
+            )}
+          </div>
+          {/* Tooltip arrow */}
+          <div style={{
+            position: 'absolute',
+            bottom: '-4px',
+            left: '50%',
+            transform: 'translateX(-50%) rotate(45deg)',
+            width: '8px',
+            height: '8px',
+            background: 'var(--s1)',
+            borderRight: '1px solid var(--glass)',
+            borderBottom: '1px solid var(--glass)',
+          }} />
         </div>
       )}
 
-      {/* Avatar */}
-      <Avatar
-        user={{ full_name: member.full_name, username: member.username, avatar_url: member.avatar_url }}
-        size="md"
-      />
-
-      {/* Info block */}
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: '13px',
-            fontWeight: 700,
-            color: 'var(--t1)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {member.full_name || member.username || 'Unknown'}
-          {isCurrentUser && (
-            <span style={{ fontSize: '10px', color: 'var(--t3)', fontWeight: 500, marginLeft: '6px' }}>
-              (you)
-            </span>
-          )}
-        </div>
-        <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '1px', textTransform: 'capitalize' }}>
-          {member.role || 'member'}
-        </div>
-      </div>
-
-      {/* Badges row */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
-        {isCurrent && (
-          <span
-            style={{
-              fontSize: '10px',
-              fontWeight: 700,
-              color: 'var(--rose-soft)',
-              background: 'rgba(244,63,94,0.12)',
-              padding: '2px 7px',
-              borderRadius: '100px',
-            }}
-          >
-            Your turn
-          </span>
-        )}
-        {(member.role === 'owner' || member.role === 'admin') && (
-          <RoleBadge role={member.role} />
-        )}
-        {canManage && !isCurrentUser && (
-          <div style={{ position: 'relative' }}>
-            <button
-              onClick={() => setMenuOpen(v => !v)}
-              style={{
-                width: '28px',
-                height: '28px',
-                background: 'var(--s3)',
-                border: '1px solid var(--glass)',
-                borderRadius: '8px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: '14px',
-                color: 'var(--t3)',
-                flexShrink: 0,
-              }}
-            >
-              ⋯
-            </button>
-            {menuOpen && (
-              <ContextMenu
-                member={member}
-                onRoleChange={onRoleChange}
-                onRemove={onRemove}
-                onClose={() => setMenuOpen(false)}
-              />
-            )}
-          </div>
-        )}
-      </div>
+      {/* Context menu for admins */}
+      {menuOpen && canManage && !isCurrentUser && (
+        <ContextMenu
+          member={member}
+          onRoleChange={onRoleChange}
+          onRemove={onRemove}
+          onClose={() => setMenuOpen(false)}
+        />
+      )}
     </div>
   )
 }
 
-function PendingInviteRow({ email }) {
+function PendingInviteBubble({ email }) {
+  const [hovered, setHovered] = useState(false)
+
   return (
     <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: '12px',
-        padding: '10px 0',
-        borderBottom: '1px solid rgba(255,255,255,0.04)',
-        opacity: 0.45,
-      }}
+      style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
-      <div
-        style={{
-          width: '30px', height: '30px', borderRadius: '50%',
-          background: 'var(--s4)', border: '1px dashed var(--t4)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: '14px', flexShrink: 0,
-        }}
-      >
+      <div style={{
+        width: '40px', height: '40px', borderRadius: '50%',
+        background: 'var(--s3)',
+        border: '2px dashed var(--t4)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: '16px',
+        opacity: 0.5,
+      }}>
         ✉️
       </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
-          style={{
-            fontSize: '13px', fontWeight: 600, color: 'var(--t2)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}
-        >
-          {email}
+      {hovered && (
+        <div style={{
+          position: 'absolute',
+          bottom: 'calc(100% + 6px)',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'var(--s1)',
+          border: '1px solid var(--glass)',
+          borderRadius: '8px',
+          padding: '6px 10px',
+          boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+          zIndex: 20,
+          whiteSpace: 'nowrap',
+          pointerEvents: 'none',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '2px',
+        }}>
+          <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--t2)' }}>{email}</span>
+          <span style={{ fontSize: '9px', fontWeight: 600, color: 'var(--t4)' }}>Invite pending</span>
+          <div style={{
+            position: 'absolute',
+            bottom: '-4px',
+            left: '50%',
+            transform: 'translateX(-50%) rotate(45deg)',
+            width: '8px',
+            height: '8px',
+            background: 'var(--s1)',
+            borderRight: '1px solid var(--glass)',
+            borderBottom: '1px solid var(--glass)',
+          }} />
         </div>
-        <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '1px' }}>
-          Invite pending
-        </div>
-      </div>
-      <span
-        style={{
-          fontSize: '10px', fontWeight: 600, color: 'var(--t4)',
-          background: 'var(--s4)', borderRadius: '6px', padding: '2px 7px',
-        }}
-      >
-        ⏳ Awaiting
-      </span>
+      )}
     </div>
   )
 }
@@ -320,7 +317,7 @@ export default function MembersCard({ members = [], pendingInvites = [], canMana
         action={headerAction}
       />
       {hasRotation && (
-        <div style={{ padding: '6px 16px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
+        <div style={{ padding: '4px 16px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
             🔄 Turn order active
           </span>
@@ -332,30 +329,28 @@ export default function MembersCard({ members = [], pendingInvites = [], canMana
             No members yet
           </div>
         ) : (
-          <div>
-            {sortedMembers.map((member, i) => (
-              <div
+          <div style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '12px',
+            justifyContent: 'center',
+            padding: '8px 0',
+          }}>
+            {sortedMembers.map(member => (
+              <MemberBubble
                 key={member.user_id}
-                style={(i === sortedMembers.length - 1 && pendingInvites.length === 0) ? { borderBottom: 'none' } : {}}
-              >
-                <MemberRow
-                  member={member}
-                  canManage={canManage}
-                  currentUserId={currentUserId}
-                  onRoleChange={onRoleChange}
-                  onRemove={onRemove}
-                  turnPosition={hasRotation ? (rotationPositions[member.user_id] ?? null) : null}
-                  isCurrent={hasRotation && member.user_id === rotation.current_user_id}
-                />
-              </div>
+                member={member}
+                isCurrent={hasRotation && member.user_id === rotation.current_user_id}
+                isCurrentUser={member.user_id === currentUserId}
+                canManage={canManage}
+                onRoleChange={onRoleChange}
+                onRemove={onRemove}
+                turnPosition={hasRotation ? (rotationPositions[member.user_id] ?? null) : null}
+                hasRotation={hasRotation}
+              />
             ))}
-            {pendingInvites.map((inv, i) => (
-              <div
-                key={inv.email}
-                style={i === pendingInvites.length - 1 ? { borderBottom: 'none' } : {}}
-              >
-                <PendingInviteRow email={inv.email} />
-              </div>
+            {pendingInvites.map(inv => (
+              <PendingInviteBubble key={inv.email} email={inv.email} />
             ))}
           </div>
         )}

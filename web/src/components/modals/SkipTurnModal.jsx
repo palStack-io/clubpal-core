@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import BaseModal from './BaseModal'
+import Modal from '../ui/Modal'
 import Button from '../ui/Button'
 import { FormGroup, FormSelect, FormTextarea } from '../ui/Form'
 
@@ -8,7 +8,7 @@ export default function SkipTurnModal({ isOpen, onClose, onConfirm, loading }) {
   const [other, setOther] = useState('')
 
   return (
-    <BaseModal
+    <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="Skip Your Turn?"
@@ -40,6 +40,6 @@ export default function SkipTurnModal({ isOpen, onClose, onConfirm, loading }) {
           </FormGroup>
         )}
       </div>
-    </BaseModal>
+    </Modal>
   )
 }

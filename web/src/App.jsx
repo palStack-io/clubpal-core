@@ -1,69 +1,79 @@
+import { lazy, Suspense } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
+import { MobileNavProvider } from './contexts/MobileNavContext'
 import OnboardingWizard from './components/onboarding/OnboardingWizard'
 
+// Eager-loaded (small, always needed)
 import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
-import ForgotPassword from './pages/auth/ForgotPassword'
-import ResetPassword from './pages/auth/ResetPassword'
-import AcceptInvite from './pages/auth/AcceptInvite'
-import JoinGroup from './pages/groups/JoinGroup'
-import VerifyEmail from './pages/auth/VerifyEmail'
 
-import Dashboard from './pages/Dashboard'
-import GroupsList from './pages/groups/GroupsList'
-import GroupDetail from './pages/groups/GroupDetail'
-import CreateGroup from './pages/groups/CreateGroup'
-import EditGroup from './pages/groups/EditGroup'
-import ManageMembers from './pages/groups/ManageMembers'
-import EventDetail from './pages/events/EventDetail'
-import EventsList from './pages/events/EventsList'
-import CreateEvent from './pages/events/CreateEvent'
-import RateEvent from './pages/events/RateEvent'
-import Stats from './pages/Stats'
-import Leaderboard from './pages/leaderboard/Leaderboard'
-import ActivityPicker from './pages/activities/ActivityPicker'
-import Profile from './pages/profile/Profile'
-import Settings from './pages/profile/Settings'
-import NotFound from './pages/NotFound'
-import AdminPage from './pages/admin/AdminPage'
-import PayConfirm from './pages/PayConfirm'
-import ClaimItems from './pages/ClaimItems'
+// Lazy-loaded pages
+const ForgotPassword = lazy(() => import('./pages/auth/ForgotPassword'))
+const ResetPassword = lazy(() => import('./pages/auth/ResetPassword'))
+const AcceptInvite = lazy(() => import('./pages/auth/AcceptInvite'))
+const JoinGroup = lazy(() => import('./pages/groups/JoinGroup'))
+const VerifyEmail = lazy(() => import('./pages/auth/VerifyEmail'))
 
-import DiscoverRestaurants from './pages/discover/DiscoverRestaurants'
-import RestaurantDetail from './pages/discover/RestaurantDetail'
-import DiscoverMovies from './pages/discover/DiscoverMovies'
-import MovieDetail from './pages/discover/MovieDetail'
-import DiscoverBooks from './pages/discover/DiscoverBooks'
-import BookDetail from './pages/discover/BookDetail'
-import DiscoverHikes from './pages/discover/DiscoverHikes'
-import HikeDetail from './pages/discover/HikeDetail'
-import DiscoverGames from './pages/discover/DiscoverGames'
-import GameDetail from './pages/discover/GameDetail'
-import DiscoverArts from './pages/discover/DiscoverArts'
-import ArtsDetail from './pages/discover/ArtsDetail'
-import DiscoverShows from './pages/discover/DiscoverShows'
-import ShowDetail from './pages/discover/ShowDetail'
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const GroupsList = lazy(() => import('./pages/groups/GroupsList'))
+const GroupDetail = lazy(() => import('./pages/groups/GroupDetail'))
+const CreateGroup = lazy(() => import('./pages/groups/CreateGroup'))
+const EditGroup = lazy(() => import('./pages/groups/EditGroup'))
+const ManageMembers = lazy(() => import('./pages/groups/ManageMembers'))
+const EventDetail = lazy(() => import('./pages/events/EventDetail'))
+const EventsList = lazy(() => import('./pages/events/EventsList'))
+const CreateEvent = lazy(() => import('./pages/events/CreateEvent'))
+const RateEvent = lazy(() => import('./pages/events/RateEvent'))
+const Stats = lazy(() => import('./pages/Stats'))
+const Leaderboard = lazy(() => import('./pages/leaderboard/Leaderboard'))
+const ActivityPicker = lazy(() => import('./pages/activities/ActivityPicker'))
+const Profile = lazy(() => import('./pages/profile/Profile'))
+const Settings = lazy(() => import('./pages/profile/Settings'))
+const NotFound = lazy(() => import('./pages/NotFound'))
+const AdminPage = lazy(() => import('./pages/admin/AdminPage'))
+const PayConfirm = lazy(() => import('./pages/PayConfirm'))
+const ClaimItems = lazy(() => import('./pages/ClaimItems'))
 
-function Spinner() {
+// Discover pages (7 types + details)
+const DiscoverRestaurants = lazy(() => import('./pages/discover/DiscoverRestaurants'))
+const RestaurantDetail = lazy(() => import('./pages/discover/RestaurantDetail'))
+const DiscoverMovies = lazy(() => import('./pages/discover/DiscoverMovies'))
+const MovieDetail = lazy(() => import('./pages/discover/MovieDetail'))
+const DiscoverBooks = lazy(() => import('./pages/discover/DiscoverBooks'))
+const BookDetail = lazy(() => import('./pages/discover/BookDetail'))
+const DiscoverHikes = lazy(() => import('./pages/discover/DiscoverHikes'))
+const HikeDetail = lazy(() => import('./pages/discover/HikeDetail'))
+const DiscoverGames = lazy(() => import('./pages/discover/DiscoverGames'))
+const GameDetail = lazy(() => import('./pages/discover/GameDetail'))
+const DiscoverArts = lazy(() => import('./pages/discover/DiscoverArts'))
+const ArtsDetail = lazy(() => import('./pages/discover/ArtsDetail'))
+const DiscoverShows = lazy(() => import('./pages/discover/DiscoverShows'))
+const ShowDetail = lazy(() => import('./pages/discover/ShowDetail'))
+
+function PageLoader() {
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="animate-spin h-8 w-8 border-4 border-primary-500 border-t-transparent rounded-full" />
+    <div className="flex items-center justify-center min-h-screen" style={{ background: 'var(--bg)' }}>
+      <div className="cp-page-loader">
+        <div className="cp-page-loader-dot" />
+        <div className="cp-page-loader-dot" style={{ animationDelay: '0.15s' }} />
+        <div className="cp-page-loader-dot" style={{ animationDelay: '0.3s' }} />
+      </div>
     </div>
   )
 }
 
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth()
-  if (loading) return <Spinner />
+  if (loading) return <PageLoader />
   if (!isAuthenticated) return <Navigate to="/login" replace />
   return children
 }
 
 function AdminRoute({ children }) {
   const { isAuthenticated, loading, user } = useAuth()
-  if (loading) return <Spinner />
+  if (loading) return <PageLoader />
   if (!isAuthenticated) return <Navigate to="/login" replace />
   if (!user?.is_admin) return <Navigate to="/dashboard" replace />
   return children
@@ -71,14 +81,13 @@ function AdminRoute({ children }) {
 
 function GuestRoute({ children }) {
   const { isAuthenticated, loading } = useAuth()
-  if (loading) return <Spinner />
+  if (loading) return <PageLoader />
   if (isAuthenticated) return <Navigate to="/dashboard" replace />
   return children
 }
 
 function OnboardingGate({ children }) {
   const { user, isAuthenticated, loading } = useAuth()
-  // Don't block initial render — ProtectedRoute handles loading/auth
   if (!loading && isAuthenticated && user && !user.onboarding_complete) {
     return (
       <>
@@ -93,6 +102,7 @@ function OnboardingGate({ children }) {
 function AppRoutes() {
   return (
     <OnboardingGate>
+    <Suspense fallback={<PageLoader />}>
     <Routes>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
@@ -143,6 +153,7 @@ function AppRoutes() {
 
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </Suspense>
     </OnboardingGate>
   )
 }
@@ -151,9 +162,11 @@ export default function App() {
   return (
     <BrowserRouter>
       <ThemeProvider>
-        <AuthProvider>
-          <AppRoutes />
-        </AuthProvider>
+        <MobileNavProvider>
+          <AuthProvider>
+            <AppRoutes />
+          </AuthProvider>
+        </MobileNavProvider>
       </ThemeProvider>
     </BrowserRouter>
   )

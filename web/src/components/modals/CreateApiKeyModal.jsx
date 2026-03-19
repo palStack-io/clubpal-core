@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import BaseModal from './BaseModal'
+import Modal from '../ui/Modal'
 import Button from '../ui/Button'
 import { FormGroup, FormInput } from '../ui/Form'
 
@@ -34,10 +34,11 @@ export default function CreateApiKeyModal({ isOpen, onClose, onCreate }) {
   }
 
   return (
-    <BaseModal
+    <Modal
       isOpen={isOpen}
       onClose={handleClose}
       title="Create API Key"
+      size="sm"
       footer={
         createdKey ? (
           <Button variant="primary" onClick={handleClose}>Done</Button>
@@ -53,17 +54,17 @@ export default function CreateApiKeyModal({ isOpen, onClose, onCreate }) {
     >
       {createdKey ? (
         <div>
-          <p style={{ fontSize: '13px', color: 'var(--t2)', marginBottom: '12px' }}>
+          <p style={{ fontSize: 'var(--text-base)', color: 'var(--t2)', marginBottom: '12px' }}>
             Copy this key now — it won't be shown again.
           </p>
           <div
             style={{
               background: 'var(--s3)',
               border: '1px solid var(--glass)',
-              borderRadius: '10px',
+              borderRadius: 'var(--r-md)',
               padding: '12px',
               fontFamily: 'monospace',
-              fontSize: '12px',
+              fontSize: 'var(--text-sm)',
               color: 'var(--rose-soft)',
               wordBreak: 'break-all',
               marginBottom: '10px',
@@ -85,6 +86,6 @@ export default function CreateApiKeyModal({ isOpen, onClose, onCreate }) {
           />
         </FormGroup>
       )}
-    </BaseModal>
+    </Modal>
   )
 }

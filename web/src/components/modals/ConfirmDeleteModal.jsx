@@ -1,12 +1,13 @@
-import BaseModal from './BaseModal'
+import Modal from '../ui/Modal'
 import Button from '../ui/Button'
 
 export default function ConfirmDeleteModal({ isOpen, onClose, onConfirm, itemName = 'this item', loading }) {
   return (
-    <BaseModal
+    <Modal
       isOpen={isOpen}
       onClose={onClose}
       title={`Delete ${itemName}?`}
+      size="sm"
       footer={
         <>
           <Button variant="ghost" onClick={onClose}>Cancel</Button>
@@ -14,9 +15,9 @@ export default function ConfirmDeleteModal({ isOpen, onClose, onConfirm, itemNam
         </>
       }
     >
-      <p style={{ fontSize: '13px', color: 'var(--t2)', lineHeight: 1.6 }}>
+      <p style={{ fontSize: 'var(--text-base)', color: 'var(--t2)', lineHeight: 1.6 }}>
         This action is permanent and cannot be undone. All associated data will be lost.
       </p>
-    </BaseModal>
+    </Modal>
   )
 }

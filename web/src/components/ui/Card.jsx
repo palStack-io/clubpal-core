@@ -1,4 +1,6 @@
 // Card — supports Card.Header / Card.Body API and legacy CardHeader export
+// Variants: default, outlined, elevated, flat
+// Add clickable prop for hover lift effect
 
 function CardHeaderNew({ title, action }) {
   return (
@@ -6,7 +8,7 @@ function CardHeaderNew({ title, action }) {
       <span
         style={{
           flex: 1,
-          fontSize: '13px',
+          fontSize: 'var(--text-base)',
           fontWeight: 700,
           color: 'var(--t1)',
           letterSpacing: '-0.2px',
@@ -31,11 +33,25 @@ function CardBody({ children, style: styleProp = {} }) {
   )
 }
 
-function Card({ children, className = '', padding = false, style: styleProp = {} }) {
+const variantClasses = {
+  default: '',
+  outlined: 'cp-card--outlined',
+  elevated: 'cp-card--elevated',
+  flat: 'cp-card--flat',
+}
+
+function Card({ children, className = '', padding = false, variant = 'default', clickable = false, onClick, style: styleProp = {} }) {
+  const vClass = variantClasses[variant] || ''
+  const clickClass = clickable || onClick ? 'cp-card--clickable' : ''
+
   return (
     <div
-      className={`cp-card ${className}`}
+      className={`cp-card ${vClass} ${clickClass} ${className}`}
       style={{ ...(padding ? { padding: '18px' } : {}), ...styleProp }}
+      onClick={onClick}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(e) } } : undefined}
     >
       {children}
     </div>

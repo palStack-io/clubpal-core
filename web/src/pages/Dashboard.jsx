@@ -172,16 +172,17 @@ export default function Dashboard() {
   }
 
   const primaryGroupObj = groups.find(g => g.id === primaryGroupId)
+  const memberCount = primaryGroupObj?.member_count || 0
   const activeTurn =
     String(rotation?.user_id) === String(user?.id) && primaryGroupId &&
-    primaryGroupObj?.rotation_type !== 'none'
+    primaryGroupObj?.rotation_type !== 'none' && memberCount > 1
       ? {
           groupId: primaryGroupId,
           groupName: primaryGroupObj?.name || 'Your Group',
           activityEmoji: rotation?.activity_emoji || primaryGroupObj?.activity_emoji || '🔄',
           activityType: rotation?.activity_type || primaryGroupObj?.activity_type || '',
           dueDate: rotation?.due_date || null,
-          memberCount: rotation?.members?.length || 0,
+          memberCount,
         }
       : null
 
@@ -212,42 +213,18 @@ export default function Dashboard() {
       </PageHero>
 
       {/* Floating stats */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: '10px',
-          padding: '0 20px',
-          transform: 'translateY(-28px)',
-          position: 'relative',
-          zIndex: 2,
-        }}
-      >
+      <div className="cp-dashboard-stats">
         {stats.map(stat => (
-          <div
-            key={stat.label}
-            style={{
-              background: 'var(--s2)',
-              border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: '14px',
-              padding: '14px 10px',
-              boxShadow: '0 4px 24px rgba(0,0,0,0.45)',
-              textAlign: 'center',
-            }}
-          >
-            <div style={{ fontSize: '20px', fontWeight: 900, color: 'var(--t1)', letterSpacing: '-0.8px', lineHeight: 1 }}>
-              {stat.value}
-            </div>
-            <div style={{ fontSize: '9px', fontWeight: 600, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: '0.8px', marginTop: '5px' }}>
-              {stat.label}
-            </div>
+          <div key={stat.label} className="cp-stat-tile">
+            <div className="cp-stat-tile-value">{stat.value}</div>
+            <div className="cp-stat-tile-label">{stat.label}</div>
           </div>
         ))}
       </div>
 
       {/* Main content */}
-      <div style={{ padding: '0 24px 24px', marginTop: '-8px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: '14px' }}>
+      <div className="cp-dashboard-content">
+        <div className="cp-dashboard-grid">
 
           {/* Left column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
@@ -257,8 +234,8 @@ export default function Dashboard() {
                 <PickCTACard
                   turn={activeTurn}
                   groupId={primaryGroupId}
-                  onSkip={() => groupsApi.skipRotation(primaryGroupId).then(load)}
-                  onAlreadyPicked={() => groupsApi.completeTurn(primaryGroupId).then(load).catch(load)}
+                  onSkip={async () => { await groupsApi.skipRotation(primaryGroupId); await load() }}
+                  onAlreadyPicked={async () => { await groupsApi.completeTurn(primaryGroupId); await load() }}
                 />
               ) : !loading && (
                 <div style={{
@@ -325,7 +302,7 @@ export default function Dashboard() {
             </div>
             {/* 4. Upcoming events — under turn queue */}
             <div id="tour-events">
-              <UpcomingEventsCard events={events} loading={loading} />
+              <UpcomingEventsCard events={events} loading={loading} onNewEvent={() => setShowCreateEvent(true)} />
             </div>
             <ActivityFeedCard
               items={activityItems}

@@ -77,7 +77,7 @@ export default function OnboardingWizard() {
   const { user, updateUser } = useAuth()
 
   const [step, setStep] = useState(1)
-  const [activities, setActivities] = useState(['dining', 'movies', 'shows', 'books', 'hiking', 'gaming', 'arts'])
+  const [activities, setActivities] = useState([])
   const [locationAddress, setLocationAddress] = useState('')
   const [locationLat, setLocationLat] = useState(null)
   const [locationLng, setLocationLng] = useState(null)
@@ -90,16 +90,71 @@ export default function OnboardingWizard() {
   const [bookGenres, setBookGenres] = useState([])
   const [gameTypes, setGameTypes] = useState(['video_game', 'board_game'])
   const [selectedEmoji, setSelectedEmoji] = useState(null)
+  const [avatarMode, setAvatarMode] = useState(null) // 'emoji' | 'photo' | null
+  const [photoUrl, setPhotoUrl] = useState(null)
+  const [photoPreview, setPhotoPreview] = useState(null)
+  const [uploading, setUploading] = useState(false)
+  const fileInputRef = useRef(null)
   const [loading, setLoading] = useState(false)
-  const [loadResult, setLoadResult] = useState(null)
   const [loadError, setLoadError] = useState('')
-  const [activeLoadIdx, setActiveLoadIdx] = useState(0)
   const geocodeTimeout = useRef(null)
-  const loadIntervalRef = useRef(null)
 
-  const handleSkip = () => {
+  const compressImage = (file) => new Promise((resolve) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const maxDim = 512
+      let { width, height } = img
+      if (width > maxDim || height > maxDim) {
+        const scale = maxDim / Math.max(width, height)
+        width = Math.round(width * scale)
+        height = Math.round(height * scale)
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height)
+      canvas.toBlob(
+        (blob) => resolve(new File([blob], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' })),
+        'image/jpeg', 0.85,
+      )
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file) }
+    img.src = url
+  })
+
+  const handlePhotoSelect = async (e) => {
+    const raw = e.target.files?.[0]
+    if (!raw || !raw.type.startsWith('image/')) return
+    const localUrl = URL.createObjectURL(raw)
+    setPhotoPreview(localUrl)
+    setAvatarMode('photo')
+    setSelectedEmoji(null)
+    setUploading(true)
+    try {
+      const file = await compressImage(raw)
+      const { upload_url, public_url } = await authApi.getAvatarUploadUrl(file.name, file.type)
+      await fetch(upload_url, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
+      setPhotoUrl(public_url)
+      setPhotoPreview(null)
+      URL.revokeObjectURL(localUrl)
+    } catch {
+      setPhotoPreview(null)
+      setPhotoUrl(null)
+      setAvatarMode(null)
+      URL.revokeObjectURL(localUrl)
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const handleSkip = async () => {
     updateUser({ onboarding_complete: true })
     navigate('/dashboard')
+    // Persist to backend so it sticks across sessions
+    try { await gatewayClient.patch('/users/me', { onboarding_complete: true }) } catch {}
   }
 
   const needsLocation = activities.some(a => LOCATION_ACTIVITIES.has(a))
@@ -157,15 +212,6 @@ export default function OnboardingWizard() {
   const handleSubmit = async () => {
     setLoading(true)
     setLoadError('')
-    setLoadResult(null)
-    setActiveLoadIdx(0)
-    // Animate through categories while waiting
-    let idx = 0
-    clearInterval(loadIntervalRef.current)
-    loadIntervalRef.current = setInterval(() => {
-      idx = Math.min(idx + 1, activities.length - 1)
-      setActiveLoadIdx(idx)
-    }, 2500)
     try {
       const prefs = {
         location_address: locationAddress || null,
@@ -180,14 +226,13 @@ export default function OnboardingWizard() {
         show_genres: showGenres.map(g => g.toLowerCase()),
         game_types: gameTypes,
       }
-      const result = await authApi.updatePreferences(prefs)
-      setLoadResult(result)
-      clearInterval(loadIntervalRef.current)
-      setActiveLoadIdx(activities.length)
-      // Save emoji if chosen
-      if (selectedEmoji) {
+      // Save preferences first
+      await authApi.updatePreferences(prefs)
+      // Save avatar if chosen (photo URL already uploaded, just persist; emoji needs saving)
+      const avatarValue = avatarMode === 'photo' ? photoUrl : avatarMode === 'emoji' ? selectedEmoji : null
+      if (avatarValue) {
         try {
-          const r = await gatewayClient.patch('/users/me', { avatar_url: selectedEmoji })
+          const r = await gatewayClient.patch('/users/me', { avatar_url: avatarValue })
           updateUser({ ...r.data, onboarding_complete: true })
         } catch {
           updateUser({ onboarding_complete: true })
@@ -195,11 +240,10 @@ export default function OnboardingWizard() {
       } else {
         updateUser({ onboarding_complete: true })
       }
-      setStep(7)
+      // Navigate immediately — feed loading happens in the background
+      navigate('/dashboard')
     } catch (e) {
-      clearInterval(loadIntervalRef.current)
       setLoadError(e?.response?.data?.detail || 'Something went wrong. Please try again.')
-    } finally {
       setLoading(false)
     }
   }
@@ -278,7 +322,7 @@ export default function OnboardingWizard() {
         <div style={{ fontSize: '48px', marginBottom: '16px' }}>👋</div>
         <div style={h2}>Welcome to clubPal, {user?.full_name?.split(' ')[0] || user?.username}!</div>
         <div style={sub}>
-          Let's set up your profile and personalize your discover feed so you see restaurants, movies, books, and more that match your taste.
+          Set up your profile so you can create groups, plan events, and coordinate with your friends — all in one place.
           Takes about 30 seconds.
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -295,14 +339,18 @@ export default function OnboardingWizard() {
     </div>
   )
 
-  // ── Step 2: Pick your emoji ────────────────────────────────────────────────
+  // ── Step 2: Profile picture ────────────────────────────────────────────────
   if (step === 2) {
+    const hasAvatar = avatarMode === 'photo' ? !!(photoUrl || photoPreview) : avatarMode === 'emoji' ? !!selectedEmoji : false
+    const previewSrc = photoPreview || photoUrl
+    const initial = user?.full_name ? user.full_name.charAt(0).toUpperCase() : '?'
+
     return (
       <div style={overlay} onClick={handleSkip}>
         <div style={card} onClick={stopProp}>
           {progressDots()}
-          <div style={h2}>Pick your vibe</div>
-          <div style={sub}>Choose an emoji that represents you — it'll show on your profile and in groups.</div>
+          <div style={h2}>Add a profile picture</div>
+          <div style={sub}>Upload a photo or pick an emoji — your group members will see this.</div>
 
           {/* Preview */}
           <div style={{
@@ -311,50 +359,118 @@ export default function OnboardingWizard() {
             borderRadius: '16px', padding: '16px 20px', marginBottom: '24px',
           }}>
             <div style={{
-              width: '56px', height: '56px', borderRadius: '50%',
-              background: selectedEmoji ? 'rgba(244,63,94,0.12)' : 'var(--s3)',
-              border: `2px solid ${selectedEmoji ? 'rgba(244,63,94,0.3)' : 'var(--glass)'}`,
+              width: '64px', height: '64px', borderRadius: '50%',
+              background: avatarMode === 'emoji' && selectedEmoji ? 'rgba(244,63,94,0.12)'
+                : previewSrc ? 'transparent' : 'var(--s3)',
+              border: `2px solid ${hasAvatar ? 'rgba(244,63,94,0.3)' : 'var(--glass)'}`,
               display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: selectedEmoji ? '30px' : '22px',
-              flexShrink: 0, transition: 'all 0.2s',
+              fontSize: avatarMode === 'emoji' ? '34px' : '24px',
+              flexShrink: 0, transition: 'all 0.2s', overflow: 'hidden',
+              position: 'relative',
             }}>
-              {selectedEmoji || (user?.full_name ? user.full_name.charAt(0).toUpperCase() : '?')}
+              {uploading ? (
+                <div style={{
+                  width: '20px', height: '20px', borderRadius: '50%',
+                  border: '2px solid var(--rose)', borderTopColor: 'transparent',
+                  animation: 'spin 0.8s linear infinite',
+                }} />
+              ) : avatarMode === 'photo' && previewSrc ? (
+                <img src={previewSrc} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ) : avatarMode === 'emoji' && selectedEmoji ? (
+                selectedEmoji
+              ) : (
+                <span style={{ color: 'var(--t3)', fontWeight: 700 }}>{initial}</span>
+              )}
             </div>
             <div>
               <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--t1)' }}>
                 {user?.full_name || user?.username}
               </div>
               <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>
-                {selectedEmoji ? 'Looking good! 🎉' : 'Pick an emoji below'}
+                {uploading ? 'Uploading…' : hasAvatar ? 'Looking good!' : 'Choose an option below'}
               </div>
             </div>
           </div>
 
-          {/* Emoji grid */}
-          <div style={{
-            display: 'grid', gridTemplateColumns: 'repeat(9, 1fr)', gap: '6px',
-            marginBottom: '28px',
-          }}>
-            {AVATAR_EMOJIS.map(emoji => (
-              <button
-                key={emoji}
-                type="button"
-                onClick={() => setSelectedEmoji(prev => prev === emoji ? null : emoji)}
-                style={{
-                  aspectRatio: '1', borderRadius: '10px', fontSize: '22px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  border: `1px solid ${selectedEmoji === emoji ? 'rgba(244,63,94,0.4)' : 'transparent'}`,
-                  background: selectedEmoji === emoji ? 'rgba(244,63,94,0.12)' : 'transparent',
-                  cursor: 'pointer', transition: 'all 0.1s', padding: 0,
-                  boxShadow: selectedEmoji === emoji ? '0 0 0 2px rgba(244,63,94,0.2)' : 'none',
-                }}
-                onMouseEnter={e => { if (selectedEmoji !== emoji) e.currentTarget.style.background = 'var(--s3)' }}
-                onMouseLeave={e => { if (selectedEmoji !== emoji) e.currentTarget.style.background = 'transparent' }}
-              >
-                {emoji}
-              </button>
-            ))}
+          {/* Two option cards */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '16px' }}>
+            {/* Upload photo option */}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+              style={{
+                padding: '20px 12px',
+                borderRadius: '14px',
+                border: `1px solid ${avatarMode === 'photo' && photoUrl ? 'rgba(244,63,94,0.4)' : 'var(--glass)'}`,
+                background: avatarMode === 'photo' && photoUrl ? 'rgba(244,63,94,0.08)' : 'var(--s2)',
+                cursor: uploading ? 'wait' : 'pointer',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+                transition: 'all 0.12s',
+              }}
+            >
+              <span style={{ fontSize: '28px' }}>📷</span>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: avatarMode === 'photo' && photoUrl ? 'var(--rose-soft)' : 'var(--t2)' }}>
+                {avatarMode === 'photo' && photoUrl ? 'Change Photo' : 'Upload Photo'}
+              </span>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={handlePhotoSelect}
+              style={{ display: 'none' }}
+            />
+
+            {/* Emoji option */}
+            <button
+              type="button"
+              onClick={() => setAvatarMode(avatarMode === 'emoji' ? null : 'emoji')}
+              style={{
+                padding: '20px 12px',
+                borderRadius: '14px',
+                border: `1px solid ${avatarMode === 'emoji' ? 'rgba(244,63,94,0.4)' : 'var(--glass)'}`,
+                background: avatarMode === 'emoji' ? 'rgba(244,63,94,0.08)' : 'var(--s2)',
+                cursor: 'pointer',
+                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px',
+                transition: 'all 0.12s',
+              }}
+            >
+              <span style={{ fontSize: '28px' }}>😎</span>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: avatarMode === 'emoji' ? 'var(--rose-soft)' : 'var(--t2)' }}>
+                Pick Emoji
+              </span>
+            </button>
           </div>
+
+          {/* Emoji grid — shown when emoji mode is active */}
+          {avatarMode === 'emoji' && (
+            <div style={{
+              display: 'grid', gridTemplateColumns: 'repeat(9, 1fr)', gap: '6px',
+              marginBottom: '16px', padding: '12px',
+              background: 'var(--s2)', border: '1px solid var(--glass)', borderRadius: '12px',
+            }}>
+              {AVATAR_EMOJIS.map(emoji => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => { setSelectedEmoji(prev => prev === emoji ? null : emoji); setPhotoUrl(null); setPhotoPreview(null) }}
+                  style={{
+                    aspectRatio: '1', borderRadius: '10px', fontSize: '22px',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    border: `1px solid ${selectedEmoji === emoji ? 'rgba(244,63,94,0.4)' : 'transparent'}`,
+                    background: selectedEmoji === emoji ? 'rgba(244,63,94,0.12)' : 'transparent',
+                    cursor: 'pointer', transition: 'all 0.1s', padding: 0,
+                    boxShadow: selectedEmoji === emoji ? '0 0 0 2px rgba(244,63,94,0.2)' : 'none',
+                  }}
+                  onMouseEnter={e => { if (selectedEmoji !== emoji) e.currentTarget.style.background = 'var(--s3)' }}
+                  onMouseLeave={e => { if (selectedEmoji !== emoji) e.currentTarget.style.background = 'transparent' }}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
 
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <button type="button" onClick={() => setStep(1)}
@@ -362,16 +478,17 @@ export default function OnboardingWizard() {
               ← Back
             </button>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              {!selectedEmoji && (
+              {!hasAvatar && (
                 <button type="button" onClick={() => setStep(3)}
                   style={{ background: 'none', border: 'none', fontSize: '13px', color: 'var(--t4)', cursor: 'pointer', textDecoration: 'underline' }}>
                   Skip
                 </button>
               )}
-              {btnPrimary(() => setStep(3), selectedEmoji ? 'Next →' : 'Skip →')}
+              {btnPrimary(() => setStep(3), hasAvatar ? 'Next →' : 'Skip →', uploading)}
             </div>
           </div>
         </div>
+        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       </div>
     )
   }
@@ -569,66 +686,42 @@ export default function OnboardingWizard() {
     </div>
   )
 
-  // ── Step 6: Loading ────────────────────────────────────────────────────────
+  // ── Step 6: Confirm & Finish ──────────────────────────────────────────────
   if (step === 6) {
-    const counts = loadResult || {}
     return (
       <div style={overlay} onClick={loading ? undefined : handleSkip}>
         <div style={card} onClick={stopProp}>
           {progressDots()}
-          <div style={h2}>{loading ? 'Building your feed…' : loadError ? 'Something went wrong' : 'Ready to load'}</div>
+          <div style={h2}>{loadError ? 'Something went wrong' : 'All set!'}</div>
           <div style={sub}>
-            {loading
-              ? 'Fetching personalized results — this takes about 30–60 seconds.'
-              : loadError
-                ? 'An error occurred. You can try again or skip for now.'
-                : 'We\'ll fetch results from each category you selected.'}
+            {loadError
+              ? 'An error occurred saving your preferences. You can try again or skip for now.'
+              : 'Your preferences are ready to save. Content will load in the background once you hit the dashboard.'}
           </div>
 
-          {/* Per-category rows */}
+          {/* Per-category summary */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
-            {activities.map((a, i) => {
-              const isDone  = activeLoadIdx > i && !loading
-              const isActive = loading && activeLoadIdx === i
-              const isPast  = loading && activeLoadIdx > i
-              const count   = counts[a]
-              return (
-                <div
-                  key={a}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: '10px',
-                    padding: '10px 14px',
-                    borderRadius: '10px',
-                    background: isActive ? 'rgba(244,63,94,0.07)' : 'var(--s2)',
-                    border: `1px solid ${isActive ? 'rgba(244,63,94,0.2)' : 'var(--glass)'}`,
-                    transition: 'all 0.3s',
-                  }}
-                >
-                  <span style={{ fontSize: '20px', flexShrink: 0 }}>{ACTIVITY_EMOJIS_MAP[a]}</span>
-                  <span style={{ flex: 1, fontSize: '13px', fontWeight: 600, color: isActive ? 'var(--t1)' : 'var(--t2)' }}>
-                    {ACTIVITY_LABELS[a]}
-                  </span>
-                  {isPast || (isDone && count !== undefined) ? (
-                    <span style={{ fontSize: '12px', color: 'var(--t3)' }}>
-                      {count !== undefined ? `${count} found` : '✓'}
-                    </span>
-                  ) : isActive ? (
-                    <div style={{
-                      width: '14px', height: '14px', borderRadius: '50%',
-                      border: '2px solid var(--rose)', borderTopColor: 'transparent',
-                      animation: 'spin 0.8s linear infinite', flexShrink: 0,
-                    }} />
-                  ) : loading ? (
-                    <span style={{ fontSize: '11px', color: 'var(--t4)' }}>queued</span>
-                  ) : (
-                    <span style={{ fontSize: '11px', color: 'var(--t4)' }}>ready</span>
-                  )}
-                </div>
-              )
-            })}
+            {activities.map(a => (
+              <div
+                key={a}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '10px',
+                  padding: '10px 14px',
+                  borderRadius: '10px',
+                  background: 'var(--s2)',
+                  border: '1px solid var(--glass)',
+                }}
+              >
+                <span style={{ fontSize: '20px', flexShrink: 0 }}>{ACTIVITY_EMOJIS_MAP[a]}</span>
+                <span style={{ flex: 1, fontSize: '13px', fontWeight: 600, color: 'var(--t2)' }}>
+                  {ACTIVITY_LABELS[a]}
+                </span>
+                <span style={{ fontSize: '11px', color: 'var(--green)' }}>✓</span>
+              </div>
+            ))}
           </div>
 
-          {!loading && !loadResult && !loadError && (
+          {!loadError && (
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <button
                 type="button"
@@ -645,14 +738,8 @@ export default function OnboardingWizard() {
                 >
                   Skip
                 </button>
-                {btnPrimary(handleSubmit, 'Load My Feed →')}
+                {btnPrimary(handleSubmit, 'Finish & Go →', false, loading)}
               </div>
-            </div>
-          )}
-
-          {loading && (
-            <div style={{ fontSize: '12px', color: 'var(--t4)', textAlign: 'center' }}>
-              Don't close this screen…
             </div>
           )}
 
@@ -662,7 +749,7 @@ export default function OnboardingWizard() {
                 {loadError}
               </div>
               <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                {btnPrimary(handleSubmit, 'Try Again')}
+                {btnPrimary(handleSubmit, 'Try Again', false, loading)}
                 <button
                   type="button"
                   onClick={handleSkip}
@@ -674,43 +761,10 @@ export default function OnboardingWizard() {
             </div>
           )}
         </div>
-        <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
       </div>
     )
   }
 
-  // ── Step 7: Done ───────────────────────────────────────────────────────────
-  if (step === 7) {
-    const loaded = loadResult || {}
-    const summary = Object.entries(loaded).map(([k, v]) => `${v} ${k}`).join(' · ')
-
-    return (
-      <div style={overlay} onClick={() => navigate('/dashboard')}>
-        <div style={card} onClick={stopProp}>
-          <div style={{ fontSize: '52px', marginBottom: '16px' }}>🎉</div>
-          <div style={h2}>Your feed is ready!</div>
-          <div style={sub}>
-            {summary
-              ? `We found: ${summary}`
-              : 'Your personalized discover feed is all set.'}
-          </div>
-          <div style={{ display: 'flex', gap: '10px' }}>
-            <button
-              type="button"
-              onClick={() => navigate('/dashboard')}
-              style={{
-                background: 'var(--rose)', color: '#fff', border: 'none',
-                borderRadius: '10px', padding: '10px 24px', fontSize: '14px',
-                fontWeight: 700, cursor: 'pointer',
-              }}
-            >
-              Go to Dashboard →
-            </button>
-          </div>
-        </div>
-      </div>
-    )
-  }
 
   return null
 }

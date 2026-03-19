@@ -1,5 +1,8 @@
+import { useMobileNav } from '../../contexts/MobileNavContext'
+
 export default function StatsHero({ user, year = new Date().getFullYear(), totalEvents = 0, groupCount = 0 }) {
   const firstName = user?.full_name?.split(' ')[0] || 'Explorer'
+  const { isMobile, openSidebar } = useMobileNav()
 
   return (
     <div
@@ -24,6 +27,20 @@ export default function StatsHero({ user, year = new Date().getFullYear(), total
           pointerEvents: 'none',
         }}
       />
+      {isMobile && (
+        <button
+          onClick={openSidebar}
+          className="cp-hamburger"
+          aria-label="Open menu"
+          style={{ marginBottom: '10px' }}
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="3" y1="6" x2="21" y2="6"/>
+            <line x1="3" y1="12" x2="21" y2="12"/>
+            <line x1="3" y1="18" x2="21" y2="18"/>
+          </svg>
+        </button>
+      )}
       <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--rose-soft)', textTransform: 'uppercase', letterSpacing: '1.5px', marginBottom: '8px' }}>
         Your {year} in Review
       </div>

@@ -1,17 +1,11 @@
 // Form primitives — FormInput, FormLabel, FormGroup, FormSection, FormRow, FormSelect, PasswordInput
-import { useState } from 'react'
+import { useState, useId } from 'react'
 
-export function FormLabel({ children, required }) {
+export function FormLabel({ children, required, htmlFor }) {
   return (
     <label
-      style={{
-        display: 'block',
-        fontSize: '11px',
-        fontWeight: 600,
-        color: 'var(--t3)',
-        letterSpacing: '0.2px',
-        marginBottom: '5px',
-      }}
+      htmlFor={htmlFor}
+      className="cp-form-label"
     >
       {children}
       {required && <span style={{ color: 'var(--rose)', marginLeft: '2px' }}>*</span>}
@@ -19,50 +13,29 @@ export function FormLabel({ children, required }) {
   )
 }
 
-export function FormInput({ error, style: styleProp = {}, ...props }) {
+export function FormInput({ error, style: styleProp = {}, id, ...props }) {
+  const errorId = error ? `${id || 'input'}-error` : undefined
   return (
     <input
-      style={{
-        width: '100%',
-        padding: '9px 12px',
-        border: `1px solid ${error ? 'rgba(248,113,113,0.5)' : 'var(--glass)'}`,
-        borderRadius: '10px',
-        fontSize: '13px',
-        color: 'var(--t1)',
-        background: 'var(--s3)',
-        outline: 'none',
-        boxSizing: 'border-box',
-        ...styleProp,
-      }}
-      onFocus={e => {
-        e.target.style.borderColor = 'rgba(244,63,94,0.22)'
-        e.target.style.boxShadow = '0 0 0 3px rgba(244,63,94,0.15)'
-      }}
-      onBlur={e => {
-        e.target.style.borderColor = error ? 'rgba(248,113,113,0.5)' : 'var(--glass)'
-        e.target.style.boxShadow = 'none'
-      }}
+      id={id}
+      className={`cp-form-input ${error ? 'cp-form-input--error' : ''}`}
+      style={styleProp}
+      aria-invalid={error ? 'true' : undefined}
+      aria-describedby={errorId}
       {...props}
     />
   )
 }
 
-export function FormSelect({ children, error, style: styleProp = {}, ...props }) {
+export function FormSelect({ children, error, style: styleProp = {}, id, ...props }) {
+  const errorId = error ? `${id || 'select'}-error` : undefined
   return (
     <select
-      style={{
-        width: '100%',
-        padding: '9px 12px',
-        border: `1px solid ${error ? 'rgba(248,113,113,0.5)' : 'var(--glass)'}`,
-        borderRadius: '10px',
-        fontSize: '13px',
-        color: 'var(--t1)',
-        background: 'var(--s3)',
-        outline: 'none',
-        boxSizing: 'border-box',
-        cursor: 'pointer',
-        ...styleProp,
-      }}
+      id={id}
+      className={`cp-form-input cp-form-select ${error ? 'cp-form-input--error' : ''}`}
+      style={styleProp}
+      aria-invalid={error ? 'true' : undefined}
+      aria-describedby={errorId}
       {...props}
     >
       {children}
@@ -70,79 +43,55 @@ export function FormSelect({ children, error, style: styleProp = {}, ...props })
   )
 }
 
-export function FormTextarea({ error, style: styleProp = {}, ...props }) {
+export function FormTextarea({ error, style: styleProp = {}, id, maxLength, value, ...props }) {
+  const errorId = error ? `${id || 'textarea'}-error` : undefined
+  const charCount = maxLength && typeof value === 'string' ? value.length : null
   return (
-    <textarea
-      style={{
-        width: '100%',
-        padding: '9px 12px',
-        border: `1px solid ${error ? 'rgba(248,113,113,0.5)' : 'var(--glass)'}`,
-        borderRadius: '10px',
-        fontSize: '13px',
-        color: 'var(--t1)',
-        background: 'var(--s3)',
-        outline: 'none',
-        boxSizing: 'border-box',
-        resize: 'vertical',
-        fontFamily: 'inherit',
-        ...styleProp,
-      }}
-      onFocus={e => {
-        e.target.style.borderColor = 'rgba(244,63,94,0.22)'
-        e.target.style.boxShadow = '0 0 0 3px rgba(244,63,94,0.15)'
-      }}
-      onBlur={e => {
-        e.target.style.borderColor = error ? 'rgba(248,113,113,0.5)' : 'var(--glass)'
-        e.target.style.boxShadow = 'none'
-      }}
-      {...props}
-    />
+    <div>
+      <textarea
+        id={id}
+        className={`cp-form-input cp-form-textarea ${error ? 'cp-form-input--error' : ''}`}
+        style={styleProp}
+        aria-invalid={error ? 'true' : undefined}
+        aria-describedby={errorId}
+        maxLength={maxLength}
+        value={value}
+        {...props}
+      />
+      {charCount !== null && (
+        <div style={{ textAlign: 'right', fontSize: 'var(--text-xs)', color: 'var(--t3)', marginTop: '2px' }}>
+          {charCount}/{maxLength}
+        </div>
+      )}
+    </div>
   )
 }
 
-export function FormError({ children }) {
+export function FormError({ children, id }) {
   if (!children) return null
   return (
-    <p style={{ fontSize: '11px', color: '#f87171', marginTop: '4px' }}>{children}</p>
+    <p id={id} className="cp-form-error" role="alert">{children}</p>
   )
 }
 
-export function PasswordInput({ error, style: styleProp = {}, ...props }) {
+export function PasswordInput({ error, style: styleProp = {}, id, ...props }) {
   const [show, setShow] = useState(false)
+  const errorId = error ? `${id || 'password'}-error` : undefined
   return (
     <div style={{ position: 'relative' }}>
       <input
+        id={id}
         type={show ? 'text' : 'password'}
-        style={{
-          width: '100%',
-          padding: '9px 38px 9px 12px',
-          border: `1px solid ${error ? 'rgba(248,113,113,0.5)' : 'var(--glass)'}`,
-          borderRadius: '10px',
-          fontSize: '13px',
-          color: 'var(--t1)',
-          background: 'var(--s3)',
-          outline: 'none',
-          boxSizing: 'border-box',
-          ...styleProp,
-        }}
-        onFocus={e => {
-          e.target.style.borderColor = 'rgba(244,63,94,0.22)'
-          e.target.style.boxShadow = '0 0 0 3px rgba(244,63,94,0.15)'
-        }}
-        onBlur={e => {
-          e.target.style.borderColor = error ? 'rgba(248,113,113,0.5)' : 'var(--glass)'
-          e.target.style.boxShadow = 'none'
-        }}
+        className={`cp-form-input cp-form-input--password ${error ? 'cp-form-input--error' : ''}`}
+        style={styleProp}
+        aria-invalid={error ? 'true' : undefined}
+        aria-describedby={errorId}
         {...props}
       />
       <button
         type="button"
         onClick={() => setShow(s => !s)}
-        style={{
-          position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)',
-          background: 'none', border: 'none', cursor: 'pointer', padding: '2px',
-          color: 'var(--t3)', display: 'flex', alignItems: 'center',
-        }}
+        className="cp-form-pwd-toggle"
         tabIndex={-1}
         aria-label={show ? 'Hide password' : 'Show password'}
       >
@@ -163,25 +112,24 @@ export function PasswordInput({ error, style: styleProp = {}, ...props }) {
   )
 }
 
-export function FormGroup({ label, required, error, children }) {
+export function FormGroup({ label, required, error, children, id: idProp }) {
+  const autoId = useId()
+  const id = idProp || autoId
+  const errorId = error ? `${id}-error` : undefined
+
   return (
     <div>
-      {label && <FormLabel required={required}>{label}</FormLabel>}
+      {label && <FormLabel required={required} htmlFor={id}>{label}</FormLabel>}
+      {/* Clone input to inject id — or just rely on wrapping */}
       {children}
-      <FormError>{error}</FormError>
+      <FormError id={errorId}>{error}</FormError>
     </div>
   )
 }
 
 export function FormRow({ children, cols = 2 }) {
   return (
-    <div
-      style={{
-        display: 'grid',
-        gridTemplateColumns: `repeat(${cols}, 1fr)`,
-        gap: '12px',
-      }}
-    >
+    <div className="cp-form-row" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
       {children}
     </div>
   )
@@ -189,27 +137,9 @@ export function FormRow({ children, cols = 2 }) {
 
 export function FormSection({ title, children, style: styleProp = {} }) {
   return (
-    <div
-      style={{
-        background: 'var(--s2)',
-        border: '1px solid var(--glass)',
-        borderRadius: '14px',
-        padding: '20px',
-        marginBottom: '14px',
-        ...styleProp,
-      }}
-    >
+    <div className="cp-form-section" style={styleProp}>
       {title && (
-        <div
-          style={{
-            fontSize: '13px',
-            fontWeight: 700,
-            color: 'var(--t1)',
-            marginBottom: '14px',
-          }}
-        >
-          {title}
-        </div>
+        <div className="cp-form-section-title">{title}</div>
       )}
       {children}
     </div>

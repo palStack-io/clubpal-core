@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import BaseModal from './BaseModal'
+import Modal from '../ui/Modal'
 import Button from '../ui/Button'
 import { FormGroup, FormInput } from '../ui/Form'
 
@@ -14,7 +14,7 @@ export default function InviteMemberModal({ isOpen, onClose, onInvite, loading, 
 
   if (successEmail) {
     return (
-      <BaseModal
+      <Modal
         isOpen={isOpen}
         onClose={onClose}
         title="Invite Sent!"
@@ -37,12 +37,12 @@ export default function InviteMemberModal({ isOpen, onClose, onInvite, loading, 
             They'll receive an email with a link to join the group.
           </div>
         </div>
-      </BaseModal>
+      </Modal>
     )
   }
 
   return (
-    <BaseModal
+    <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="Invite Member"
@@ -92,6 +92,6 @@ export default function InviteMemberModal({ isOpen, onClose, onInvite, loading, 
           ))}
         </div>
       )}
-    </BaseModal>
+    </Modal>
   )
 }

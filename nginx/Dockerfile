@@ -1,6 +1,8 @@
 # Stage 1: Build web app
 FROM node:20-alpine AS web-builder
 WORKDIR /web
+ARG VITE_GOOGLE_CLIENT_ID=""
+ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
 COPY web/package*.json ./
 RUN npm install --prefer-offline
 COPY web/ .

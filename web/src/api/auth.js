@@ -16,6 +16,9 @@ export const authApi = {
   updateProfile: (data) =>
     gatewayClient.patch('/users/me', data).then(r => r.data),
 
+  getAvatarUploadUrl: (filename, contentType = 'image/jpeg') =>
+    gatewayClient.post('/users/me/avatar/upload-url', { filename, content_type: contentType }).then(r => r.data),
+
   forgotPassword: (email) =>
     gatewayClient.post('/auth/forgot-password', { email }).then(r => r.data),
 

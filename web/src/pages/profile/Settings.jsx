@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useLocation } from 'react-router-dom'
 import AppShell from '../../components/shell/AppShell'
 import Avatar from '../../components/ui/Avatar'
@@ -193,16 +193,23 @@ function EmojiPicker({ value, onChange }) {
 
 function ProfileSection({ user }) {
   const { updateUser } = useAuth()
+  const fileInputRef = useRef(null)
   const [form, setForm] = useState({
     full_name: user?.full_name || '',
     username: user?.username || '',
     email: user?.email || '',
   })
+  const isImageUrl = (url) => url && (url.startsWith('http') || url.startsWith('/'))
+  const isEmoji = (url) => url && !isImageUrl(url)
+
   const [selectedEmoji, setSelectedEmoji] = useState(
-    user?.avatar_url && !user.avatar_url.startsWith('http') && !user.avatar_url.startsWith('/')
-      ? user.avatar_url
-      : null
+    isEmoji(user?.avatar_url) ? user.avatar_url : null
   )
+  const [photoUrl, setPhotoUrl] = useState(
+    isImageUrl(user?.avatar_url) ? user.avatar_url : null
+  )
+  const [photoPreview, setPhotoPreview] = useState(null)
+  const [uploading, setUploading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -210,11 +217,90 @@ function ProfileSection({ user }) {
   const previewUser = {
     ...user,
     full_name: form.full_name,
-    avatar_url: selectedEmoji !== null ? selectedEmoji : (
-      user?.avatar_url && (user.avatar_url.startsWith('http') || user.avatar_url.startsWith('/'))
-        ? user.avatar_url
-        : null
-    ),
+    avatar_url: photoPreview || (selectedEmoji !== null ? selectedEmoji : photoUrl),
+  }
+
+  // Compress image to JPEG via canvas, targeting max 512px and ~200KB
+  const compressImage = (file) => new Promise((resolve) => {
+    const img = new Image()
+    const url = URL.createObjectURL(file)
+    img.onload = () => {
+      URL.revokeObjectURL(url)
+      const maxDim = 512
+      let { width, height } = img
+      if (width > maxDim || height > maxDim) {
+        const scale = maxDim / Math.max(width, height)
+        width = Math.round(width * scale)
+        height = Math.round(height * scale)
+      }
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')
+      ctx.drawImage(img, 0, 0, width, height)
+      canvas.toBlob(
+        (blob) => resolve(new File([blob], file.name.replace(/\.\w+$/, '.jpg'), { type: 'image/jpeg' })),
+        'image/jpeg',
+        0.85,
+      )
+    }
+    img.onerror = () => { URL.revokeObjectURL(url); resolve(file) }
+    img.src = url
+  })
+
+  const handlePhotoSelect = async (e) => {
+    const raw = e.target.files?.[0]
+    if (!raw) return
+    if (!raw.type.startsWith('image/')) return
+
+    // Show local preview immediately
+    const localUrl = URL.createObjectURL(raw)
+    setPhotoPreview(localUrl)
+    setSelectedEmoji(null)
+    setUploading(true)
+
+    try {
+      const file = await compressImage(raw)
+      // 1. Get presigned upload URL from backend
+      const { upload_url, public_url } = await authApi.getAvatarUploadUrl(file.name, file.type)
+      // 2. Upload directly to MinIO via presigned URL
+      await fetch(upload_url, {
+        method: 'PUT',
+        headers: { 'Content-Type': file.type },
+        body: file,
+      })
+      // 3. Save the public URL to user profile
+      const r = await gatewayClient.patch('/users/me', { avatar_url: public_url })
+      updateUser(r.data)
+      setPhotoUrl(public_url)
+      setPhotoPreview(null)
+      URL.revokeObjectURL(localUrl)
+    } catch (err) {
+      setPhotoPreview(null)
+      URL.revokeObjectURL(localUrl)
+      alert(err?.response?.data?.detail || 'Failed to upload photo. Please try again.')
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const handleRemovePhoto = async () => {
+    setPhotoUrl(null)
+    setPhotoPreview(null)
+    setSelectedEmoji(null)
+    try {
+      const r = await gatewayClient.patch('/users/me', { avatar_url: null })
+      updateUser(r.data)
+    } catch {}
+  }
+
+  const handleEmojiChange = (emoji) => {
+    setSelectedEmoji(emoji)
+    if (emoji !== null) {
+      setPhotoUrl(null)
+      setPhotoPreview(null)
+    }
   }
 
   const handleSave = async () => {
@@ -223,12 +309,9 @@ function ProfileSection({ user }) {
       const payload = { full_name: form.full_name }
       if (form.username !== user?.username) payload.username = form.username
       if (form.email !== user?.email) payload.email = form.email
-      // Send emoji or explicit null to clear
+      // Send emoji if selected (photo is saved immediately on upload)
       if (selectedEmoji !== null) {
         payload.avatar_url = selectedEmoji
-      } else if (user?.avatar_url && !user.avatar_url.startsWith('http') && !user.avatar_url.startsWith('/')) {
-        // Was emoji, now cleared
-        payload.avatar_url = null
       }
       const r = await gatewayClient.patch('/users/me', payload)
       updateUser(r.data)
@@ -247,11 +330,69 @@ function ProfileSection({ user }) {
       </div>
 
       <FormSection title="Personal Info">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-          <Avatar user={previewUser} size="xl" />
-          <div>
-            <div style={{ fontSize: '12px', color: 'var(--t3)', marginBottom: '6px' }}>Avatar</div>
-            <EmojiPicker value={selectedEmoji} onChange={setSelectedEmoji} />
+        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', marginBottom: '16px' }}>
+          {/* Avatar preview — clickable to upload */}
+          <div style={{ position: 'relative', flexShrink: 0 }}>
+            <div
+              onClick={() => !uploading && fileInputRef.current?.click()}
+              style={{ cursor: uploading ? 'default' : 'pointer', position: 'relative' }}
+              title="Click to upload photo"
+            >
+              <Avatar user={previewUser} size="xl" style={{ width: '64px', height: '64px', fontSize: '22px' }} />
+              {uploading && (
+                <div style={{
+                  position: 'absolute', inset: 0, borderRadius: '50%',
+                  background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <div style={{
+                    width: '18px', height: '18px', borderRadius: '50%',
+                    border: '2px solid #fff', borderTopColor: 'transparent',
+                    animation: 'spin 0.8s linear infinite',
+                  }} />
+                </div>
+              )}
+              {!uploading && (
+                <div style={{
+                  position: 'absolute', bottom: '-2px', right: '-2px',
+                  width: '22px', height: '22px', borderRadius: '50%',
+                  background: 'var(--rose)', border: '2px solid var(--s1)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                    <circle cx="12" cy="13" r="4" />
+                  </svg>
+                </div>
+              )}
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              onChange={handlePhotoSelect}
+              style={{ display: 'none' }}
+            />
+          </div>
+
+          {/* Avatar options */}
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '12px', color: 'var(--t3)', marginBottom: '8px' }}>Avatar</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', alignItems: 'center' }}>
+              <EmojiPicker value={selectedEmoji} onChange={handleEmojiChange} />
+              {(photoUrl || selectedEmoji) && (
+                <button
+                  type="button"
+                  onClick={handleRemovePhoto}
+                  style={{
+                    background: 'none', border: 'none',
+                    fontSize: '11px', color: 'var(--t4)',
+                    cursor: 'pointer', textDecoration: 'underline',
+                  }}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
           </div>
         </div>
         <FormRow>
@@ -274,6 +415,7 @@ function ProfileSection({ user }) {
           {saved ? '✓ Saved!' : 'Save Changes'}
         </Button>
       </div>
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
   )
 }

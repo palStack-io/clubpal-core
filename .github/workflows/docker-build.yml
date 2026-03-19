@@ -55,6 +55,8 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/clubpal-nginx:latest
             ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/clubpal-nginx:${{ github.sha }}
+          build-args: |
+            VITE_GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
           no-cache: true
 
   # ──────────────────────────────────────────────────────────────────────────

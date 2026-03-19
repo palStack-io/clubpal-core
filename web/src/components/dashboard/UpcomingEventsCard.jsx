@@ -35,9 +35,12 @@ function SkeletonRow() {
   )
 }
 
-export default function UpcomingEventsCard({ events = [], loading = false }) {
+const VISIBLE_COUNT = 5
+
+export default function UpcomingEventsCard({ events = [], loading = false, onNewEvent }) {
   const navigate = useNavigate()
   const [activeFilter, setActiveFilter] = useState('all')
+  const [expanded, setExpanded] = useState(false)
 
   const filtered =
     activeFilter === 'all'
@@ -48,23 +51,39 @@ export default function UpcomingEventsCard({ events = [], loading = false }) {
           return aliases.includes(t)
         })
 
+  const visible = expanded ? filtered : filtered.slice(0, VISIBLE_COUNT)
+  const hasMore = filtered.length > VISIBLE_COUNT
+
   return (
     <Card>
       <Card.Header
         title="Upcoming Events"
         action={
-          <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-            {PILLS.map(p => (
-              <ActivityPill
-                key={p.value}
-                label={p.label}
-                active={activeFilter === p.value}
-                onClick={() => setActiveFilter(p.value)}
-              />
-            ))}
-          </div>
+          <button
+            onClick={() => navigate('/events')}
+            style={{
+              fontSize: '11px', fontWeight: 600, color: 'var(--rose-soft)',
+              background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px',
+            }}
+          >
+            View all →
+          </button>
         }
       />
+      {/* Filter pills — own row below header */}
+      <div style={{
+        display: 'flex', gap: '4px', padding: '0 16px 8px',
+        overflowX: 'auto', scrollbarWidth: 'none',
+      }}>
+        {PILLS.map(p => (
+          <ActivityPill
+            key={p.value}
+            label={p.label}
+            active={activeFilter === p.value}
+            onClick={() => { setActiveFilter(p.value); setExpanded(false) }}
+          />
+        ))}
+      </div>
       <Card.Body>
         {loading ? (
           <div>{[0, 1, 2, 3].map(i => <SkeletonRow key={i} />)}</div>
@@ -79,7 +98,7 @@ export default function UpcomingEventsCard({ events = [], loading = false }) {
           >
             No upcoming events.{' '}
             <button
-              onClick={() => navigate('/events/new')}
+              onClick={() => onNewEvent ? onNewEvent() : navigate('/events/new')}
               style={{
                 color: 'var(--rose)',
                 background: 'none',
@@ -93,13 +112,27 @@ export default function UpcomingEventsCard({ events = [], loading = false }) {
           </div>
         ) : (
           <div>
-            {filtered.map(event => (
+            {visible.map(event => (
               <EventItem
                 key={event.id}
                 event={event}
                 onClick={() => navigate(`/events/${event.id}`)}
               />
             ))}
+            {hasMore && (
+              <button
+                onClick={() => setExpanded(v => !v)}
+                style={{
+                  width: '100%', padding: '10px', marginTop: '4px',
+                  fontSize: '12px', fontWeight: 700, color: 'var(--t3)',
+                  background: 'var(--s3)', border: '1px solid var(--glass)',
+                  borderRadius: '10px', cursor: 'pointer',
+                  transition: 'color 0.15s',
+                }}
+              >
+                {expanded ? 'Show less' : `Show ${filtered.length - VISIBLE_COUNT} more`}
+              </button>
+            )}
           </div>
         )}
       </Card.Body>

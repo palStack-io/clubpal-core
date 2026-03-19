@@ -73,22 +73,14 @@ export default function Stats() {
       />
 
       {/* KPI row — lifted */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: '12px',
-          padding: '0 24px',
-          transform: 'translateY(-20px)',
-        }}
-      >
+      <div className="cp-floating-stats" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
         <KpiCard value={thisYear.length} label="Total Events" />
         <KpiCard value={avgRating} label="Avg Rating" />
         <KpiCard value={picksCount} label="Picks Made" />
         <KpiCard value={groups.length} label="Groups" />
       </div>
 
-      <div style={{ padding: '0 24px 24px', marginTop: '-8px' }}>
+      <div style={{ padding: '0 24px 24px' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
           <ActivityDonutCard breakdown={breakdown} />
           <MonthlyBarCard monthly={monthly} />

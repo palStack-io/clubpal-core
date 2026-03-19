@@ -113,35 +113,11 @@ export default function EventsList() {
       </PageHero>
 
       {/* Floating stats */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: '12px',
-          padding: '0 20px',
-          transform: 'translateY(-28px)',
-          position: 'relative',
-          zIndex: 2,
-        }}
-      >
+      <div className="cp-floating-stats" style={{ gridTemplateColumns: 'repeat(3, 1fr)' }}>
         {stats.map(stat => (
-          <div
-            key={stat.label}
-            style={{
-              background: 'var(--s2)',
-              border: '1px solid rgba(255,255,255,0.12)',
-              borderRadius: '14px',
-              padding: '14px 10px',
-              boxShadow: '0 4px 24px rgba(0,0,0,0.45)',
-              textAlign: 'center',
-            }}
-          >
-            <div style={{ fontSize: '22px', fontWeight: 900, color: 'var(--t1)', letterSpacing: '-1px', lineHeight: 1 }}>
-              {stat.value}
-            </div>
-            <div style={{ fontSize: '9px', fontWeight: 600, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: '0.8px', marginTop: '5px' }}>
-              {stat.label}
-            </div>
+          <div key={stat.label} className="cp-stat-tile">
+            <div className="cp-stat-tile-value">{stat.value}</div>
+            <div className="cp-stat-tile-label">{stat.label}</div>
           </div>
         ))}
       </div>
@@ -157,7 +133,6 @@ export default function EventsList() {
           backdropFilter: 'blur(16px)',
           WebkitBackdropFilter: 'blur(16px)',
           borderBottom: '1px solid var(--glass)',
-          marginTop: '-8px',
         }}
       >
         {/* Search + status row */}

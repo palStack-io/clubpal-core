@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import BaseModal from './BaseModal'
+import Modal from '../ui/Modal'
 import Button from '../ui/Button'
 import { FormGroup, FormInput, FormTextarea, FormRow } from '../ui/Form'
 
@@ -14,7 +14,7 @@ export default function PickEventModal({ isOpen, onClose, onConfirm, item, activ
   }
 
   return (
-    <BaseModal
+    <Modal
       isOpen={isOpen}
       onClose={onClose}
       title="Confirm Your Pick"
@@ -67,6 +67,6 @@ export default function PickEventModal({ isOpen, onClose, onConfirm, item, activ
           />
         </FormGroup>
       </div>
-    </BaseModal>
+    </Modal>
   )
 }

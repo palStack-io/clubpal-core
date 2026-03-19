@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import BaseModal from './BaseModal'
+import Modal from '../ui/Modal'
 import Button from '../ui/Button'
 
 const OPTIONS = [
@@ -12,7 +12,7 @@ export default function RSVPModal({ isOpen, onClose, onSubmit, eventTitle, loadi
   const [selected, setSelected] = useState(null)
 
   return (
-    <BaseModal
+    <Modal
       isOpen={isOpen}
       onClose={onClose}
       title={`Your RSVP for ${eventTitle || 'this event'}`}
@@ -48,6 +48,6 @@ export default function RSVPModal({ isOpen, onClose, onSubmit, eventTitle, loadi
           </button>
         ))}
       </div>
-    </BaseModal>
+    </Modal>
   )
 }

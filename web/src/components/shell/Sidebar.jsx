@@ -34,61 +34,67 @@ const SETTINGS_NAV = [
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ]
 
-function NavItem({ to, label, icon, id }) {
+function NavItem({ to, label, icon, id, onClick }) {
   return (
     <NavLink
       id={id}
       to={to}
+      onClick={onClick}
       className={({ isActive }) => `cp-nav-item${isActive ? ' active' : ''}`}
     >
-      <span style={{ fontSize: '16px', width: '22px', textAlign: 'center', flexShrink: 0 }}>
-        {icon}
-      </span>
+      <span className="cp-nav-icon">{icon}</span>
       <span style={{ flex: 1 }}>{label}</span>
     </NavLink>
   )
 }
 
-export default function Sidebar({ user: userProp, groupCount = 0, notifCount = 0 }) {
+export default function Sidebar({ user: userProp, groupCount = 0, notifCount = 0, isMobile = false, isOpen = false, onClose }) {
   const { user: authUser, logout } = useAuth()
   const navigate = useNavigate()
   const user = userProp || authUser
   const [discoverOpen, setDiscoverOpen] = useState(true)
 
-  return (
-    <aside className="cp-sidebar">
+  const handleNavClick = () => {
+    if (isMobile && onClose) onClose()
+  }
+
+  const handleSignOut = async () => {
+    await logout()
+    navigate('/login')
+  }
+
+  const sidebarContent = (
+    <aside className={`cp-sidebar${isMobile ? ' cp-sidebar--mobile' : ''}`}>
+      {/* Mobile close button */}
+      {isMobile && (
+        <button
+          onClick={onClose}
+          className="cp-sidebar-close"
+          aria-label="Close menu"
+        >
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18"/>
+            <line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      )}
+
       {/* Top — user identity */}
       <div
-        onClick={() => navigate('/settings')}
-        style={{
-          padding: '16px 16px 14px',
-          borderBottom: '1px solid var(--sidebar-border)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          cursor: 'pointer',
-        }}
-        onMouseEnter={e => e.currentTarget.style.background = 'var(--nav-hover-bg)'}
-        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+        onClick={() => { navigate('/settings'); handleNavClick() }}
+        className="cp-sidebar-user"
       >
         <Avatar user={user} size="md" />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--t1)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div className="cp-sidebar-username">
               {user?.full_name || user?.username || 'User'}
             </div>
             {user?.is_admin && (
-              <span style={{
-                fontSize: '9px', fontWeight: 800, letterSpacing: '0.5px',
-                textTransform: 'uppercase', color: 'var(--rose)',
-                background: 'var(--rose-glow)', border: '1px solid var(--rose-border)',
-                borderRadius: '5px', padding: '1px 5px', flexShrink: 0,
-              }}>
-                Admin
-              </span>
+              <span className="cp-admin-badge">Admin</span>
             )}
           </div>
-          <div style={{ fontSize: '11px', color: 'var(--t3)' }}>
+          <div className="cp-sidebar-handle">
             @{user?.username || '—'}
           </div>
         </div>
@@ -99,36 +105,16 @@ export default function Sidebar({ user: userProp, groupCount = 0, notifCount = 0
         {/* Main */}
         <div className="cp-nav-label">Main</div>
         {MAIN_NAV.map(item => (
-          <NavItem key={item.to} to={item.to} label={item.label} icon={item.icon} id={item.id} />
+          <NavItem key={item.to} to={item.to} label={item.label} icon={item.icon} id={item.id} onClick={handleNavClick} />
         ))}
 
         {/* Discover — collapsible */}
         <button
           id="tour-nav-discover"
           onClick={() => setDiscoverOpen(o => !o)}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            width: '100%',
-            background: 'none',
-            border: 'none',
-            cursor: 'pointer',
-            padding: '0 8px',
-            margin: '16px 0 6px',
-          }}
+          className="cp-nav-section-toggle"
         >
-          <span
-            style={{
-              fontSize: '10px',
-              fontWeight: 700,
-              textTransform: 'uppercase',
-              letterSpacing: '1px',
-              color: 'var(--nav-label-color)',
-              flex: 1,
-              textAlign: 'left',
-            }}
-          >
+          <span className="cp-nav-label" style={{ margin: 0, padding: 0, flex: 1, textAlign: 'left' }}>
             Discover
           </span>
           <span
@@ -145,59 +131,54 @@ export default function Sidebar({ user: userProp, groupCount = 0, notifCount = 0
         </button>
 
         {discoverOpen && DISCOVER_NAV.map(item => (
-          <NavItem key={item.to} to={item.to} label={item.label} icon={item.icon} />
+          <NavItem key={item.to} to={item.to} label={item.label} icon={item.icon} onClick={handleNavClick} />
         ))}
 
         {/* Settings */}
         <div className="cp-nav-label">Settings</div>
         {SETTINGS_NAV.map(item => (
-          <NavItem key={item.to} to={item.to} label={item.label} icon={item.icon} />
+          <NavItem key={item.to} to={item.to} label={item.label} icon={item.icon} onClick={handleNavClick} />
         ))}
         {user?.is_admin && (
           <NavLink
             to="/settings"
+            onClick={handleNavClick}
             className={({ isActive }) => `cp-nav-item${isActive ? ' active' : ''}`}
             style={{ color: 'var(--rose)' }}
           >
-            <span style={{ fontSize: '16px', width: '22px', textAlign: 'center', flexShrink: 0 }}>🛡️</span>
+            <span className="cp-nav-icon">🛡️</span>
             <span style={{ flex: 1 }}>Admin Panel</span>
-            <span style={{
-              fontSize: '8px', fontWeight: 800, letterSpacing: '0.5px',
-              textTransform: 'uppercase', color: 'var(--rose)',
-              background: 'var(--rose-glow)', border: '1px solid var(--rose-border)',
-              borderRadius: '4px', padding: '1px 4px',
-            }}>
-              You
-            </span>
+            <span className="cp-admin-badge" style={{ fontSize: '8px', padding: '1px 4px' }}>You</span>
           </NavLink>
         )}
       </nav>
 
       {/* Bottom — sign out */}
-      <button
-        onClick={async () => { await logout(); navigate('/login'); }}
-        style={{
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          padding: '12px 16px',
-          background: 'none',
-          border: 'none',
-          borderTop: '1px solid var(--sidebar-border)',
-          cursor: 'pointer',
-          fontSize: '12px',
-          fontWeight: 600,
-          color: 'var(--t3)',
-          textAlign: 'left',
-          transition: 'color 0.15s, background 0.15s',
-        }}
-        onMouseEnter={e => { e.currentTarget.style.color = '#f87171'; e.currentTarget.style.background = 'rgba(248,113,113,0.06)'; }}
-        onMouseLeave={e => { e.currentTarget.style.color = 'var(--t3)'; e.currentTarget.style.background = 'none'; }}
-      >
+      <button onClick={handleSignOut} className="cp-sidebar-signout">
         {SIGNOUT_ICON}
         Sign out
       </button>
     </aside>
   )
+
+  // Mobile: render as overlay drawer
+  if (isMobile) {
+    return (
+      <>
+        {/* Backdrop */}
+        <div
+          className={`cp-sidebar-backdrop${isOpen ? ' open' : ''}`}
+          onClick={onClose}
+          aria-hidden="true"
+        />
+        {/* Drawer */}
+        <div className={`cp-sidebar-drawer${isOpen ? ' open' : ''}`}>
+          {sidebarContent}
+        </div>
+      </>
+    )
+  }
+
+  // Desktop: render normally
+  return sidebarContent
 }

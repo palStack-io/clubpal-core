@@ -8,6 +8,8 @@ import CreateApiKeyModal from '../../components/modals/CreateApiKeyModal'
 import { useAuth } from '../../contexts/AuthContext'
 import { useTheme } from '../../contexts/ThemeContext'
 import { gatewayClient, enrichClient } from '../../api/client'
+import AdminUsersCard from '../../components/admin/AdminUsersCard'
+import AdminOCRStatsCard from '../../components/admin/AdminOCRStatsCard'
 import { SunIcon, MoonIcon } from '@heroicons/react/24/outline'
 import { authApi } from '../../api/auth'
 import { enrichApi } from '../../api/enrich'
@@ -966,6 +968,12 @@ function IntegrationsSection({ user }) {
       )}
         </>
       )}
+      <div style={{ marginTop: '28px' }}>
+        <AdminOCRStatsCard />
+      </div>
+      <div style={{ marginTop: '16px' }}>
+        <AdminUsersCard />
+      </div>
     </div>
   )
 }

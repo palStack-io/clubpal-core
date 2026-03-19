@@ -32,7 +32,6 @@ const ActivityPicker = lazy(() => import('./pages/activities/ActivityPicker'))
 const Profile = lazy(() => import('./pages/profile/Profile'))
 const Settings = lazy(() => import('./pages/profile/Settings'))
 const NotFound = lazy(() => import('./pages/NotFound'))
-const AdminPage = lazy(() => import('./pages/admin/AdminPage'))
 const PayConfirm = lazy(() => import('./pages/PayConfirm'))
 const ClaimItems = lazy(() => import('./pages/ClaimItems'))
 
@@ -68,14 +67,6 @@ function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth()
   if (loading) return <PageLoader />
   if (!isAuthenticated) return <Navigate to="/login" replace />
-  return children
-}
-
-function AdminRoute({ children }) {
-  const { isAuthenticated, loading, user } = useAuth()
-  if (loading) return <PageLoader />
-  if (!isAuthenticated) return <Navigate to="/login" replace />
-  if (!user?.is_admin) return <Navigate to="/dashboard" replace />
   return children
 }
 
@@ -133,7 +124,6 @@ function AppRoutes() {
       <Route path="/activities" element={<ProtectedRoute><ActivityPicker /></ProtectedRoute>} />
       <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-      <Route path="/admin" element={<AdminRoute><AdminPage /></AdminRoute>} />
 
       {/* Discovery */}
       <Route path="/discover/restaurants" element={<ProtectedRoute><DiscoverRestaurants /></ProtectedRoute>} />

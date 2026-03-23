@@ -35,6 +35,9 @@ const NotFound = lazy(() => import('./pages/NotFound'))
 const PayConfirm = lazy(() => import('./pages/PayConfirm'))
 const ClaimItems = lazy(() => import('./pages/ClaimItems'))
 
+// Unified discover page
+const DiscoverExplore = lazy(() => import('./pages/discover/DiscoverExplore'))
+
 // Discover pages (7 types + details)
 const DiscoverRestaurants = lazy(() => import('./pages/discover/DiscoverRestaurants'))
 const RestaurantDetail = lazy(() => import('./pages/discover/RestaurantDetail'))
@@ -126,6 +129,7 @@ function AppRoutes() {
       <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
 
       {/* Discovery */}
+      <Route path="/discover" element={<ProtectedRoute><DiscoverExplore /></ProtectedRoute>} />
       <Route path="/discover/restaurants" element={<ProtectedRoute><DiscoverRestaurants /></ProtectedRoute>} />
       <Route path="/discover/restaurants/:placeId" element={<ProtectedRoute><RestaurantDetail /></ProtectedRoute>} />
       <Route path="/discover/movies" element={<ProtectedRoute><DiscoverMovies /></ProtectedRoute>} />

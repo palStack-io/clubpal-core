@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import Avatar from '../ui/Avatar'
@@ -20,25 +19,20 @@ const MAIN_NAV = [
 ]
 
 const DISCOVER_NAV = [
-  { to: '/discover/restaurants', label: 'Restaurants', icon: '🍽️' },
-  { to: '/discover/movies',      label: 'Movies',      icon: '🎬' },
-  { to: '/discover/shows',       label: 'TV Shows',    icon: '📺' },
-  { to: '/discover/books',       label: 'Books',       icon: '📚' },
-  { to: '/discover/hikes',       label: 'Hikes',       icon: '🥾' },
-  { to: '/discover/games',       label: 'Games',       icon: '🎮' },
-  { to: '/discover/arts',        label: 'Arts',        icon: '🎨' },
-  { to: '/activities',           label: 'Activities',  icon: '✨' },
+  { to: '/discover',   label: 'Explore',    icon: '✦',  id: 'tour-nav-discover', end: true },
+  { to: '/activities', label: 'Activities', icon: '✨' },
 ]
 
 const SETTINGS_NAV = [
   { to: '/settings', label: 'Settings', icon: '⚙️' },
 ]
 
-function NavItem({ to, label, icon, id, onClick }) {
+function NavItem({ to, label, icon, id, onClick, end }) {
   return (
     <NavLink
       id={id}
       to={to}
+      end={end}
       onClick={onClick}
       className={({ isActive }) => `cp-nav-item${isActive ? ' active' : ''}`}
     >
@@ -52,7 +46,6 @@ export default function Sidebar({ user: userProp, groupCount = 0, notifCount = 0
   const { user: authUser, logout } = useAuth()
   const navigate = useNavigate()
   const user = userProp || authUser
-  const [discoverOpen, setDiscoverOpen] = useState(true)
 
   const handleNavClick = () => {
     if (isMobile && onClose) onClose()
@@ -108,30 +101,10 @@ export default function Sidebar({ user: userProp, groupCount = 0, notifCount = 0
           <NavItem key={item.to} to={item.to} label={item.label} icon={item.icon} id={item.id} onClick={handleNavClick} />
         ))}
 
-        {/* Discover — collapsible */}
-        <button
-          id="tour-nav-discover"
-          onClick={() => setDiscoverOpen(o => !o)}
-          className="cp-nav-section-toggle"
-        >
-          <span className="cp-nav-label" style={{ margin: 0, padding: 0, flex: 1, textAlign: 'left' }}>
-            Discover
-          </span>
-          <span
-            style={{
-              fontSize: '10px',
-              color: 'var(--nav-label-color)',
-              transition: 'transform 0.15s',
-              display: 'inline-block',
-              transform: discoverOpen ? 'rotate(0deg)' : 'rotate(-90deg)',
-            }}
-          >
-            ▾
-          </span>
-        </button>
-
-        {discoverOpen && DISCOVER_NAV.map(item => (
-          <NavItem key={item.to} to={item.to} label={item.label} icon={item.icon} onClick={handleNavClick} />
+        {/* Discover */}
+        <div className="cp-nav-label">Discover</div>
+        {DISCOVER_NAV.map(item => (
+          <NavItem key={item.to} to={item.to} label={item.label} icon={item.icon} id={item.id} end={item.end} onClick={handleNavClick} />
         ))}
 
         {/* Settings */}

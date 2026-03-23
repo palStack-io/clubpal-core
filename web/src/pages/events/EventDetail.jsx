@@ -197,7 +197,7 @@ export default function EventDetail() {
   const heroActions = [
     ...(event.status === 'scheduled' && isHost ? [{ label: '✏️ Edit', onClick: () => setShowEditEvent(true) }] : []),
     ...((event.status === 'completed' || (event.scheduled_date && new Date(event.scheduled_date) < new Date())) ? [{ label: '⭐ Rate', onClick: () => setShowRateModal(true) }] : []),
-    { label: '💳 Split', onClick: () => setShowBillSplit(true) },
+    ...(event.bill_split_enabled ? [{ label: '💳 Split', onClick: () => setShowBillSplit(true) }] : []),
     ...(isScheduled && myAttendee?.status !== 'going' ? [{ label: '✓ RSVP', onClick: () => handleRsvp('going'), loading: rsvpLoading }] : []),
   ]
 

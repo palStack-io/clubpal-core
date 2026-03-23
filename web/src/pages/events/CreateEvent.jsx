@@ -11,6 +11,16 @@ import BannerUpload from '../../components/ui/BannerUpload'
 import { FormSection, FormRow, FormGroup, FormInput, FormSelect } from '../../components/ui/Form'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 
+// Maps group activity_type → activity category for filtering
+const ACTIVITY_TYPE_TO_CATEGORY = {
+  dining:  'Food & Drink',
+  movies:  'Entertainment',
+  gaming:  'Entertainment',
+  hiking:  'Outdoors',
+  arts:    'Cultural',
+  books:   'Cultural',
+}
+
 const RECURRENCE_RULES = [
   { value: 'weekly',   label: 'Weekly' },
   { value: 'biweekly', label: 'Every 2 Weeks' },
@@ -67,12 +77,23 @@ export default function CreateEvent() {
     end_date: '',
   })
 
+  // Bill split opt-in
+  const [billSplitEnabled, setBillSplitEnabled] = useState(false)
+
   // Banner/cover
   const [coverFile, setCoverFile] = useState(null)
   const [coverPreview, setCoverPreview] = useState(null)
 
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  // Derive filtered activities based on selected group's activity_type
+  const selectedGroup = groups.find(g => String(g.id) === String(form.group_id))
+  const groupActivityType = selectedGroup?.activity_type
+  const groupCategory = groupActivityType ? ACTIVITY_TYPE_TO_CATEGORY[groupActivityType] : null
+  const filteredActivities = groupCategory
+    ? activities.filter(a => a.category === groupCategory)
+    : activities
 
   useEffect(() => {
     Promise.all([
@@ -84,7 +105,14 @@ export default function CreateEvent() {
     }).catch(console.error).finally(() => setDataLoading(false))
   }, [user.id])
 
-  const set = (key) => (e) => setForm(f => ({ ...f, [key]: e.target.value }))
+  const set = (key) => (e) => {
+    const value = e.target.value
+    if (key === 'group_id') {
+      setForm(f => ({ ...f, group_id: value, activity_id: '' }))
+    } else {
+      setForm(f => ({ ...f, [key]: value }))
+    }
+  }
   const setRec = (key) => (e) => setRecurrence(r => ({ ...r, [key]: e.target.value }))
 
   const handleCoverChange = (file) => {
@@ -108,6 +136,7 @@ export default function CreateEvent() {
         location: form.location.trim() || null,
         description: form.description.trim() || null,
         created_by: user.id,
+        bill_split_enabled: billSplitEnabled,
         // Recurring fields
         is_recurring: isRecurring,
         recurrence_rule: isRecurring ? recurrence.rule : null,
@@ -166,10 +195,10 @@ export default function CreateEvent() {
                 {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
               </FormSelect>
             </FormGroup>
-            <FormGroup label="Activity">
+            <FormGroup label={groupCategory ? `Activity (${groupCategory})` : 'Activity'}>
               <FormSelect value={form.activity_id} onChange={set('activity_id')}>
                 <option value="">Select an activity…</option>
-                {activities.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                {filteredActivities.map(a => <option key={a.id} value={a.id}>{a.icon ? `${a.icon} ${a.name}` : a.name}</option>)}
               </FormSelect>
             </FormGroup>
           </FormRow>
@@ -208,6 +237,36 @@ export default function CreateEvent() {
               style={{ width: '100%', resize: 'none', background: 'var(--s3)', border: '1px solid var(--glass)', borderRadius: '10px', padding: '10px 12px', fontSize: '14px', color: 'var(--t1)', outline: 'none', fontFamily: 'inherit' }}
             />
           </FormGroup>
+        </FormSection>
+
+        {/* Bill Split */}
+        <FormSection title="Bill Splitting">
+          <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+            <div
+              onClick={() => setBillSplitEnabled(v => !v)}
+              style={{
+                width: '44px', height: '24px', borderRadius: '12px',
+                background: billSplitEnabled ? 'var(--rose)' : 'var(--glass)',
+                position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0,
+              }}
+            >
+              <div style={{
+                position: 'absolute', top: '2px',
+                left: billSplitEnabled ? '22px' : '2px',
+                width: '20px', height: '20px', borderRadius: '10px',
+                background: '#fff', transition: 'left 0.2s',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+              }} />
+            </div>
+            <div>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)' }}>
+                Enable bill splitting
+              </div>
+              <div style={{ fontSize: '12px', color: 'var(--t3)' }}>
+                Lets the host split and track costs with attendees after the event
+              </div>
+            </div>
+          </label>
         </FormSection>
 
         {/* Recurring */}

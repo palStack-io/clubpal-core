@@ -133,6 +133,11 @@ def init_db():
     except Exception:
         pass
 
+    try:
+        cursor.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS bill_split_enabled BOOLEAN DEFAULT FALSE")
+    except Exception:
+        pass
+
     # Background personalization migrations
     for col, defn in [
         ("bg_type", "TEXT DEFAULT 'default'"),
@@ -249,17 +254,19 @@ def create_event(group_id: int, activity_id: Optional[int], title: str, schedule
                 created_by: int, host_user_id: int, description: str = None,
                 location: str = None, rsvp_deadline=None, parent_recurring_id: int = None,
                 activity_type: str = None, max_attendees: int = None,
-                cover_url: str = None) -> int:
+                cover_url: str = None, bill_split_enabled: bool = False) -> int:
     """Create a new event."""
     conn = get_db()
     cursor = conn.cursor()
 
     cursor.execute(
         """INSERT INTO events (group_id, activity_id, activity_type, title, description, scheduled_date,
-                              location, host_user_id, created_by, rsvp_deadline, parent_recurring_id, max_attendees, cover_url)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                              location, host_user_id, created_by, rsvp_deadline, parent_recurring_id,
+                              max_attendees, cover_url, bill_split_enabled)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
         (group_id, activity_id, activity_type, title, description, scheduled_date, location,
-         host_user_id, created_by, rsvp_deadline, parent_recurring_id, max_attendees, cover_url)
+         host_user_id, created_by, rsvp_deadline, parent_recurring_id, max_attendees, cover_url,
+         bill_split_enabled)
     )
 
     event_id = cursor.fetchone()['id']

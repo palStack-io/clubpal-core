@@ -67,7 +67,17 @@ export default function DiscoverHikes() {
   }
 
   const doSearch = async (q, location) => {
-    if (!q) return loadPersonalFeed()
+    if (!q && !location) return loadPersonalFeed()
+    if (!q && location) {
+      setLoading(true)
+      setSetupRequired(false)
+      try {
+        const data = await enrichApi.searchHikes({ query: 'hiking trail', location })
+        setResults(data?.results || [])
+      } catch { setResults([]) }
+      finally { setLoading(false) }
+      return
+    }
     setLoading(true)
     setSetupRequired(false)
     try {

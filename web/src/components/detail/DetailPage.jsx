@@ -6,6 +6,7 @@ import AppShell from '../shell/AppShell'
 import BackButton from '../ui/BackButton'
 import CreateEventModal from '../modals/CreateEventModal'
 import CreatePollModal from '../modals/CreatePollModal'
+import PickModal from '../discover/PickModal'
 import { PhotoCarouselImage, CarouselArrow, CarouselDots } from './PhotoCarousel'
 import InfoCard from './InfoCard'
 import ReviewCard from './ReviewCard'
@@ -80,7 +81,7 @@ const TYPE_CONFIG = {
   },
 
   movie: {
-    ctaLabel: 'Add to Watch List',
+    ctaLabel: 'Select for Watch Party',
     accentBg: '#6366f1',
     accentColor: '#6366f1',
     activityType: 'movies',
@@ -124,7 +125,7 @@ const TYPE_CONFIG = {
   },
 
   book: {
-    ctaLabel: 'Add to Reading List',
+    ctaLabel: 'Select for Reading Party',
     accentBg: '#a855f7',
     accentColor: '#a855f7',
     activityType: 'books',
@@ -166,7 +167,7 @@ const TYPE_CONFIG = {
   },
 
   game: {
-    ctaLabel: 'Add to Game List',
+    ctaLabel: 'Select for Game Night',
     accentBg: '#22d3ee',
     accentColor: '#22d3ee',
     activityType: 'gaming',
@@ -206,7 +207,7 @@ const TYPE_CONFIG = {
   },
 
   show: {
-    ctaLabel: 'Add to Watch List',
+    ctaLabel: 'Select for Watch Party',
     accentBg: '#dc2626',
     accentColor: '#dc2626',
     activityType: 'shows',

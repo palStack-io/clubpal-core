@@ -92,6 +92,7 @@ export default function CreateEventModal({
   const [coverUrlOverride, setCoverUrlOverride] = useState(initialImageUrl || null)
   const [maxAttendees, setMaxAttendees] = useState('')
   const [pulseCheck, setPulseCheck] = useState(false)
+  const [billSplitEnabled, setBillSplitEnabled] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const coverRef = useRef()
@@ -156,6 +157,7 @@ export default function CreateEventModal({
         activity_type: resolvedActivity || null,
         rsvp_deadline: rsvpDeadlineISO,
         max_attendees: maxAttendees ? parseInt(maxAttendees, 10) : null,
+        bill_split_enabled: billSplitEnabled,
         // Pass discover item image as default banner (user may have kept or cleared it)
         banner_url: coverUrlOverride || null,
         ...(isRecurring && recurrence.end_date ? {
@@ -500,6 +502,17 @@ export default function CreateEventModal({
         <div>
           <div style={{ fontSize: '13px', fontWeight: 600, color: pulseCheck ? 'var(--rose-soft)' : 'var(--t2)' }}>💬 Send Pulse Check</div>
           <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>Ask the group how they feel about this pick after creating the event</div>
+        </div>
+      </div>
+
+      {/* Bill Split toggle */}
+      <div style={{ ...sectionStyle, display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }} onClick={() => setBillSplitEnabled(v => !v)}>
+        <div style={toggleStyle(billSplitEnabled)}>
+          <div style={{ position: 'absolute', top: '2px', left: billSplitEnabled ? '20px' : '2px', width: '18px', height: '18px', borderRadius: '9px', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
+        </div>
+        <div>
+          <div style={{ fontSize: '13px', fontWeight: 600, color: billSplitEnabled ? 'var(--green)' : 'var(--t2)' }}>💸 Enable Bill Splitting</div>
+          <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>Let the host split and track costs with attendees after the event</div>
         </div>
       </div>
 

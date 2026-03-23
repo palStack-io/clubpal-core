@@ -68,7 +68,18 @@ export default function DiscoverRestaurants() {
   }
 
   const doSearch = async (q, location) => {
-    if (!q) { setSubType('all'); return loadPersonalFeed() }
+    if (!q && !location) { setSubType('all'); return loadPersonalFeed() }
+    if (!q && location) {
+      // Location changed with no query — search broadly for restaurants in the new location
+      setLoading(true)
+      setSetupRequired(false)
+      try {
+        const data = await enrichApi.searchPlaces({ query: 'restaurant', type: 'restaurant', location })
+        setResults(data?.results || data || [])
+      } catch { setResults([]) }
+      finally { setLoading(false) }
+      return
+    }
     setLoading(true)
     setSetupRequired(false)
     try {

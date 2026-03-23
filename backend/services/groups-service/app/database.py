@@ -399,16 +399,63 @@ def update_member_role(group_id: int, user_id: int, role: str) -> bool:
 
 
 def remove_member(group_id: int, user_id: int) -> bool:
-    """Remove a member from a group."""
+    """Remove a member from a group and adjust rotation state if they were on turn."""
     conn = get_db()
     cursor = conn.cursor()
 
+    # Snapshot rotation state and member order before removal
+    cursor.execute(
+        "SELECT current_user_id, current_turn_index FROM rotation_state WHERE group_id = %s",
+        (group_id,)
+    )
+    rotation = cursor.fetchone()
+
+    cursor.execute(
+        """SELECT user_id FROM group_members WHERE group_id = %s
+           ORDER BY rotation_order ASC NULLS LAST, joined_at ASC""",
+        (group_id,)
+    )
+    members_before = [row['user_id'] for row in cursor.fetchall()]
+
+    # Delete the member
     cursor.execute(
         "DELETE FROM group_members WHERE group_id = %s AND user_id = %s",
         (group_id, user_id)
     )
-
     success = cursor.rowcount > 0
+
+    if success and rotation:
+        current_user_id = rotation['current_user_id']
+        current_turn_index = rotation['current_turn_index']
+
+        # Get remaining members after removal
+        cursor.execute(
+            """SELECT user_id FROM group_members WHERE group_id = %s
+               ORDER BY rotation_order ASC NULLS LAST, joined_at ASC""",
+            (group_id,)
+        )
+        members_after = [row['user_id'] for row in cursor.fetchall()]
+
+        if members_after:
+            if current_user_id == user_id:
+                # Removed user was on turn — pass turn to whoever is now at that position
+                removed_pos = members_before.index(user_id) if user_id in members_before else 0
+                new_index = removed_pos % len(members_after)
+                new_user_id = members_after[new_index]
+            elif current_user_id in members_after:
+                # Current user still exists — recalculate their index
+                new_index = members_after.index(current_user_id)
+                new_user_id = current_user_id
+            else:
+                new_index = 0
+                new_user_id = members_after[0]
+
+            cursor.execute(
+                """UPDATE rotation_state SET current_user_id = %s, current_turn_index = %s,
+                   last_rotation_at = CURRENT_TIMESTAMP WHERE group_id = %s""",
+                (new_user_id, new_index, group_id)
+            )
+
     conn.commit()
     conn.close()
 

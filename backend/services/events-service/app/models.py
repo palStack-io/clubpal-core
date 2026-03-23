@@ -28,6 +28,7 @@ class EventCreate(BaseModel):
     banner_url: Optional[str] = None
     # Link to an existing recurring schedule (poll → recurring event conversion)
     parent_recurring_id: Optional[int] = None
+    bill_split_enabled: bool = False
     # Recurring fields (only used when is_recurring=True)
     is_recurring: bool = False
     recurrence_rule: Optional[str] = None        # weekly | biweekly | monthly
@@ -101,6 +102,7 @@ class EventResponse(BaseModel):
     updated_at: datetime
     rsvp_deadline: Optional[datetime] = None
     max_attendees: Optional[int] = None
+    bill_split_enabled: bool = False
     my_rsvp_status: Optional[str] = None
 
 

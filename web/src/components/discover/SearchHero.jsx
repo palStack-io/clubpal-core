@@ -177,10 +177,13 @@ function SearchRow({ query, locationLabel, locationOverride, onChange, onSubmit,
   }
 
   const pickSuggestion = (suggestion) => {
-    setLocationInput(suggestion.short || suggestion.label)
+    clearTimeout(locDebounceRef.current)
+    const label = suggestion.short || suggestion.label
+    setLocationInput(label)
     setLocSuggestions([])
+    setLoadingLoc(false)
     setEditingLocation(false)
-    onLocationChange(suggestion.short || suggestion.label)
+    onLocationChange(label)
   }
 
   const useMyLocation = () => {

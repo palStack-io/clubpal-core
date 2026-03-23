@@ -330,6 +330,7 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(
         parent_recurring_id=event_data.parent_recurring_id,
         max_attendees=event_data.max_attendees,
         cover_url=event_data.banner_url,
+        bill_split_enabled=event_data.bill_split_enabled,
     )
 
     # If linked to an existing recurring schedule, advance it so the daily job

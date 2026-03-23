@@ -471,7 +471,7 @@ export default function DiscoverExplore() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const [activeTabKey, setActiveTabKey] = useState('all')
-  const [picks, setPicks] = useState({ all: MOCK_PICKS.all })
+  const [picks, setPicks] = useState({})
   const [loading, setLoading] = useState({})
   const [searchResults, setSearchResults] = useState(null) // null = not searching
   const [starred, setStarred] = useState(loadStarred)
@@ -492,6 +492,28 @@ export default function DiscoverExplore() {
 
   const isStarredView = activeTabKey === 'starred'
   const starredItemsList = isStarredView ? loadStarredItems() : []
+
+  // Load real popular data for the "All" tab on mount
+  useEffect(() => {
+    if (!user?.id) return
+    let cancelled = false
+    setLoading(l => ({ ...l, all: true }))
+    Promise.allSettled([
+      enrichApi.moviesPopular(),
+      enrichApi.showsPopular(),
+      enrichApi.popularGames(),
+    ]).then(([movies, shows, games]) => {
+      if (cancelled) return
+      const items = [
+        ...normalizeItems(movies.value, 'movies').slice(0, 2).map(i => ({ ...i, _tabKey: 'movies' })),
+        ...normalizeItems(shows.value, 'shows').slice(0, 2).map(i => ({ ...i, _tabKey: 'shows' })),
+        ...normalizeItems(games.value, 'games').slice(0, 2).map(i => ({ ...i, _tabKey: 'games' })),
+      ]
+      if (items.length) setPicks(p => ({ ...p, all: items }))
+      setLoading(l => ({ ...l, all: false }))
+    })
+    return () => { cancelled = true }
+  }, [user?.id])
 
   // Load real data for a tab on first visit
   useEffect(() => {
@@ -556,6 +578,12 @@ export default function DiscoverExplore() {
 
   const handleNavigate = (item) => {
     const tabKey = item._tabKey || activeTabKey
+    // Mock items don't have real API IDs — navigate to the category explore page instead
+    if (item._isMock) {
+      const tabRoute = TABS.find(t => t.key === tabKey)?.route
+      if (tabRoute) navigate(tabRoute)
+      return
+    }
     const routeFn = DETAIL_ROUTE[tabKey]
     if (routeFn && item.id) navigate(routeFn(item.id))
   }

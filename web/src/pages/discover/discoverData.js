@@ -64,12 +64,17 @@ export const MOCK_PICKS = {
   ],
 }
 
+// Tag all mock items so the UI knows not to navigate to detail pages
+Object.keys(MOCK_PICKS).forEach(key => {
+  MOCK_PICKS[key] = MOCK_PICKS[key].map(i => ({ ...i, _isMock: true }))
+})
+
 MOCK_PICKS.all = [
-  ...MOCK_PICKS.restaurants.slice(0, 2).map(i => ({ ...i, _tabKey: 'restaurants' })),
-  { ...MOCK_PICKS.movies[0], _tabKey: 'movies' },
-  { ...MOCK_PICKS.hikes[0],  _tabKey: 'hikes'  },
-  { ...MOCK_PICKS.shows[0],  _tabKey: 'shows'  },
-  { ...MOCK_PICKS.books[0],  _tabKey: 'books'  },
+  ...MOCK_PICKS.restaurants.slice(0, 2).map(i => ({ ...i, _tabKey: 'restaurants', _isMock: true })),
+  { ...MOCK_PICKS.movies[0], _tabKey: 'movies', _isMock: true },
+  { ...MOCK_PICKS.hikes[0],  _tabKey: 'hikes',  _isMock: true },
+  { ...MOCK_PICKS.shows[0],  _tabKey: 'shows',  _isMock: true },
+  { ...MOCK_PICKS.books[0],  _tabKey: 'books',  _isMock: true },
 ]
 
 // ─── Trending in your groups (mock — no dedicated API endpoint yet) ───────────

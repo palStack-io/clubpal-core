@@ -19,8 +19,7 @@ const MAIN_NAV = [
 ]
 
 const DISCOVER_NAV = [
-  { to: '/discover',   label: 'Explore',    icon: '✦',  id: 'tour-nav-discover', end: true },
-  { to: '/activities', label: 'Activities', icon: '✨' },
+  { to: '/discover', label: 'Explore', icon: '✦', id: 'tour-nav-discover', end: true },
 ]
 
 const SETTINGS_NAV = [

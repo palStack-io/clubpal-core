@@ -69,6 +69,7 @@ app.add_middleware(
 GROUPS_SERVICE_URL     = "http://groups-service:8002"
 ACTIVITIES_SERVICE_URL = "http://activities-service:8005"
 GATEWAY_URL            = "http://api-gateway:8001"
+RATINGS_SERVICE_URL    = "http://ratings-service:8004"
 
 
 def get_current_user_id(authorization: Optional[str] = Header(None)) -> int:
@@ -224,6 +225,25 @@ async def send_rsvp_deadline_final_counts():
             logger.error(f"Failed to send deadline final count for event {event['id']}: {e}")
 
 
+async def auto_complete_past_events():
+    """Hourly job: mark scheduled events as completed once their date has passed (2-hour buffer)."""
+    logger.info("Running auto-complete past events job")
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        UPDATE events
+        SET status = 'completed', updated_at = NOW()
+        WHERE status = 'scheduled'
+          AND scheduled_date IS NOT NULL
+          AND scheduled_date < NOW() - INTERVAL '2 hours'
+    """)
+    count = cursor.rowcount
+    conn.commit()
+    conn.close()
+    if count:
+        logger.info(f"Auto-completed {count} past events")
+
+
 async def spawn_recurring_instances():
     """Daily job: create event instances for all due recurring schedules."""
     logger.info("Running recurring events scheduler")
@@ -280,6 +300,9 @@ async def startup():
     # Schedule daily recurring event generation at 07:00
     scheduler.add_job(spawn_recurring_instances, 'cron', hour=7, minute=0,
                       id='recurring_events', replace_existing=True)
+    # Schedule hourly auto-complete of past events
+    scheduler.add_job(auto_complete_past_events, 'cron', minute=15,
+                      id='auto_complete_events', replace_existing=True)
     # Schedule hourly RSVP deadline reminders
     scheduler.add_job(send_rsvp_deadline_reminders, 'cron', minute=0,
                       id='rsvp_deadline_reminders', replace_existing=True)
@@ -422,6 +445,35 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(
             upsert_attendee(event_id, host_user_id, "going")
     except Exception as e:
         logger.warning(f"Could not auto-RSVP creator for event {event_id}: {e}")
+
+    # Increment hosted-events counter in ratings service
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            await client.post(f"{RATINGS_SERVICE_URL}/users/{host_user_id}/hosted-events/increment")
+    except Exception as e:
+        logger.warning(f"Could not increment hosted events for user {host_user_id}: {e}")
+
+    # Notify all group members to RSVP for the new event
+    sched_str = ''
+    if event_data.scheduled_date:
+        try:
+            sched_str = event_data.scheduled_date.strftime('%A, %b %-d at %-I:%M %p')
+        except Exception:
+            sched_str = str(event_data.scheduled_date)
+    deadline_str = None
+    if event_data.rsvp_deadline:
+        try:
+            deadline_str = event_data.rsvp_deadline.strftime('%A, %b %-d at %-I:%M %p')
+        except Exception:
+            deadline_str = str(event_data.rsvp_deadline)
+    await _notify_group_members(
+        group_id=event_data.group_id,
+        event_id=event_id,
+        event_title=event_data.title,
+        event_date=sched_str,
+        event_type='new_event',
+        deadline=deadline_str,
+    )
 
     event = get_event(event_id)
     return EventResponse(**event)

@@ -19,11 +19,11 @@ async function fetchLocationSuggestions(query) {
   }
 }
 
-export default function SearchHero({ eyebrow, headline, onSearch, suggestions = [] }) {
+export default function SearchHero({ eyebrow, headline, onSearch, suggestions = [], initialLocationOverride = null }) {
   const [query, setQuery] = useState('')
   const [activeChip, setActiveChip] = useState(null)
   const [location, setLocation] = useState(null)
-  const [locationOverride, setLocationOverride] = useState(null)
+  const [locationOverride, setLocationOverride] = useState(initialLocationOverride)
   const debounceRef = useRef(null)
 
   useEffect(() => {

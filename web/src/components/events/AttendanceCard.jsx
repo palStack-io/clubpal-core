@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import Card from '../ui/Card'
 import Avatar from '../ui/Avatar'
 import StatusChip from '../ui/StatusChip'
+import UserStatsModal from '../ui/UserStatsModal'
 
 const rsvpStatusMap = {
   going: 'going',
@@ -37,6 +39,7 @@ export default function AttendanceCard({
   rsvpDeadline,
   maxAttendees,
 }) {
+  const [selectedAttendee, setSelectedAttendee] = useState(null)
   const going = attendees.filter((a) => a.status === 'going').length
   const maybe = attendees.filter((a) => a.status === 'maybe').length
   const notGoing = attendees.filter((a) => a.status === 'not_going').length
@@ -79,6 +82,7 @@ export default function AttendanceCard({
   })()
 
   return (
+    <>
     <Card>
       <Card.Header
         title={maxAttendees ? `Attendance (${going}/${maxAttendees} seats)` : `Attendance (${going}/${total})`}
@@ -145,15 +149,18 @@ export default function AttendanceCard({
                   marginBottom: '6px',
                 }}
               >
-                <Avatar
-                  user={{
-                    full_name: a.full_name || a.username,
-                    avatar_url: a.avatar_url,
-                  }}
-                  size="sm"
-                />
+                <button
+                  onClick={() => setSelectedAttendee(a)}
+                  style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', flexShrink: 0 }}
+                >
+                  <Avatar
+                    user={{ full_name: a.full_name || a.username, avatar_url: a.avatar_url }}
+                    size="sm"
+                  />
+                </button>
                 <span
-                  style={{ flex: 1, fontSize: '12px', fontWeight: 600, color: 'var(--t2)' }}
+                  style={{ flex: 1, fontSize: '12px', fontWeight: 600, color: 'var(--t2)', cursor: 'pointer' }}
+                  onClick={() => setSelectedAttendee(a)}
                 >
                   {a.full_name || a.username || 'Member'}
                 </span>
@@ -167,5 +174,13 @@ export default function AttendanceCard({
         )}
       </Card.Body>
     </Card>
+
+    {selectedAttendee && (
+      <UserStatsModal
+        member={selectedAttendee}
+        onClose={() => setSelectedAttendee(null)}
+      />
+    )}
+  </>
   )
 }

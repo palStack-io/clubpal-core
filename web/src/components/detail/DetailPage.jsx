@@ -6,7 +6,6 @@ import AppShell from '../shell/AppShell'
 import BackButton from '../ui/BackButton'
 import CreateEventModal from '../modals/CreateEventModal'
 import CreatePollModal from '../modals/CreatePollModal'
-import PickModal from '../discover/PickModal'
 import { PhotoCarouselImage, CarouselArrow, CarouselDots } from './PhotoCarousel'
 import InfoCard from './InfoCard'
 import ReviewCard from './ReviewCard'
@@ -929,11 +928,14 @@ export default function DetailPage({ type, itemId, data: rawData, extra = {}, lo
 
       {/* Modals */}
       {showPick && (
-        <PickModal
-          title={data.title}
-          location={data.address || null}
+        <CreateEventModal
+          isOpen={true}
+          initialTitle={data.title}
+          initialLocation={data.address || null}
+          initialImageUrl={data.photos?.[0] || null}
           activityType={cfg.activityType}
           onClose={() => setShowPick(false)}
+          onCreated={(id) => { setShowPick(false); navigate(`/events/${id}`) }}
           onPollGroup={() => { setShowPick(false); setShowPoll(true) }}
         />
       )}

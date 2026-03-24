@@ -105,6 +105,19 @@ const PILL_ENDPOINTS = {
   },
 }
 
+// ─── Session state persistence (survives back-navigation) ────────────────────
+const SS_EXPLORE_KEY = 'discover_explore'
+function saveExploreState(tabKey, searchResults) {
+  try { sessionStorage.setItem(SS_EXPLORE_KEY, JSON.stringify({ tabKey, searchResults, ts: Date.now() })) } catch {}
+}
+function loadExploreState() {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(SS_EXPLORE_KEY) || 'null')
+    if (!s || Date.now() - s.ts > 10 * 60 * 1000) return null
+    return s
+  } catch { return null }
+}
+
 // ─── Starred items via localStorage ──────────────────────────────────────────
 const STAR_KEY      = 'clubpal_starred'
 const STAR_DATA_KEY = 'clubpal_starred_data'
@@ -470,10 +483,10 @@ async function fetchTabItems(userId, tab) {
 export default function DiscoverExplore() {
   const navigate = useNavigate()
   const { user } = useAuth()
-  const [activeTabKey, setActiveTabKey] = useState('all')
+  const [activeTabKey, setActiveTabKey] = useState(() => loadExploreState()?.tabKey || 'all')
   const [picks, setPicks] = useState({})
   const [loading, setLoading] = useState({})
-  const [searchResults, setSearchResults] = useState(null) // null = not searching
+  const [searchResults, setSearchResults] = useState(() => loadExploreState()?.searchResults ?? null)
   const [starred, setStarred] = useState(loadStarred)
   const [pickItem, setPickItem] = useState(null)  // { name, location, tabKey }
   const [pollItem, setPollItem] = useState(null)  // { name, tabKey }
@@ -488,6 +501,7 @@ export default function DiscoverExplore() {
   const handleTabSelect = (key) => {
     setActiveTabKey(key)
     setSearchResults(null)
+    saveExploreState(key, null)
   }
 
   const isStarredView = activeTabKey === 'starred'
@@ -551,7 +565,42 @@ export default function DiscoverExplore() {
 
     // ── Generic text search ──
     const tab = TABS.find(t => t.key === activeTabKey)
-    if (!tab?.apiType) { setSearchResults(null); return }
+    if (!tab?.apiType) {
+      // 'all' tab with a text query — search across movies, shows, books (+ restaurants if location set)
+      if (activeTabKey === 'all' && query) {
+        try {
+          const [movies, shows, books] = await Promise.allSettled([
+            enrichApi.searchMovies(query),
+            enrichApi.searchShows(query),
+            enrichApi.searchBooks({ query }),
+          ])
+          const combined = [
+            ...normalizeItems(movies.value, 'movies').slice(0, 4).map(i => ({ ...i, _tabKey: 'movies' })),
+            ...normalizeItems(shows.value, 'shows').slice(0, 4).map(i => ({ ...i, _tabKey: 'shows' })),
+            ...normalizeItems(books.value, 'books').slice(0, 4).map(i => ({ ...i, _tabKey: 'books' })),
+          ]
+          if (location) {
+            const places = await enrichApi.searchPlaces({ query, type: 'restaurant', location }).catch(() => null)
+            if (places) combined.unshift(...normalizeItems(places, 'restaurants').slice(0, 4).map(i => ({ ...i, _tabKey: 'restaurants' })))
+          }
+          const results = combined.length ? combined : []
+          setSearchResults(results)
+          saveExploreState(activeTabKey, results)
+        } catch { setSearchResults([]) }
+      } else if (activeTabKey === 'all' && location) {
+        // Location changed with no query on 'all' tab — show nearby restaurants
+        try {
+          const data = await enrichApi.searchPlaces({ query: 'restaurant', type: 'restaurant', location })
+          const results = normalizeItems(data, 'restaurants').map(i => ({ ...i, _tabKey: 'restaurants' }))
+          setSearchResults(results)
+          saveExploreState(activeTabKey, results)
+        } catch { setSearchResults([]) }
+      } else {
+        setSearchResults(null)
+        saveExploreState(activeTabKey, null)
+      }
+      return
+    }
     try {
       const q = query || ''
       const loc = location
@@ -563,14 +612,16 @@ export default function DiscoverExplore() {
       else if (tab.key === 'hikes')   data = await enrichApi.searchHikes({ query: q || 'hiking trail', ...(loc ? { location: loc } : {}) })
       else if (tab.key === 'games')   data = await enrichApi.searchGames({ query: q || 'popular' })
       else if (tab.key === 'arts')    data = await enrichApi.searchArts({ query: q || 'museum', ...(loc ? { location: loc } : {}) })
-      setSearchResults(normalizeItems(data, tab.key))
+      const results = normalizeItems(data, tab.key)
+      setSearchResults(results)
+      saveExploreState(activeTabKey, results)
     } catch { setSearchResults([]) }
   }, [activeTabKey])
 
   const handleStar = (id, item) => setStarred(toggleStarred(id, item))
 
   const handlePick = (item) => {
-    setPickItem({ name: item.name, location: item.location, tabKey: item._tabKey || activeTabKey })
+    setPickItem({ name: item.name, location: item.location, imageUrl: item.imageUrl || null, tabKey: item._tabKey || activeTabKey })
   }
   const handlePoll = (item) => {
     setPollItem({ name: item.name, tabKey: item._tabKey || activeTabKey })
@@ -669,7 +720,7 @@ export default function DiscoverExplore() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               {searchResults !== null && (
                 <button
-                  onClick={() => setSearchResults(null)}
+                  onClick={() => { setSearchResults(null); saveExploreState(activeTabKey, null) }}
                   style={{ fontSize: '12px', color: 'var(--rose)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
                 >
                   ✕ Clear
@@ -739,6 +790,7 @@ export default function DiscoverExplore() {
           isOpen={true}
           initialTitle={pickItem.name}
           initialLocation={pickItem.location}
+          initialImageUrl={pickItem.imageUrl}
           activityType={getApiType(pickItem.tabKey)}
           onClose={() => setPickItem(null)}
           onCreated={(id) => { setPickItem(null); navigate(`/events/${id}`) }}

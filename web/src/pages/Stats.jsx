@@ -34,7 +34,15 @@ export default function Stats() {
     }).finally(() => setLoading(false))
   }, [user?.id])
 
-  const completed = events.filter(e => e.status === 'completed')
+  const now = new Date()
+  const effectiveStatus = (e) => {
+    if (e.status === 'scheduled' || e.status === 'in_progress') {
+      const d = e.scheduled_date || e.event_date
+      if (d && new Date(d) < now) return 'completed'
+    }
+    return e.status
+  }
+  const completed = events.filter(e => effectiveStatus(e) === 'completed')
   const thisYear = completed.filter(e => {
     const d = e.event_date || e.scheduled_date
     return d && new Date(d).getFullYear() === year
@@ -60,7 +68,7 @@ export default function Stats() {
   })
 
   // Picks made = events where user was host
-  const picksCount = thisYear.filter(e => e.host_user_id === user?.id).length
+  const picksCount = thisYear.filter(e => String(e.host_user_id) === String(user?.id)).length
 
   return (
     <AppShell activeRoute="/stats">

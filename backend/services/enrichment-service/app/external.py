@@ -174,6 +174,7 @@ def _normalize_places(places: list) -> list:
         loc = p.get("geometry", {}).get("location", {})
         photos = p.get("photos", [])
         hours = p.get("opening_hours", {})
+        photo_ref = photos[0].get("photo_reference") if photos else None
         result.append({
             "place_id": p.get("place_id"),
             "name": p.get("name"),
@@ -183,7 +184,8 @@ def _normalize_places(places: list) -> list:
             "rating": p.get("rating"),
             "price_level": p.get("price_level"),
             "is_open": hours.get("open_now"),
-            "photo_ref": photos[0].get("photo_reference") if photos else None,
+            "photo_ref": photo_ref,
+            "photo_url": place_photo_url(photo_ref) if photo_ref and GOOGLE_API_KEY else None,
         })
     return result
 

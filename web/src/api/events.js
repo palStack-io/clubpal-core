@@ -63,4 +63,7 @@ export const eventsApi = {
 
   getGroupRecurringSchedules: (groupId) =>
     eventsClient.get(`/groups/${groupId}/recurring-schedules`).then(r => r.data),
+
+  sendRsvpReminder: (eventId) =>
+    eventsClient.post(`/events/${eventId}/rsvp-reminder`).then(r => r.data),
 }

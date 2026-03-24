@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import AppShell from '../../components/shell/AppShell'
 import Topbar from '../../components/shell/Topbar'
@@ -10,6 +10,18 @@ import SearchHero from '../../components/discover/SearchHero'
 import { enrichApi } from '../../api/enrich'
 import { authApi } from '../../api/auth'
 import { useAuth } from '../../contexts/AuthContext'
+
+const SS_KEY = 'discover_restaurants'
+function saveRestaurantState(results, location, query) {
+  try { sessionStorage.setItem(SS_KEY, JSON.stringify({ results, location, query, ts: Date.now() })) } catch {}
+}
+function loadRestaurantState() {
+  try {
+    const s = JSON.parse(sessionStorage.getItem(SS_KEY) || 'null')
+    if (!s || Date.now() - s.ts > 10 * 60 * 1000) return null
+    return s
+  } catch { return null }
+}
 
 const SUB_TYPES = [
   { id: 'all', label: 'All' },
@@ -48,6 +60,8 @@ function SetupBanner({ onNavigate }) {
 export default function DiscoverRestaurants() {
   const navigate = useNavigate()
   const { user } = useAuth()
+  const restoredRef = useRef(false)
+  const [savedLocation] = useState(() => loadRestaurantState()?.location ?? null)
   const [results, setResults] = useState([])
   const [loading, setLoading] = useState(true)
   const [setupRequired, setSetupRequired] = useState(false)
@@ -70,12 +84,13 @@ export default function DiscoverRestaurants() {
   const doSearch = async (q, location) => {
     if (!q && !location) { setSubType('all'); return loadPersonalFeed() }
     if (!q && location) {
-      // Location changed with no query — search broadly for restaurants in the new location
       setLoading(true)
       setSetupRequired(false)
       try {
         const data = await enrichApi.searchPlaces({ query: 'restaurant', type: 'restaurant', location })
-        setResults(data?.results || data || [])
+        const r = data?.results || data || []
+        setResults(r)
+        saveRestaurantState(r, location, '')
       } catch { setResults([]) }
       finally { setLoading(false) }
       return
@@ -84,7 +99,9 @@ export default function DiscoverRestaurants() {
     setSetupRequired(false)
     try {
       const data = await enrichApi.searchPlaces({ query: q, type: 'restaurant', location: location || undefined })
-      setResults(data?.results || data || [])
+      const r = data?.results || data || []
+      setResults(r)
+      saveRestaurantState(r, location || null, q)
     } catch { setResults([]) }
     finally { setLoading(false) }
   }
@@ -96,6 +113,16 @@ export default function DiscoverRestaurants() {
   }
 
   useEffect(() => {
+    if (!user?.id) return
+    if (!restoredRef.current) {
+      restoredRef.current = true
+      const saved = loadRestaurantState()
+      if (saved?.results?.length) {
+        setResults(saved.results)
+        setLoading(false)
+        return
+      }
+    }
     if (subType !== 'all') doSearch(subType)
     else loadPersonalFeed()
   }, [subType, user?.id])
@@ -116,6 +143,7 @@ export default function DiscoverRestaurants() {
         headline="Where should your club go?"
         onSearch={doSearch}
         suggestions={['🍜 Ramen', '🍕 Italian', '⭐ Top rated', '🌙 Open late']}
+        initialLocationOverride={savedLocation}
       />
 
       <div style={{ padding: '20px 24px 24px' }}>
@@ -162,7 +190,7 @@ export default function DiscoverRestaurants() {
                     💬 Poll
                   </button>
                   <button
-                    onClick={e => { e.stopPropagation(); setPickItem({ title: item.name, location: item.vicinity || item.address || '' }) }}
+                    onClick={e => { e.stopPropagation(); setPickItem({ title: item.name, location: item.vicinity || item.address || '', photo: item.photo_url || null }) }}
                     style={{ background: 'var(--rose)', border: 'none', borderRadius: '8px', padding: '5px 10px', fontSize: '11px', fontWeight: 700, color: '#fff', cursor: 'pointer' }}
                   >
                     Pick
@@ -179,6 +207,7 @@ export default function DiscoverRestaurants() {
           isOpen={true}
           initialTitle={pickItem.title}
           initialLocation={pickItem.location}
+          initialImageUrl={pickItem.photo}
           activityType="dining"
           onClose={() => setPickItem(null)}
           onCreated={(id) => { setPickItem(null); navigate(`/events/${id}`) }}

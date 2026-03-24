@@ -181,8 +181,8 @@ export default function EventDetail() {
 
   const handleRsvpReminder = async () => {
     try {
-      const res = await eventsApi.post(`/events/${id}/rsvp-reminder`, {}, { params: { user_id: user.id } })
-      const count = res.data?.nudged ?? 0
+      const res = await eventsApi.sendRsvpReminder(id)
+      const count = res?.nudged ?? 0
       alert(count > 0 ? `Reminder sent to ${count} member${count !== 1 ? 's' : ''}.` : 'Everyone has already RSVPed.')
     } catch {
       alert('Could not send reminder. Try again.')

@@ -154,6 +154,7 @@ export default function CreateEventModal({
         scheduled_date: scheduledDateTime,
         description: notes.trim() || null,
         created_by: user?.id,
+        host_user_id: user?.id,   // picker always becomes the host
         activity_type: resolvedActivity || null,
         rsvp_deadline: rsvpDeadlineISO,
         max_attendees: maxAttendees ? parseInt(maxAttendees, 10) : null,

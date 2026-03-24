@@ -1,15 +1,9 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState } from 'react'
 import Card from '../ui/Card'
 import Avatar from '../ui/Avatar'
-import { ratingsClient } from '../../api/client'
+import UserStatsModal from '../ui/UserStatsModal'
 
-function vibeLabel(avg) {
-  if (avg >= 9) return { label: '🔥 Tough critic', color: 'var(--rose)' }
-  if (avg >= 7) return { label: '👍 High standards', color: 'var(--green)' }
-  if (avg >= 5) return { label: '⚖️ Balanced', color: 'var(--blue)' }
-  return { label: '😌 Easy going', color: 'var(--amber)' }
-}
-
+// kept for dead-code removal — replaced by UserStatsModal
 function MemberStatsPopup({ member, canManage, onRoleChange, onRemove, onClose }) {
   const [stats, setStats] = useState(null)
   const ref = useRef(null)
@@ -40,7 +34,8 @@ function MemberStatsPopup({ member, canManage, onRoleChange, onRemove, onClose }
       style={{
         position: 'fixed', inset: 0, zIndex: 1000,
         background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '24px',
       }}
       onMouseDown={onClose}
     >
@@ -50,12 +45,9 @@ function MemberStatsPopup({ member, canManage, onRoleChange, onRemove, onClose }
         style={{
           width: '100%', maxWidth: '400px',
           background: 'var(--s2)', border: '1px solid var(--glass)',
-          borderRadius: '20px 20px 0 0', padding: '24px',
-          paddingBottom: '32px',
+          borderRadius: '20px', padding: '24px',
         }}
       >
-        {/* Handle */}
-        <div style={{ width: 36, height: 4, background: 'var(--glass)', borderRadius: 2, margin: '0 auto 20px' }} />
 
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
@@ -77,6 +69,10 @@ function MemberStatsPopup({ member, canManage, onRoleChange, onRemove, onClose }
               )}
             </div>
           </div>
+          <button
+            onClick={onClose}
+            style={{ flexShrink: 0, width: '30px', height: '30px', borderRadius: '50%', background: 'var(--s4)', border: '1px solid var(--glass)', color: 'var(--t3)', fontSize: '16px', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', alignSelf: 'flex-start' }}
+          >×</button>
         </div>
 
         {/* Stats tiles */}
@@ -406,7 +402,7 @@ export default function MembersCard({ members = [], pendingInvites = [], canMana
     </Card>
 
     {selectedMember && (
-      <MemberStatsPopup
+      <UserStatsModal
         member={selectedMember}
         canManage={canManage && selectedMember.user_id !== currentUserId}
         onRoleChange={onRoleChange}

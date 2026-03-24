@@ -220,12 +220,21 @@ export default function EventsList() {
       .finally(() => setLoading(false))
   }, [user?.id])
 
+  const now = new Date()
+  const effectiveStatus = (e) => {
+    if (e.status === 'scheduled' || e.status === 'in_progress') {
+      const d = e.scheduled_date || e.event_date
+      if (d && new Date(d) < now) return 'completed'
+    }
+    return e.status
+  }
+
   let filtered = events
 
   if (statusFilter === 'Upcoming') {
-    filtered = filtered.filter(e => e.status === 'scheduled' || e.status === 'in_progress' || e.status === 'upcoming')
+    filtered = filtered.filter(e => effectiveStatus(e) === 'scheduled' || effectiveStatus(e) === 'in_progress')
   } else if (statusFilter === 'Completed') {
-    filtered = filtered.filter(e => e.status === 'completed')
+    filtered = filtered.filter(e => effectiveStatus(e) === 'completed')
   } else if (statusFilter === 'Cancelled') {
     filtered = filtered.filter(e => e.status === 'cancelled')
   }
@@ -248,8 +257,8 @@ export default function EventsList() {
   const thisMonth = filtered.filter(e => getDate(e) && !isThisWeek(new Date(getDate(e)), { weekStartsOn: 1 }) && isThisMonth(new Date(getDate(e))))
   const other     = filtered.filter(e => !getDate(e) || (!isThisWeek(new Date(getDate(e)), { weekStartsOn: 1 }) && !isThisMonth(new Date(getDate(e)))))
 
-  const upcoming   = events.filter(e => e.status === 'scheduled' || e.status === 'in_progress').length
-  const completed  = events.filter(e => e.status === 'completed').length
+  const upcoming   = events.filter(e => effectiveStatus(e) === 'scheduled' || effectiveStatus(e) === 'in_progress').length
+  const completed  = events.filter(e => effectiveStatus(e) === 'completed').length
 
   const stats = [
     { label: 'Total',     value: loading ? '—' : events.length },

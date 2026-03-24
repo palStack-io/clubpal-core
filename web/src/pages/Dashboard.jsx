@@ -178,7 +178,7 @@ export default function Dashboard() {
     primaryGroupObj?.rotation_type !== 'none' && memberCount > 1
       ? {
           groupId: primaryGroupId,
-          groupName: primaryGroupObj?.name || 'Your Group',
+          groupName: primaryGroupObj?.name || 'Your Club',
           activityEmoji: rotation?.activity_emoji || primaryGroupObj?.activity_emoji || '🔄',
           activityType: rotation?.activity_type || primaryGroupObj?.activity_type || '',
           dueDate: rotation?.due_date || null,
@@ -194,7 +194,7 @@ export default function Dashboard() {
   const greeting = `${getGreeting()}, ${user?.full_name?.split(' ')[0] || user?.username} 👋`
 
   const stats = [
-    { label: 'Groups',     value: loading ? '—' : activeGroups },
+    { label: 'Clubs',      value: loading ? '—' : activeGroups },
     { label: 'Upcoming',   value: loading ? '—' : events.length },
     { label: 'This Month', value: loading ? '—' : monthEvents },
     { label: 'Turn',       value: loading ? '—' : turnPosition },
@@ -205,11 +205,11 @@ export default function Dashboard() {
       <PageHero
         label="clubPal"
         title={greeting}
-        subtitle={`${activeGroups} group${activeGroups !== 1 ? 's' : ''} · ${events.length} upcoming`}
+        subtitle={`${activeGroups} club${activeGroups !== 1 ? 's' : ''} · ${events.length} upcoming`}
         hasStats
       >
         <Button variant="ghost" size="sm" onClick={() => setShowCreateEvent(true)}>+ Event</Button>
-        <Button variant="primary" size="sm" onClick={() => setShowCreateGroup(true)}>+ Group</Button>
+        <Button variant="primary" size="sm" onClick={() => setShowCreateGroup(true)}>+ Club</Button>
       </PageHero>
 
       {/* Floating stats */}

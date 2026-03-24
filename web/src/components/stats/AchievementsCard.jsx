@@ -2,7 +2,7 @@ import Card from '../ui/Card'
 
 const ACHIEVEMENTS = [
   { id: 'first_pick',     icon: '🎯', name: 'First Pick',    desc: 'Host your first event' },
-  { id: 'social_butterfly', icon: '🦋', name: 'Social Butterfly', desc: 'Join 3+ groups' },
+  { id: 'social_butterfly', icon: '🦋', name: 'Social Butterfly', desc: 'Join 3+ clubs' },
   { id: 'critic',         icon: '⭐', name: 'Critic',        desc: 'Rate 10 events' },
   { id: 'globe_trotter',  icon: '🌍', name: 'Globetrotter',  desc: 'Try 5 activity types' },
   { id: 'streak_3',       icon: '🔥', name: 'On a Roll',     desc: '3 events in a row' },

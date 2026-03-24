@@ -160,7 +160,7 @@ function MemberManageRow({ member, canManage, onRoleChange, onRemove }) {
                 style={{ ...menuBtnStyle, color: '#f87171' }}
                 onClick={() => { onRemove(member.user_id); setMenuOpen(false) }}
               >
-                Remove from group
+                Remove from club
               </button>
             </div>
           )}
@@ -348,7 +348,7 @@ export default function EditGroupModal({
 
   // ── Save ───────────────────────────────────────────────────────────────────
   const handleSave = async () => {
-    if (!form.name.trim()) { setError('Group name is required.'); return }
+    if (!form.name.trim()) { setError('Club name is required.'); return }
     setError('')
     setLoading(true)
     try {
@@ -383,7 +383,7 @@ export default function EditGroupModal({
       onDeleted?.()
       onClose()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to delete group.')
+      setError(err?.response?.data?.detail || 'Failed to delete club.')
       setLoading(false)
     }
   }
@@ -392,10 +392,10 @@ export default function EditGroupModal({
   const blurBorder  = (e) => (e.target.style.borderColor = 'var(--glass)')
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Edit Group" size="lg">
-      {/* Section 1 – Group Details */}
+    <Modal isOpen={isOpen} onClose={onClose} title="Edit Club" size="lg">
+      {/* Section 1 – Club Details */}
       <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>Group Details</div>
+        <div style={sectionTitleStyle}>Club Details</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
           <div>
             <label style={labelStyle}>Name *</label>
@@ -545,10 +545,10 @@ export default function EditGroupModal({
         {!deleteConfirm ? (
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <div>
-              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)', marginBottom: '2px' }}>Delete this group</div>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)', marginBottom: '2px' }}>Delete this club</div>
               <div style={{ fontSize: '11px', color: 'var(--t3)' }}>This is permanent. All events and ratings will be lost.</div>
             </div>
-            <Button variant="danger" size="sm" onClick={() => setDeleteConfirm(true)}>Delete Group</Button>
+            <Button variant="danger" size="sm" onClick={() => setDeleteConfirm(true)}>Delete Club</Button>
           </div>
         ) : (
           <div>
@@ -557,7 +557,7 @@ export default function EditGroupModal({
             </div>
             <div style={{ display: 'flex', gap: '8px' }}>
               <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(false)}>Cancel</Button>
-              <Button variant="danger" size="sm" loading={loading} onClick={handleDelete}>Yes, Delete Group</Button>
+              <Button variant="danger" size="sm" loading={loading} onClick={handleDelete}>Yes, Delete Club</Button>
             </div>
           </div>
         )}

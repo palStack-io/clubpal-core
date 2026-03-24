@@ -133,7 +133,7 @@ export default function DiscoverGames() {
 
       <SearchHero
         eyebrow="Find a game"
-        headline="What should your group play?"
+        headline="What should your club play?"
         onSearch={doSearch}
         suggestions={['🎲 Board games', '🎮 Video games', '🃏 Card games', '🧩 Puzzles']}
       />

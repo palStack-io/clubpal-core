@@ -77,7 +77,7 @@ export default function Stats() {
         <KpiCard value={thisYear.length} label="Total Events" />
         <KpiCard value={avgRating} label="Avg Rating" />
         <KpiCard value={picksCount} label="Picks Made" />
-        <KpiCard value={groups.length} label="Groups" />
+        <KpiCard value={groups.length} label="Clubs" />
       </div>
 
       <div style={{ padding: '0 24px 24px' }}>

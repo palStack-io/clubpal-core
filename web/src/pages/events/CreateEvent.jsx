@@ -122,7 +122,7 @@ export default function CreateEvent() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.group_id) { setError('Please select a group.'); return }
+    if (!form.group_id) { setError('Please select a club.'); return }
     if (!form.title.trim()) { setError('Please enter a title.'); return }
     if (isRecurring && !recurrence.end_date) { setError('Please set an end date for the recurring series.'); return }
     setError('')
@@ -189,9 +189,9 @@ export default function CreateEvent() {
         {/* Core details */}
         <FormSection title="Event Details">
           <FormRow>
-            <FormGroup label="Group" required>
+            <FormGroup label="Club" required>
               <FormSelect value={form.group_id} onChange={set('group_id')}>
-                <option value="">Select a group…</option>
+                <option value="">Select a club…</option>
                 {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
               </FormSelect>
             </FormGroup>

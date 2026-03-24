@@ -1129,3 +1129,5 @@ def get_pending_join_requests_count(group_id: int) -> int:
     row = cursor.fetchone()
     conn.close()
     return row["cnt"] if row else 0
+
+

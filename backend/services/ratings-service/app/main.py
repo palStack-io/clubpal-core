@@ -50,10 +50,6 @@ async def health_check():
 @app.post("/ratings", response_model=RatingResponse, status_code=201)
 async def create_rating_endpoint(rating_data: RatingCreate, user_id: int):
     """Create a new rating."""
-    # Prevent self-rating
-    if user_id == rating_data.rated_user_id:
-        raise HTTPException(status_code=400, detail="Cannot rate yourself")
-
     # Verify event exists via events service
     async with httpx.AsyncClient() as client:
         try:

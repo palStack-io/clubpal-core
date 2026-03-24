@@ -118,7 +118,7 @@ export default function CreatePollModal({ isOpen, onClose, groupId: preGroupId, 
   if (!isOpen) return null
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Poll Your Group" size="md">
+    <Modal isOpen={isOpen} onClose={onClose} title="Poll Your Club" size="md">
       {/* Activity name */}
       <div style={sectionStyle}>
         <label style={labelStyle}>What are you considering? *</label>
@@ -160,13 +160,13 @@ export default function CreatePollModal({ isOpen, onClose, groupId: preGroupId, 
       {/* Group selector (only when not pre-selected) */}
       {!preGroupId && (
         <div style={sectionStyle}>
-          <label style={labelStyle}>Group *</label>
+          <label style={labelStyle}>Club *</label>
           <select
             value={groupId}
             onChange={e => setGroupId(e.target.value)}
             style={{ ...inputStyle, appearance: 'none' }}
           >
-            <option value="">Select a group…</option>
+            <option value="">Select a club…</option>
             {groups.map(g => (
               <option key={g.id} value={String(g.id)}>{g.name}</option>
             ))}

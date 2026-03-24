@@ -11,6 +11,18 @@ import { useAuth } from '../../contexts/AuthContext'
 
 const PRESET_TAGS = ['Hidden Gem', 'Would Return', 'Special Occasion', 'Date Night', 'Family', 'Casual', 'Pricey', 'Great Vibes', 'Loud', 'Cozy']
 
+const ACTIVITY_COPY = {
+  dining:  { heading: 'Rate the Restaurant', placeholder: 'Share your thoughts on the food, service, atmosphere…' },
+  movies:  { heading: 'Rate the Movie',      placeholder: 'What did you think of the film?' },
+  books:   { heading: 'Rate the Book',       placeholder: 'Share your thoughts on the read…' },
+  hiking:  { heading: 'Rate the Hike',       placeholder: 'How was the trail? Difficulty, views, conditions…' },
+  gaming:  { heading: 'Rate the Game',       placeholder: 'How was the session? Fun, challenge, vibes…' },
+  arts:    { heading: 'Rate the Show',       placeholder: 'Share your thoughts on the performance…' },
+}
+function getRatingCopy(activityType) {
+  return ACTIVITY_COPY[activityType?.toLowerCase()] ?? { heading: 'Rate the Event', placeholder: 'Share your thoughts about this event…' }
+}
+
 function ScoreInput({ value, onChange }) {
   return (
     <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
@@ -126,9 +138,11 @@ export default function RateEvent() {
     }
   }
 
+  const copy = getRatingCopy(event?.activity_type)
+
   return (
     <AppShell activeRoute="/events">
-      <Topbar title={`Rate ${event?.title || event?.venue_name || 'Event'}`} onBack={() => navigate(-1)} />
+      <Topbar title={copy.heading} onBack={() => navigate(-1)} />
 
       <div style={{ padding: '24px', maxWidth: '640px' }}>
         {error && (
@@ -179,7 +193,7 @@ export default function RateEvent() {
           <FormTextarea
             value={review}
             onChange={e => setReview(e.target.value)}
-            placeholder="Share your thoughts about this event..."
+            placeholder={copy.placeholder}
             style={{ minHeight: '100px' }}
           />
         </FormSection>

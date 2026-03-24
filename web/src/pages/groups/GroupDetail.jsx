@@ -157,13 +157,13 @@ export default function GroupDetail() {
 
   if (loading) return (
     <AppShell activeRoute="/groups">
-      <div style={{ padding: '40px', textAlign: 'center', color: 'var(--t3)' }}>Loading group…</div>
+      <div style={{ padding: '40px', textAlign: 'center', color: 'var(--t3)' }}>Loading club…</div>
     </AppShell>
   )
 
   if (!group) return (
     <AppShell activeRoute="/groups">
-      <div style={{ padding: '40px', textAlign: 'center', color: 'var(--t3)' }}>Group not found.</div>
+      <div style={{ padding: '40px', textAlign: 'center', color: 'var(--t3)' }}>Club not found.</div>
     </AppShell>
   )
 

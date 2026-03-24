@@ -1,12 +1,32 @@
 import { useState } from 'react'
 import Button from '../ui/Button'
-import Avatar from '../ui/Avatar'
 import { ratingsClient } from '../../api/client'
 
-const TAGS = [
-  'Hidden Gem', 'Would Return', 'Special Occasion', 'Date Night',
-  'Family', 'Casual', 'Pricey', 'Great Vibes', 'Loud', 'Cozy',
-]
+const ACTIVITY_TAGS = {
+  dining:  ['Hidden Gem', 'Would Return', 'Special Occasion', 'Date Night', 'Family Friendly', 'Casual', 'Pricey', 'Great Vibes', 'Loud', 'Cozy'],
+  movies:  ['Mind-Blowing', 'Tear-Jerker', 'Edge of Your Seat', 'Instant Classic', 'Overhyped', 'Great Soundtrack', 'Must Rewatch', 'Date Night', 'Family Friendly', 'Too Long'],
+  books:   ['Page-Turner', 'Mind-Expanding', 'Beautifully Written', 'Slow Burn', 'Thought-Provoking', "Couldn't Put Down", 'Great for Book Club', 'Overrated', 'Life-Changing', 'Quick Read'],
+  hiking:  ['Breathtaking Views', 'Dog Friendly', 'Family Friendly', 'Challenging', 'Well-Marked', 'Hidden Gem', 'Crowded', 'Scenic', 'Good Workout', 'Great Picnic Spot'],
+  gaming:  ['Addictive', 'Great Multiplayer', 'Stunning Graphics', 'Deep Story', 'Easy to Learn', 'Replay Value', 'Too Short', 'Frustrating', 'Couch Co-op', 'Hidden Gem'],
+  arts:    ['Moving', 'Thought-Provoking', 'World Class', 'Intimate', 'Standing Ovation', 'Overpriced', 'Stunning Visuals', 'Great Atmosphere', 'Date Night', 'Hidden Gem'],
+}
+const DEFAULT_TAGS = ['Great Experience', 'Would Return', 'Special Occasion', 'Date Night', 'Family Friendly', 'Casual', 'Hidden Gem', 'Great Vibes', 'Overrated', 'Budget-Friendly']
+
+function getTagsForActivity(activityType) {
+  return ACTIVITY_TAGS[activityType?.toLowerCase()] ?? DEFAULT_TAGS
+}
+
+const ACTIVITY_COPY = {
+  dining:  { heading: 'Rate the Restaurant', placeholder: 'Food, service, atmosphere…' },
+  movies:  { heading: 'Rate the Movie',      placeholder: 'What did you think of the film?' },
+  books:   { heading: 'Rate the Book',       placeholder: 'Share your thoughts on the read…' },
+  hiking:  { heading: 'Rate the Hike',       placeholder: 'Trail, views, difficulty…' },
+  gaming:  { heading: 'Rate the Game',       placeholder: 'Fun, challenge, vibes…' },
+  arts:    { heading: 'Rate the Show',       placeholder: 'Share your thoughts on the performance…' },
+}
+function getRatingCopy(activityType) {
+  return ACTIVITY_COPY[activityType?.toLowerCase()] ?? { heading: 'Rate the Event', placeholder: 'Share your thoughts…' }
+}
 
 function ScoreInput({ value, onChange }) {
   return (
@@ -36,13 +56,13 @@ function ScoreInput({ value, onChange }) {
   )
 }
 
-function TagPicker({ selected, onChange }) {
+function TagPicker({ selected, onChange, tagList }) {
   const toggle = tag => onChange(
     selected.includes(tag) ? selected.filter(t => t !== tag) : [...selected, tag]
   )
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-      {TAGS.map(tag => {
+      {tagList.map(tag => {
         const active = selected.includes(tag)
         return (
           <button
@@ -69,22 +89,29 @@ function TagPicker({ selected, onChange }) {
   )
 }
 
-export default function RateEventModal({ isOpen, onClose, event, attendees, currentUser, onSubmitted }) {
-  const others = (attendees || []).filter(a => String(a.user_id) !== String(currentUser?.id))
-  const defaultRatedUserId = others[0]?.user_id ?? null
+const SCORE_LABELS = {
+  1: 'Terrible', 2: 'Bad', 3: 'Poor', 4: 'Below Average', 5: 'Average',
+  6: 'Decent', 7: 'Good', 8: 'Great', 9: 'Excellent', 10: 'Perfect',
+}
+
+export default function RateEventModal({ isOpen, onClose, event, currentUser, onSubmitted }) {
+  // Always rate the event host/picker — no attendee picker needed
+  const ratedUserId = event?.host_user_id || event?.created_by || null
 
   const [score, setScore] = useState(0)
   const [comment, setComment] = useState('')
   const [tags, setTags] = useState([])
-  const [ratedUserId, setRatedUserId] = useState(defaultRatedUserId)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
   if (!isOpen) return null
 
+  const copy = getRatingCopy(event?.activity_type)
+  const tagList = getTagsForActivity(event?.activity_type)
+
   const handleSubmit = async () => {
     if (!score) { setError('Please select a score.'); return }
-    if (!ratedUserId) { setError('Please select who to rate.'); return }
+    if (!ratedUserId) { setError('Could not determine who to rate.'); return }
     setError('')
     setSubmitting(true)
     try {
@@ -130,7 +157,7 @@ export default function RateEventModal({ isOpen, onClose, event, attendees, curr
         <div style={{ width: '36px', height: '4px', background: 'var(--glass)', borderRadius: '2px', margin: '0 auto 20px' }} />
 
         <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--t1)', marginBottom: '4px' }}>
-          Rate Event
+          {copy.heading}
         </div>
         <div style={{ fontSize: '13px', color: 'var(--t3)', marginBottom: '20px' }}>
           {event?.title || event?.venue_name || 'Event'}
@@ -142,45 +169,17 @@ export default function RateEventModal({ isOpen, onClose, event, attendees, curr
           </div>
         )}
 
-        {/* Who to rate */}
-        {others.length > 0 && (
-          <div style={{ marginBottom: '20px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '10px' }}>
-              Who are you rating?
-            </div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-              {others.map(a => {
-                const selected = ratedUserId === a.user_id
-                return (
-                  <button
-                    key={a.user_id}
-                    type="button"
-                    onClick={() => setRatedUserId(a.user_id)}
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '8px',
-                      padding: '8px 12px', borderRadius: '10px',
-                      border: `1px solid ${selected ? 'var(--rose-border)' : 'var(--glass)'}`,
-                      background: selected ? 'var(--rose-glow)' : 'var(--s3)',
-                      cursor: 'pointer', transition: 'all 0.12s',
-                    }}
-                  >
-                    <Avatar user={{ full_name: a.full_name, avatar_url: a.avatar_url }} size="sm" />
-                    <span style={{ fontSize: '12px', fontWeight: 600, color: selected ? 'var(--rose-soft)' : 'var(--t2)' }}>
-                      {a.full_name || a.username}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
         {/* Score */}
-        <div style={{ marginBottom: '20px' }}>
-          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '10px' }}>
+        <div style={{ marginBottom: '22px' }}>
+          <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '12px' }}>
             Your Score
           </div>
           <ScoreInput value={score} onChange={setScore} />
+          {score > 0 && (
+            <div style={{ textAlign: 'center', fontSize: '13px', fontWeight: 700, color: 'var(--rose)', marginTop: '10px' }}>
+              {score}/10 — {SCORE_LABELS[score]}
+            </div>
+          )}
         </div>
 
         {/* Tags */}
@@ -188,7 +187,7 @@ export default function RateEventModal({ isOpen, onClose, event, attendees, curr
           <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '10px' }}>
             Tags (optional)
           </div>
-          <TagPicker selected={tags} onChange={setTags} />
+          <TagPicker selected={tags} onChange={setTags} tagList={tagList} />
         </div>
 
         {/* Comment */}
@@ -199,7 +198,7 @@ export default function RateEventModal({ isOpen, onClose, event, attendees, curr
           <textarea
             value={comment}
             onChange={e => setComment(e.target.value)}
-            placeholder="Share your thoughts..."
+            placeholder={copy.placeholder}
             maxLength={500}
             style={{
               width: '100%', minHeight: '80px', resize: 'vertical',
@@ -219,7 +218,7 @@ export default function RateEventModal({ isOpen, onClose, event, attendees, curr
             variant="primary"
             onClick={handleSubmit}
             loading={submitting}
-            disabled={!score || !ratedUserId}
+            disabled={!score}
             style={{ flex: 2 }}
           >
             Submit Rating

@@ -120,7 +120,7 @@ export default function DiscoverArts() {
 
       <SearchHero
         eyebrow="Find something cultural"
-        headline="What's your group into?"
+        headline="What's your club into?"
         onSearch={doSearch}
         suggestions={['🎭 Theatre', '🖼️ Exhibitions', '🎵 Live music', '🎪 Events']}
       />

@@ -1070,13 +1070,13 @@ function NotificationsSection() {
           <FormSection title="Email Notifications">
             <NotificationRow
               label="Rotation alerts"
-              description="Email when it's your turn to pick an activity in a group."
+              description="Email when it's your turn to pick an activity in a club."
               checked={prefs.notify_rotation}
               onChange={() => toggle('notify_rotation')}
             />
             <NotificationRow
               label="New events"
-              description="Email when someone schedules a new event in one of your groups."
+              description="Email when someone schedules a new event in one of your clubs."
               checked={prefs.notify_events}
               onChange={() => toggle('notify_events')}
             />
@@ -1088,8 +1088,8 @@ function NotificationsSection() {
             />
             <div style={{ paddingTop: '14px' }}>
               <NotificationRow
-                label="Group invitations"
-                description="Email when someone invites you to join a group."
+                label="Club invitations"
+                description="Email when someone invites you to join a club."
                 checked={prefs.notify_invites}
                 onChange={() => toggle('notify_invites')}
               />

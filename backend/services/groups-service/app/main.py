@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi import FastAPI, HTTPException, Header, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
 import uuid
@@ -183,18 +183,39 @@ async def delete_group_endpoint(group_id: int, user_id: int = Depends(get_curren
 
 # ===== Member Endpoints =====
 
+async def _auto_rsvp_new_member(group_id: int, user_id: int):
+    """After adding a member, RSVP them to all scheduled/in-progress events for the group.
+    Fire-and-forget: failures are logged but never block member addition."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(
+                f"{EVENTS_SERVICE_URL}/groups/{group_id}/events",
+                params={"status": "scheduled"},
+            )
+            if r.status_code == 200:
+                for event in r.json():
+                    try:
+                        await client.post(
+                            f"{EVENTS_SERVICE_URL}/events/{event['id']}/attendees",
+                            json={"user_id": user_id},
+                        )
+                    except Exception:
+                        pass
+    except Exception as e:
+        print(f"Warning: auto-RSVP failed for user {user_id} in group {group_id}: {e}")
+
+
 @app.post("/groups/{group_id}/members", response_model=MemberResponse, status_code=201)
 async def add_member_endpoint(group_id: int, member_data: MemberAdd):
     """Add a member to a group."""
-    # Check if group exists
     if not get_group(group_id):
         raise HTTPException(status_code=404, detail="Group not found")
 
-    # Add member
     success = add_member(group_id, member_data.user_id)
-
     if not success:
         raise HTTPException(status_code=400, detail="User is already a member")
+
+    await _auto_rsvp_new_member(group_id, member_data.user_id)
 
     member = get_member(group_id, member_data.user_id)
     return MemberResponse(**member)
@@ -469,6 +490,21 @@ async def get_banner_upload_url(group_id: int, request: BannerUploadRequest, use
         public_url=public_url,
         object_name=object_name,
     )
+
+
+@app.post("/groups/{group_id}/banner/upload")
+async def upload_group_banner(group_id: int, file: UploadFile = File(...), user_id: int = Depends(get_current_user_id)):
+    """Upload a group banner image directly (no presigned URL required)."""
+    if not get_group(group_id):
+        raise HTTPException(status_code=404, detail="Group not found")
+    if not is_admin_or_owner(group_id, user_id):
+        raise HTTPException(status_code=403, detail="Only admins and owners can update the banner")
+    ext = (file.filename or "banner.jpg").rsplit(".", 1)[-1].lower()
+    object_name = f"groups/{group_id}/banner-{uuid.uuid4().hex[:8]}.{ext}"
+    content = await file.read()
+    public_url = storage.upload_bytes(storage.BUCKET_EVENTS, object_name, content, file.content_type or "image/jpeg")
+    update_group(group_id, banner_url=public_url)
+    return {"banner_url": public_url}
 
 
 # ===== Comment Endpoints =====
@@ -802,6 +838,7 @@ async def join_via_invite_code(code: str, user_id: int = Depends(get_current_use
         if not success:
             raise HTTPException(status_code=409, detail="Could not add member")
         increment_invite_used_count(row["id"])
+        await _auto_rsvp_new_member(group_id, user_id)
         return {"joined": True, "group_id": group_id}
 
     else:  # approval
@@ -878,6 +915,7 @@ async def review_join_request(
 
     if data.action == "approve":
         add_member(req["group_id"], req["user_id"])
+        await _auto_rsvp_new_member(req["group_id"], req["user_id"])
 
     # Notify requester
     group = get_group(req["group_id"])

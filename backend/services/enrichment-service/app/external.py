@@ -190,6 +190,20 @@ def _normalize_places(places: list) -> list:
 
 # ===== Google Geocoding =====
 
+async def places_autocomplete(input_text: str, types: str = "(cities)") -> list:
+    if not GOOGLE_API_KEY:
+        return []
+    async with httpx.AsyncClient(timeout=10.0) as c:
+        resp = await c.get(
+            f"{GOOGLE_PLACES_BASE}/autocomplete/json",
+            params={"input": input_text, "types": types, "key": GOOGLE_API_KEY},
+        )
+        if resp.status_code == 200:
+            predictions = resp.json().get("predictions", [])
+            return [{"description": p["description"], "place_id": p["place_id"]} for p in predictions]
+    return []
+
+
 async def geocode_address(address: str) -> Optional[dict]:
     if not GOOGLE_API_KEY:
         return None

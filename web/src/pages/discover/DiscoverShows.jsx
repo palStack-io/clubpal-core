@@ -83,7 +83,7 @@ export default function DiscoverShows() {
 
       <SearchHero
         eyebrow="Find something to binge"
-        headline="What's your group binge-watching?"
+        headline="What's your club binge-watching?"
         onSearch={doSearch}
         suggestions={['📺 Drama', '😂 Comedy', '🔬 Sci-Fi', '🕵️ Crime']}
       />

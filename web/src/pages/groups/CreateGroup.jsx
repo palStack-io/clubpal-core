@@ -73,7 +73,7 @@ export default function CreateGroup() {
   }
 
   const handleSubmit = async () => {
-    if (!form.name.trim()) { setError('Group name is required.'); return }
+    if (!form.name.trim()) { setError('Club name is required.'); return }
     if (!form.join_behavior) { setError('Please select how new members can join.'); return }
     setError('')
     setLoading(true)
@@ -100,7 +100,7 @@ export default function CreateGroup() {
 
       navigate(`/groups/${group.id}`)
     } catch (e) {
-      setError(e.response?.data?.detail || 'Failed to create group.')
+      setError(e.response?.data?.detail || 'Failed to create club.')
     } finally {
       setLoading(false)
     }
@@ -108,9 +108,9 @@ export default function CreateGroup() {
 
   return (
     <AppShell activeRoute="/groups">
-      <Topbar title="Create New Group" onBack={() => navigate('/groups')}>
+      <Topbar title="Create New Club" onBack={() => navigate('/groups')}>
         <Button variant="ghost" onClick={() => navigate('/groups')}>Cancel</Button>
-        <Button variant="primary" onClick={handleSubmit} loading={loading}>Create Group</Button>
+        <Button variant="primary" onClick={handleSubmit} loading={loading}>Create Club</Button>
       </Topbar>
 
       <div style={{ padding: '20px 24px', maxWidth: '720px' }}>
@@ -120,18 +120,18 @@ export default function CreateGroup() {
           </div>
         )}
 
-        <FormSection title="Group Banner">
+        <FormSection title="Club Banner">
           <BannerUpload
             value={bannerPreview}
             onChange={handleBannerChange}
-            label="Group Banner Photo"
+            label="Club Banner Photo"
             aspectRatio="16/5"
           />
         </FormSection>
 
-        <FormSection title="Group Details">
+        <FormSection title="Club Details">
           <FormRow>
-            <FormGroup label="Group Name" required>
+            <FormGroup label="Club Name" required>
               <FormInput
                 placeholder="e.g. Friday Foodies"
                 value={form.name}

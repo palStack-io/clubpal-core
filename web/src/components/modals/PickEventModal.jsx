@@ -62,7 +62,7 @@ export default function PickEventModal({ isOpen, onClose, onConfirm, item, activ
           <FormTextarea
             value={notes}
             onChange={e => setNotes(e.target.value)}
-            placeholder="Any details for the group..."
+            placeholder="Any details for the club..."
             style={{ minHeight: '80px' }}
           />
         </FormGroup>

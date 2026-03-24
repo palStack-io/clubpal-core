@@ -110,7 +110,7 @@ function ResultState({ result, groupId, groupName, navigate }) {
       <div style={{ textAlign: 'center' }}>
         <div style={{ fontSize: '48px', marginBottom: '16px' }}>❌</div>
         <p style={{ color: 'var(--t2)', marginBottom: '20px' }}>{result.error}</p>
-        <button onClick={() => navigate('/groups')} style={btnStyle('primary')}>My Groups</button>
+        <button onClick={() => navigate('/groups')} style={btnStyle('primary')}>My Clubs</button>
       </div>
     )
   }
@@ -125,7 +125,7 @@ function ResultState({ result, groupId, groupName, navigate }) {
           Welcome to <strong style={{ color: 'var(--t1)' }}>{groupName}</strong>
         </p>
         <button onClick={() => navigate(`/groups/${groupId}`)} style={btnStyle('primary')}>
-          Go to Group →
+          Go to Club →
         </button>
       </div>
     )
@@ -141,7 +141,7 @@ function ResultState({ result, groupId, groupName, navigate }) {
           The admin of <strong style={{ color: 'var(--t1)' }}>{groupName}</strong> will review your request.
           We'll notify you when it's approved.
         </p>
-        <button onClick={() => navigate('/groups')} style={btnStyle('ghost')}>Back to My Groups</button>
+        <button onClick={() => navigate('/groups')} style={btnStyle('ghost')}>Back to My Clubs</button>
       </div>
     )
   }
@@ -195,7 +195,7 @@ function PreviewState({ preview, emoji, code, isAuthenticated, joining, onJoin }
       <p style={{ fontSize: '13px', color: 'var(--t3)', textAlign: 'center', marginBottom: '20px' }}>
         {isInstant
           ? 'You\'ll join immediately and be added to the rotation queue.'
-          : 'Your request will be sent to the group admin for approval.'}
+          : 'Your request will be sent to the club admin for approval.'}
       </p>
 
       {/* CTA */}

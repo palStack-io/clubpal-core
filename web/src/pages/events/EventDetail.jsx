@@ -65,11 +65,11 @@ export default function EventDetail() {
       setComments(await enrichWithProfiles(rawComments, 'user_id'))
 
       const rawRatings = Array.isArray(rat) ? rat : rat?.ratings || []
-      const enrichedRatings = await enrichWithProfiles(rawRatings, r => r.reviewer_id || r.rater_id || r.user_id)
+      const enrichedRatings = await enrichWithProfiles(rawRatings, r => r.rater_user_id || r.reviewer_id || r.rater_id || r.user_id)
       setRatings(enrichedRatings.map(r => ({
         ...r,
-        reviewer_name: r.reviewer_name || r.full_name,
-        reviewer_avatar: r.reviewer_avatar || r.avatar_url,
+        reviewer_name: r.full_name || r.reviewer_name || r.rater_name,
+        reviewer_avatar: r.avatar_url || r.reviewer_avatar || r.rater_avatar,
       })))
     } catch {
       // silently ignore top-level failures; individual catches already handle per-resource errors
@@ -177,6 +177,17 @@ export default function EventDetail() {
   }
 
   const isHost = user?.id != null && event.host_user_id != null && String(user.id) === String(event.host_user_id)
+  const isCreator = user?.id != null && String(user.id) === String(event.created_by ?? event.host_user_id)
+
+  const handleRsvpReminder = async () => {
+    try {
+      const res = await eventsApi.post(`/events/${id}/rsvp-reminder`, {}, { params: { user_id: user.id } })
+      const count = res.data?.nudged ?? 0
+      alert(count > 0 ? `Reminder sent to ${count} member${count !== 1 ? 's' : ''}.` : 'Everyone has already RSVPed.')
+    } catch {
+      alert('Could not send reminder. Try again.')
+    }
+  }
   const hostName = attendees.find(a => String(a.user_id) === String(event.host_user_id))?.full_name || null
   const isScheduled = event.status === 'scheduled' || event.status === 'in_progress'
   const myAttendee = attendees.find(a => String(a.user_id) === String(user?.id))
@@ -196,6 +207,7 @@ export default function EventDetail() {
 
   const heroActions = [
     ...(event.status === 'scheduled' && isHost ? [{ label: '✏️ Edit', onClick: () => setShowEditEvent(true) }] : []),
+    ...(isScheduled && isCreator ? [{ label: '📣 Remind', onClick: handleRsvpReminder }] : []),
     ...((event.status === 'completed' || (event.scheduled_date && new Date(event.scheduled_date) < new Date())) ? [{ label: '⭐ Rate', onClick: () => setShowRateModal(true) }] : []),
     ...(event.bill_split_enabled ? [{ label: '💳 Split', onClick: () => setShowBillSplit(true) }] : []),
     ...(isScheduled && myAttendee?.status !== 'going' ? [{ label: '✓ RSVP', onClick: () => handleRsvp('going'), loading: rsvpLoading }] : []),
@@ -300,7 +312,6 @@ export default function EventDetail() {
         isOpen={showRateModal}
         onClose={() => setShowRateModal(false)}
         event={event}
-        attendees={attendees}
         currentUser={user}
         onSubmitted={fetchAll}
       />

@@ -91,7 +91,7 @@ export default function ManageMembers() {
 
   return (
     <AppShell activeRoute="/groups">
-      <Topbar title={`${group?.name || 'Group'} · Members`} onBack={() => navigate(`/groups/${id}`)}>
+      <Topbar title={`${group?.name || 'Club'} · Members`} onBack={() => navigate(`/groups/${id}`)}>
         <Button variant="primary" onClick={() => setShowInvite(true)}>+ Invite Member</Button>
       </Topbar>
 

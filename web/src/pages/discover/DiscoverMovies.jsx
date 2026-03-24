@@ -162,7 +162,7 @@ export default function DiscoverMovies() {
 
       <SearchHero
         eyebrow="Find something to watch"
-        headline="What's on your group's watchlist?"
+        headline="What's on your club's watchlist?"
         onSearch={doSearch}
         suggestions={['🎬 Action', '😂 Comedy', '😱 Horror', '🏆 Award winners']}
       />

@@ -664,7 +664,7 @@ export default function DetailPage({ type, itemId, data: rawData, extra = {}, lo
           fontFamily: `'DM Sans', sans-serif`,
         }}
       >
-        {isWide ? '💬 Poll Group' : '💬'}
+        {isWide ? '💬 Poll Club' : '💬'}
       </button>
     </div>
   )

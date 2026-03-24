@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi import FastAPI, HTTPException, Header, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, List
@@ -829,6 +829,17 @@ class UploadUrlResponse(BaseModel):
     object_name: str
 
 
+@app.post("/users/me/avatar/upload")
+async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    """Upload a user avatar image directly (no presigned URL required)."""
+    ext = (file.filename or "avatar.jpg").rsplit(".", 1)[-1].lower()
+    object_name = f"user-{current_user['id']}-{uuid.uuid4().hex[:8]}.{ext}"
+    content = await file.read()
+    public_url = storage.upload_bytes(storage.BUCKET_AVATARS, object_name, content, file.content_type or "image/jpeg")
+    update_user_profile(current_user["id"], avatar_url=public_url)
+    return {"avatar_url": public_url}
+
+
 @app.post("/users/me/avatar/upload-url", response_model=UploadUrlResponse)
 async def get_avatar_upload_url(request: AvatarUploadRequest,
                                 current_user: dict = Depends(get_current_user)):
@@ -1135,6 +1146,13 @@ async def update_my_preferences(
     return prefs
 
 
+@app.post("/users/me/onboarding/complete")
+async def complete_onboarding(current_user: dict = Depends(get_current_user)):
+    """Mark onboarding as complete without blocking on enrichment."""
+    upsert_user_preferences(current_user["id"], onboarding_complete=1)
+    return {"onboarding_complete": True}
+
+
 @app.post("/users/me/preferences/refresh")
 async def refresh_my_preferences(current_user: dict = Depends(get_current_user)):
     """Re-trigger bulk enrichment load without changing preferences."""
@@ -1373,6 +1391,12 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                 req.event_id,
             )
 
+        elif req.type == "rsvp_nudge":
+            # Manual nudge from event creator — always in-app + push, no email
+            create_notification(uid, "reminder", f"📅 RSVP needed: {req.event_title}",
+                                f"{creator_name} is asking — are you in?",
+                                link_type="event", link_id=req.event_id)
+
         elif req.type == "rsvp_reminder":
             if not prefs["notify_reminders"] or not user.get("email"):
                 continue
@@ -1430,6 +1454,10 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
         elif req.type in ("created", "recurring"):
             await _send_push(push_tokens, f"📅 {group_name}",
                              f"New event: {req.event_title}",
+                             {"link_type": "event", "link_id": req.event_id})
+        elif req.type == "rsvp_nudge":
+            await _send_push(push_tokens, f"📅 RSVP needed: {req.event_title}",
+                             f"{creator_name} is asking — are you in?",
                              {"link_type": "event", "link_id": req.event_id})
         elif req.type == "reminder":
             await _send_push(push_tokens, f"⏰ {req.event_title}",

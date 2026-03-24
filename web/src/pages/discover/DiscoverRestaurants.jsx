@@ -113,7 +113,7 @@ export default function DiscoverRestaurants() {
 
       <SearchHero
         eyebrow="Find somewhere to eat"
-        headline="Where should your group go?"
+        headline="Where should your club go?"
         onSearch={doSearch}
         suggestions={['🍜 Ramen', '🍕 Italian', '⭐ Top rated', '🌙 Open late']}
       />

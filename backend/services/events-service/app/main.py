@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Header, Depends
+from fastapi import FastAPI, HTTPException, Header, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional
@@ -28,6 +28,30 @@ from app.database import (
 from app import storage
 
 logger = logging.getLogger(__name__)
+
+_STORAGE_PREFIX = f"{storage.MINIO_PUBLIC_URL}/{storage.BUCKET_EVENTS}/"
+
+
+def _cover_object_key(cover_url: str) -> Optional[str]:
+    """Extract the MinIO object key from a public cover URL, or None if external."""
+    if cover_url and cover_url.startswith(_STORAGE_PREFIX):
+        return cover_url[len(_STORAGE_PREFIX):]
+    return None
+
+
+async def _mirror_external_cover(event_id: int, url: str) -> str:
+    """Fetch an external image URL and upload it to MinIO. Returns the MinIO public URL."""
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(url, follow_redirects=True)
+            r.raise_for_status()
+        content_type = r.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+        ext = {"image/png": "png", "image/gif": "gif", "image/webp": "webp"}.get(content_type, "jpg")
+        object_name = f"events/{event_id}/cover-{uuid.uuid4().hex[:8]}.{ext}"
+        return storage.upload_bytes(storage.BUCKET_EVENTS, object_name, r.content, content_type)
+    except Exception as e:
+        logger.warning(f"Could not mirror cover image for event {event_id}: {e}")
+        return url  # fall back to external URL if fetch fails
 
 app = FastAPI(title="ClubPal Events Service", version="1.0.0")
 scheduler = AsyncIOScheduler()
@@ -315,7 +339,7 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(
             raise HTTPException(status_code=400, detail="Could not determine host from rotation")
         host_user_id = rotation_user_id
 
-    # Create the (first) event instance
+    # Create the event first (no cover yet — we need event_id for proper MinIO path)
     event_id = create_event(
         group_id=event_data.group_id,
         activity_id=event_data.activity_id,
@@ -329,9 +353,19 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(
         rsvp_deadline=event_data.rsvp_deadline,
         parent_recurring_id=event_data.parent_recurring_id,
         max_attendees=event_data.max_attendees,
-        cover_url=event_data.banner_url,
+        cover_url=None,
         bill_split_enabled=event_data.bill_split_enabled,
     )
+
+    # Mirror cover into MinIO under the real event path
+    if event_data.banner_url:
+        if event_data.banner_url.startswith(_STORAGE_PREFIX):
+            # Already in our MinIO — just store it
+            update_event(event_id, cover_url=event_data.banner_url)
+        else:
+            # External URL — fetch and upload to MinIO
+            cover_url = await _mirror_external_cover(event_id, event_data.banner_url)
+            update_event(event_id, cover_url=cover_url)
 
     # If linked to an existing recurring schedule, advance it so the daily job
     # doesn't spawn a duplicate for this occurrence
@@ -472,6 +506,23 @@ async def update_event_endpoint(event_id: int, event_data: EventUpdate, user_id:
     return EventResponse(**event)
 
 
+@app.delete("/events/{event_id}/cover", status_code=204)
+async def delete_event_cover(event_id: int, user_id: int = Depends(get_current_user_id)):
+    """Remove the cover image from an event and delete it from storage."""
+    event = get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if event["created_by"] != user_id and event["host_user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    cover_url = event.get("cover_url")
+    if cover_url:
+        key = _cover_object_key(cover_url)
+        if key:
+            storage.delete_object(storage.BUCKET_EVENTS, key)
+        update_event(event_id, cover_url="")  # clear in DB
+
+
 @app.delete("/events/{event_id}", status_code=204)
 async def delete_event_endpoint(event_id: int, user_id: int = Depends(get_current_user_id)):
     """Delete an event."""
@@ -483,13 +534,73 @@ async def delete_event_endpoint(event_id: int, user_id: int = Depends(get_curren
     if event["created_by"] != user_id and event["host_user_id"] != user_id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this event")
 
-    success = delete_event(event_id, user_id)
+    # Clean up cover image from MinIO
+    cover_url = event.get("cover_url")
+    if cover_url:
+        key = _cover_object_key(cover_url)
+        if key:
+            storage.delete_object(storage.BUCKET_EVENTS, key)
 
+    # Clean up all event photos from MinIO
+    for photo in get_photos(event_id):
+        if photo.get("object_key"):
+            storage.delete_object(storage.BUCKET_EVENTS, photo["object_key"])
+
+    success = delete_event(event_id, user_id)
     if not success:
         raise HTTPException(status_code=500, detail="Failed to delete event")
 
 
 # ===== Attendee Endpoints =====
+
+@app.post("/events/{event_id}/rsvp-reminder", status_code=202)
+async def send_rsvp_reminder(event_id: int, user_id: int = Depends(get_current_user_id)):
+    """Event creator nudges all group members who haven't RSVPed 'going'."""
+    event = get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if event["created_by"] != user_id:
+        raise HTTPException(status_code=403, detail="Only the event creator can send reminders")
+
+    # Get group members
+    group_member_ids: List[int] = []
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{GROUPS_SERVICE_URL}/groups/{event['group_id']}/members")
+            if r.status_code == 200:
+                group_member_ids = [m["user_id"] for m in r.json()]
+    except Exception:
+        pass
+
+    # Exclude those already going + the creator
+    going_ids = {a["user_id"] for a in get_attendees(event_id) if a["status"] == "going"}
+    target_ids = [uid for uid in group_member_ids if uid != user_id and uid not in going_ids]
+
+    if not target_ids:
+        return {"nudged": 0, "message": "Everyone has already RSVPed going."}
+
+    sched = event.get("scheduled_date")
+    event_date_str = sched.strftime("%A, %b %-d at %-I:%M %p") if sched else ""
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.post(
+                f"{GATEWAY_URL}/internal/notify/event",
+                json={
+                    "user_ids": target_ids,
+                    "event_id": event_id,
+                    "event_title": event["title"],
+                    "event_date": event_date_str,
+                    "group_id": event["group_id"],
+                    "creator_id": user_id,
+                    "type": "rsvp_nudge",
+                },
+            )
+    except Exception as e:
+        logger.warning(f"Failed to send RSVP nudge for event {event_id}: {e}")
+
+    return {"nudged": len(target_ids)}
+
 
 @app.post("/events/{event_id}/rsvp", response_model=AttendeeResponse)
 async def rsvp_event(event_id: int, rsvp_data: AttendeeRSVP, user_id: int = Depends(get_current_user_id)):
@@ -633,6 +744,20 @@ class UploadUrlResponse(BaseModel):
     upload_url: str
     public_url: str
     object_name: str
+
+
+@app.post("/events/{event_id}/cover/upload")
+async def upload_event_cover(event_id: int, file: UploadFile = File(...), user_id: int = Depends(get_current_user_id)):
+    """Upload an event cover image directly (no presigned URL required)."""
+    event = get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    ext = (file.filename or "cover.jpg").rsplit(".", 1)[-1].lower()
+    object_name = f"events/{event_id}/cover-{uuid.uuid4().hex[:8]}.{ext}"
+    content = await file.read()
+    public_url = storage.upload_bytes(storage.BUCKET_EVENTS, object_name, content, file.content_type or "image/jpeg")
+    update_event(event_id, cover_url=public_url)
+    return {"cover_url": public_url}
 
 
 @app.post("/events/{event_id}/cover/upload-url", response_model=UploadUrlResponse)

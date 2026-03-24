@@ -1,76 +1,133 @@
 import { useState, useRef, useEffect } from 'react'
 import Card from '../ui/Card'
 import Avatar from '../ui/Avatar'
+import { ratingsClient } from '../../api/client'
 
-function ContextMenu({ member, onRoleChange, onRemove, onClose }) {
+function vibeLabel(avg) {
+  if (avg >= 9) return { label: '🔥 Tough critic', color: 'var(--rose)' }
+  if (avg >= 7) return { label: '👍 High standards', color: 'var(--green)' }
+  if (avg >= 5) return { label: '⚖️ Balanced', color: 'var(--blue)' }
+  return { label: '😌 Easy going', color: 'var(--amber)' }
+}
+
+function MemberStatsPopup({ member, canManage, onRoleChange, onRemove, onClose }) {
+  const [stats, setStats] = useState(null)
   const ref = useRef(null)
 
   useEffect(() => {
-    function handleClickOutside(e) {
-      if (ref.current && !ref.current.contains(e.target)) {
-        onClose()
-      }
+    ratingsClient.get(`/users/${member.user_id}/stats`)
+      .then(r => setStats(r.data))
+      .catch(() => {})
+  }, [member.user_id])
+
+  useEffect(() => {
+    function handleClick(e) {
+      if (ref.current && !ref.current.contains(e.target)) onClose()
     }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
   }, [onClose])
+
+  const avg = stats?.average_score ?? stats?.avg_score ?? null
+  const total = stats?.total_ratings ?? stats?.ratings_count ?? 0
+  const vibe = avg != null && total > 0 ? vibeLabel(avg) : null
+  const roleBadge = member.role === 'owner' ? { text: 'Owner', color: 'var(--rose)' }
+    : member.role === 'admin' ? { text: 'Admin', color: 'var(--amber)' }
+    : null
 
   return (
     <div
-      ref={ref}
       style={{
-        position: 'absolute',
-        left: '50%',
-        transform: 'translateX(-50%)',
-        top: 'calc(100% + 8px)',
-        background: 'var(--s1)',
-        border: '1px solid var(--glass)',
-        borderRadius: '10px',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
-        zIndex: 30,
-        minWidth: '160px',
-        overflow: 'hidden',
+        position: 'fixed', inset: 0, zIndex: 1000,
+        background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
       }}
+      onMouseDown={onClose}
     >
-      {/* Name header */}
-      <div style={{ padding: '8px 14px 6px', fontSize: '12px', fontWeight: 700, color: 'var(--t1)', borderBottom: '1px solid var(--glass)' }}>
-        {member.full_name || member.username || 'Unknown'}
-      </div>
-      {member.role === 'member' && (
-        <button
-          onClick={() => { onRoleChange(member.user_id, 'admin'); onClose() }}
-          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', fontSize: '12px', fontWeight: 500, color: 'var(--t2)', background: 'transparent', border: 'none', cursor: 'pointer' }}
-          onMouseEnter={e => e.currentTarget.style.background = 'var(--glass)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-        >
-          Make Admin
-        </button>
-      )}
-      {member.role === 'admin' && (
-        <button
-          onClick={() => { onRoleChange(member.user_id, 'member'); onClose() }}
-          style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', fontSize: '12px', fontWeight: 500, color: 'var(--t2)', background: 'transparent', border: 'none', cursor: 'pointer' }}
-          onMouseEnter={e => e.currentTarget.style.background = 'var(--glass)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-        >
-          Make Member
-        </button>
-      )}
-      <div style={{ height: '1px', background: 'var(--glass)' }} />
-      <button
-        onClick={() => { onRemove(member.user_id); onClose() }}
-        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '10px 14px', fontSize: '12px', fontWeight: 500, color: '#f87171', background: 'transparent', border: 'none', cursor: 'pointer' }}
-        onMouseEnter={e => e.currentTarget.style.background = 'rgba(248,113,113,0.06)'}
-        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+      <div
+        ref={ref}
+        onMouseDown={e => e.stopPropagation()}
+        style={{
+          width: '100%', maxWidth: '400px',
+          background: 'var(--s2)', border: '1px solid var(--glass)',
+          borderRadius: '20px 20px 0 0', padding: '24px',
+          paddingBottom: '32px',
+        }}
       >
-        Remove from group
-      </button>
+        {/* Handle */}
+        <div style={{ width: 36, height: 4, background: 'var(--glass)', borderRadius: 2, margin: '0 auto 20px' }} />
+
+        {/* Header */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '20px' }}>
+          <div style={{ borderRadius: '50%', border: '2.5px solid var(--rose-border)', padding: '3px' }}>
+            <Avatar user={member} size="lg" style={{ width: '52px', height: '52px' }} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--t1)', letterSpacing: '-0.4px' }}>
+              {member.full_name || member.username || 'Member'}
+            </div>
+            {member.username && member.full_name && (
+              <div style={{ fontSize: '12px', color: 'var(--t3)', marginTop: '2px' }}>@{member.username}</div>
+            )}
+            <div style={{ display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' }}>
+              {roleBadge && (
+                <span style={{ fontSize: '10px', fontWeight: 700, color: roleBadge.color, background: `color-mix(in srgb, ${roleBadge.color} 15%, transparent)`, border: `1px solid color-mix(in srgb, ${roleBadge.color} 35%, transparent)`, borderRadius: '99px', padding: '2px 8px' }}>
+                  {roleBadge.text}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Stats tiles */}
+        {!stats ? (
+          <div style={{ fontSize: '12px', color: 'var(--t4)', textAlign: 'center', padding: '12px 0' }}>Loading…</div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1.2fr', gap: '10px', marginBottom: canManage ? '16px' : '0' }}>
+            <div style={{ background: 'var(--s3)', borderRadius: '14px', padding: '14px', textAlign: 'center', border: '1px solid var(--glass)' }}>
+              <div style={{ fontSize: '22px', fontWeight: 900, color: 'var(--t1)', letterSpacing: '-0.5px' }}>
+                {avg != null ? avg.toFixed(1) : '—'}
+              </div>
+              <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: '0.8px', marginTop: '4px' }}>Avg ★</div>
+            </div>
+            <div style={{ background: 'var(--s3)', borderRadius: '14px', padding: '14px', textAlign: 'center', border: '1px solid var(--glass)' }}>
+              <div style={{ fontSize: '22px', fontWeight: 900, color: 'var(--t1)', letterSpacing: '-0.5px' }}>{total}</div>
+              <div style={{ fontSize: '9px', fontWeight: 700, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: '0.8px', marginTop: '4px' }}>Rated</div>
+            </div>
+            <div style={{ background: 'var(--s3)', borderRadius: '14px', padding: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--glass)' }}>
+              {vibe ? (
+                <span style={{ fontSize: '12px', fontWeight: 800, color: vibe.color, textAlign: 'center', lineHeight: 1.3 }}>{vibe.label}</span>
+              ) : (
+                <span style={{ fontSize: '11px', color: 'var(--t4)', textAlign: 'center' }}>No ratings yet</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Admin actions */}
+        {canManage && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <button
+              onClick={() => { onRoleChange(member.user_id, member.role === 'admin' ? 'member' : 'admin'); onClose() }}
+              style={{ width: '100%', padding: '11px', borderRadius: '12px', background: 'var(--s3)', border: '1px solid var(--glass)', color: 'var(--t2)', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
+            >
+              {member.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
+            </button>
+            <button
+              onClick={() => { onRemove(member.user_id); onClose() }}
+              style={{ width: '100%', padding: '11px', borderRadius: '12px', background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
+            >
+              Remove from Club
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
-function MemberBubble({ member, isCurrent, isCurrentUser, canManage, onRoleChange, onRemove, turnPosition, hasRotation }) {
-  const [menuOpen, setMenuOpen] = useState(false)
+
+function MemberBubble({ member, isCurrent, isCurrentUser, onShowStats, turnPosition, hasRotation }) {
   const [hovered, setHovered] = useState(false)
 
   const displayName = member.full_name || member.username || '?'
@@ -85,13 +142,13 @@ function MemberBubble({ member, isCurrent, isCurrentUser, canManage, onRoleChang
       {/* Avatar ring */}
       <button
         type="button"
-        onClick={canManage && !isCurrentUser ? () => setMenuOpen(v => !v) : undefined}
+        onClick={() => onShowStats(member)}
         style={{
           position: 'relative',
           padding: '3px',
           borderRadius: '50%',
           border: 'none',
-          cursor: canManage && !isCurrentUser ? 'pointer' : 'default',
+          cursor: 'pointer',
           background: isCurrent
             ? 'linear-gradient(135deg, var(--rose), var(--rose-soft))'
             : 'transparent',
@@ -201,15 +258,6 @@ function MemberBubble({ member, isCurrent, isCurrentUser, canManage, onRoleChang
         </div>
       )}
 
-      {/* Context menu for admins */}
-      {menuOpen && canManage && !isCurrentUser && (
-        <ContextMenu
-          member={member}
-          onRoleChange={onRoleChange}
-          onRemove={onRemove}
-          onClose={() => setMenuOpen(false)}
-        />
-      )}
     </div>
   )
 }
@@ -273,6 +321,7 @@ function PendingInviteBubble({ email }) {
 
 export default function MembersCard({ members = [], pendingInvites = [], canManage, currentUserId, onRoleChange, onRemove, onInvite, rotation, rotationType }) {
   const totalCount = members.length + pendingInvites.length
+  const [selectedMember, setSelectedMember] = useState(null)
   const isManual = rotationType === 'none'
   const hasRotation = !isManual && !!(rotation?.current_user_id)
 
@@ -311,6 +360,7 @@ export default function MembersCard({ members = [], pendingInvites = [], canMana
   )
 
   return (
+    <>
     <Card style={{ overflow: 'visible' }}>
       <Card.Header
         title={`Members (${totalCount})`}
@@ -342,9 +392,7 @@ export default function MembersCard({ members = [], pendingInvites = [], canMana
                 member={member}
                 isCurrent={hasRotation && member.user_id === rotation.current_user_id}
                 isCurrentUser={member.user_id === currentUserId}
-                canManage={canManage}
-                onRoleChange={onRoleChange}
-                onRemove={onRemove}
+                onShowStats={setSelectedMember}
                 turnPosition={hasRotation ? (rotationPositions[member.user_id] ?? null) : null}
                 hasRotation={hasRotation}
               />
@@ -356,5 +404,16 @@ export default function MembersCard({ members = [], pendingInvites = [], canMana
         )}
       </Card.Body>
     </Card>
+
+    {selectedMember && (
+      <MemberStatsPopup
+        member={selectedMember}
+        canManage={canManage && selectedMember.user_id !== currentUserId}
+        onRoleChange={onRoleChange}
+        onRemove={onRemove}
+        onClose={() => setSelectedMember(null)}
+      />
+    )}
+  </>
   )
 }

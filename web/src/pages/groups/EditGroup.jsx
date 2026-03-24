@@ -57,7 +57,7 @@ export default function EditGroup() {
         setInviteCode(ic)
         setJoinRequests(Array.isArray(jrs) ? jrs : [])
       })
-      .catch(() => setError('Failed to load group.'))
+      .catch(() => setError('Failed to load club.'))
       .finally(() => { setLoading(false); setInviteLoading(false) })
   }, [id])
 
@@ -87,7 +87,7 @@ export default function EditGroup() {
   }
 
   const handleSave = async () => {
-    if (!form.name.trim()) { setError('Group name is required.'); return }
+    if (!form.name.trim()) { setError('Club name is required.'); return }
     setError('')
     setSaving(true)
     try {
@@ -158,7 +158,7 @@ export default function EditGroup() {
       await groupsApi.delete(id)
       navigate('/groups')
     } catch {
-      setError('Failed to delete group.')
+      setError('Failed to delete club.')
       setShowDelete(false)
       setDeleting(false)
     }
@@ -166,7 +166,7 @@ export default function EditGroup() {
 
   return (
     <AppShell activeRoute="/groups">
-      <Topbar title="Edit Group" onBack={() => navigate(`/groups/${id}`)}>
+      <Topbar title="Edit Club" onBack={() => navigate(`/groups/${id}`)}>
         <Button variant="ghost" onClick={() => navigate(`/groups/${id}`)}>Cancel</Button>
         <Button variant="primary" onClick={handleSave} loading={saving}>Save Changes</Button>
       </Topbar>
@@ -182,9 +182,9 @@ export default function EditGroup() {
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--t3)' }}>Loading…</div>
         ) : (
           <>
-            <FormSection title="Group Details">
+            <FormSection title="Club Details">
               <FormRow>
-                <FormGroup label="Group Name" required>
+                <FormGroup label="Club Name" required>
                   <FormInput value={form.name} onChange={e => set('name', e.target.value)} />
                 </FormGroup>
                 <FormGroup label="Description">
@@ -258,7 +258,7 @@ export default function EditGroup() {
             {form.rotation_mode === 'manual' && (
               <FormSection title="Manual Rotation">
                 <div style={{ fontSize: '13px', color: 'var(--t2)', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '10px', padding: '12px 14px' }}>
-                  ✉️ When rotation advances, all group members will be emailed to vote on who picks next.
+                  ✉️ When rotation advances, all club members will be emailed to vote on who picks next.
                 </div>
               </FormSection>
             )}
@@ -409,9 +409,9 @@ export default function EditGroup() {
             <FormSection title="Danger Zone">
               <div style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.15)', borderRadius: '14px', padding: '20px' }}>
                 <p style={{ fontSize: '13px', color: 'var(--t2)', marginBottom: '12px' }}>
-                  Deleting this group is permanent. All events and ratings will be lost.
+                  Deleting this club is permanent. All events and ratings will be lost.
                 </p>
-                <Button variant="danger" onClick={() => setShowDelete(true)}>Delete Group</Button>
+                <Button variant="danger" onClick={() => setShowDelete(true)}>Delete Club</Button>
               </div>
             </FormSection>
           </>

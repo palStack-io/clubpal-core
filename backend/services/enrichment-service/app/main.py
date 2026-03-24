@@ -281,6 +281,15 @@ async def nearby_places(lat: float, lng: float, type: str = "restaurant", radius
     return payload
 
 
+@app.get("/places/autocomplete")
+async def location_autocomplete(input: str):
+    """Return city/region autocomplete suggestions for a partial location string."""
+    if len(input.strip()) < 2:
+        return []
+    results = await external.places_autocomplete(input.strip(), types="(cities)")
+    return results
+
+
 @app.get("/places/{place_id}")
 async def get_place_detail(place_id: str):
     # Check detail cache

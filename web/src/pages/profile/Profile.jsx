@@ -82,7 +82,7 @@ export default function Profile() {
             {/* Stats row */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
               {[
-                { label: 'Groups', value: groupCount },
+                { label: 'Clubs', value: groupCount },
                 { label: 'Events Hosted', value: hostCount },
                 { label: 'Avg Rating', value: stats?.average_score ? stats.average_score.toFixed(1) : '—' },
                 { label: 'Ratings', value: stats?.total_ratings || 0 },

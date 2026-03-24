@@ -117,7 +117,7 @@ export default function DiscoverHikes() {
 
       <SearchHero
         eyebrow="Find a trail"
-        headline="Where's your group heading?"
+        headline="Where's your club heading?"
         onSearch={doSearch}
         suggestions={['🌿 Easy', '🏔️ Challenging', '🌊 Waterfall', '🌅 Views']}
       />

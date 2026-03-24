@@ -40,11 +40,6 @@ services:
       POSTGRES_DB: clubpal
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # pg-init scripts must be mounted from the host or baked into a custom image.
-      # If using Portainer with a Git-based stack, bind-mount the init path:
-      #   - /opt/clubpal/pg-init:/docker-entrypoint-initdb.d:ro
-      # If using a prebuilt postgres image with schemas baked in, remove this line.
-      - /opt/clubpal/pg-init:/docker-entrypoint-initdb.d:ro
     networks:
       - clubpal-network
     restart: unless-stopped
@@ -53,6 +48,27 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # ===========================================================================
+  # DB Init — creates all per-service databases (runs once after postgres ready)
+  # ===========================================================================
+  db-init:
+    image: postgres:15-alpine
+    container_name: clubpal-db-init
+    networks:
+      - clubpal-network
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: CHANGEME_DB_PASSWORD           # ← must match db above
+    entrypoint: >
+      /bin/sh -c "
+      for db in clubpal_gateway clubpal_groups clubpal_events clubpal_ratings clubpal_activities clubpal_enrichment clubpal_billsplit; do
+        psql -h db -U clubpal -tc \"SELECT 1 FROM pg_database WHERE datname='$$db'\" | grep -q 1 ||
+        psql -h db -U clubpal -c \"CREATE DATABASE $$db\";
+      done"
+    restart: on-failure
 
   # ===========================================================================
   # MinIO — object storage (avatars, event photos, enrichment cache)

@@ -93,11 +93,14 @@ async def _igdb_headers() -> Optional[dict]:
 # ===== Google Places (New API) =====
 
 async def places_text_search(
-    query: str, place_type: Optional[str] = None, radius: int = 5000
+    query: str, place_type: Optional[str] = None, radius: int = 5000,
+    location: Optional[str] = None,
 ) -> list:
     if not GOOGLE_API_KEY:
         return []
-    params: dict = {"query": query, "radius": radius, "key": GOOGLE_API_KEY}
+    # Append location to query so Google biases results to that area
+    search_query = f"{query} in {location}" if location else query
+    params: dict = {"query": search_query, "radius": radius, "key": GOOGLE_API_KEY}
     if place_type:
         params["type"] = place_type
     async with httpx.AsyncClient(timeout=10.0) as c:

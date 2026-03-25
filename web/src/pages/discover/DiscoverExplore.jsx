@@ -703,9 +703,10 @@ export default function DiscoverExplore() {
         <SearchHero
           key={activeTabKey}
           eyebrow={activeTab?.eyebrow}
-          headline={`Where do you want to ${activeTab?.headline}?`}
+          headline={`${activeTab?.locBased === false ? 'What' : 'Where'} do you want to ${activeTab?.headline}?`}
           suggestions={PILLS[activeTabKey] ?? []}
           onSearch={handleSearch}
+          hideLocation={activeTab?.locBased === false}
         />
       </div>
 

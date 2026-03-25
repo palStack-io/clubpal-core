@@ -19,7 +19,7 @@ async function fetchLocationSuggestions(query) {
   }
 }
 
-export default function SearchHero({ eyebrow, headline, onSearch, suggestions = [], initialLocationOverride = null }) {
+export default function SearchHero({ eyebrow, headline, onSearch, suggestions = [], initialLocationOverride = null, hideLocation = false }) {
   const [query, setQuery] = useState('')
   const [activeChip, setActiveChip] = useState(null)
   const [location, setLocation] = useState(null)
@@ -99,6 +99,7 @@ export default function SearchHero({ eyebrow, headline, onSearch, suggestions = 
         onChange={handleInput}
         onSubmit={handleSubmit}
         onLocationChange={handleLocationChange}
+        hideLocation={hideLocation}
       />
 
       {/* Suggestion chips */}
@@ -126,7 +127,7 @@ export default function SearchHero({ eyebrow, headline, onSearch, suggestions = 
   )
 }
 
-function SearchRow({ query, locationLabel, locationOverride, onChange, onSubmit, onLocationChange }) {
+function SearchRow({ query, locationLabel, locationOverride, onChange, onSubmit, onLocationChange, hideLocation = false }) {
   const [focused, setFocused] = useState(false)
   const [editingLocation, setEditingLocation] = useState(false)
   const [locationInput, setLocationInput] = useState('')
@@ -244,7 +245,7 @@ function SearchRow({ query, locationLabel, locationOverride, onChange, onSubmit,
         />
 
         {/* Location badge / editor */}
-        {editingLocation ? (
+        {!hideLocation && (editingLocation ? (
           <div style={{
             display: 'flex', alignItems: 'center', flexShrink: 0,
             background: 'var(--s3)', borderLeft: '1px solid var(--glass)',
@@ -290,7 +291,7 @@ function SearchRow({ query, locationLabel, locationOverride, onChange, onSubmit,
             📍 {locationLabel || 'Set location'}
             <span style={{ fontSize: '9px', opacity: 0.6, marginLeft: '2px' }}>✎</span>
           </button>
-        )}
+        ))}
 
         {/* Search button */}
         <button

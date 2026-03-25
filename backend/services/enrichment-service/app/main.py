@@ -251,7 +251,7 @@ async def search_places(
         return cached
 
     track_call("google_places", False)
-    results = await external.places_text_search(query, place_type=type, radius=radius)
+    results = await external.places_text_search(query, place_type=type, radius=radius, location=location)
 
     # Apply client-side filters (Places API free-tier doesn't support all filters)
     if open_now:
@@ -683,7 +683,7 @@ async def search_hikes(query: str, location: Optional[str] = None, radius: int =
 
     track_call("google_places", False)
     results = await external.places_text_search(
-        query or "hiking trail park", place_type="park", radius=radius
+        query or "hiking trail park", place_type="park", radius=radius, location=location
     )
     payload = {"results": results}
     cache_set(ck, "hikes", payload, CACHE_TTL_SEARCH)
@@ -783,7 +783,7 @@ async def search_arts(
         return cached
 
     track_call("google_places", False)
-    results = await external.places_text_search(query, place_type=type, radius=radius)
+    results = await external.places_text_search(query, place_type=type, radius=radius, location=location)
     payload = {"results": results}
     cache_set(ck, "arts", payload, CACHE_TTL_SEARCH)
     return payload

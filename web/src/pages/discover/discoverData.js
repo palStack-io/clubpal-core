@@ -2,11 +2,11 @@
 export const TABS = [
   { key: 'all',         label: 'All',        emoji: '✦',  color: '#f43f5e', headline: 'go next',   eyebrow: 'Explore Everything',   route: null,                     apiType: null      },
   { key: 'restaurants', label: 'Eats',        emoji: '🍽️', color: '#f97316', headline: 'eat',       eyebrow: 'Find somewhere to eat', route: '/discover/restaurants', apiType: 'dining'  },
-  { key: 'movies',      label: 'Movies',      emoji: '🎬', color: '#6366f1', headline: 'watch',     eyebrow: 'Pick a movie night',    route: '/discover/movies',      apiType: 'movies'  },
-  { key: 'shows',       label: 'TV Shows',    emoji: '📺', color: '#a855f7', headline: 'binge',     eyebrow: 'Find your next series', route: '/discover/shows',       apiType: 'shows'   },
+  { key: 'movies',      label: 'Movies',      emoji: '🎬', color: '#6366f1', headline: 'watch',     eyebrow: 'Pick a movie night',    route: '/discover/movies',      apiType: 'movies',  locBased: false },
+  { key: 'shows',       label: 'TV Shows',    emoji: '📺', color: '#a855f7', headline: 'binge',     eyebrow: 'Find your next series', route: '/discover/shows',       apiType: 'shows',   locBased: false },
   { key: 'books',       label: 'Books',       emoji: '📚', color: '#f59e0b', headline: 'read',      eyebrow: 'Find your next read',   route: '/discover/books',       apiType: 'books'   },
   { key: 'hikes',       label: 'Hikes',       emoji: '🥾', color: '#14b8a6', headline: 'explore',   eyebrow: 'Get outside together',  route: '/discover/hikes',       apiType: 'hiking'  },
-  { key: 'games',       label: 'Games',       emoji: '🎮', color: '#22d3a0', headline: 'play',      eyebrow: 'Plan a game night',     route: '/discover/games',       apiType: 'gaming'  },
+  { key: 'games',       label: 'Games',       emoji: '🎮', color: '#22d3a0', headline: 'play',      eyebrow: 'Plan a game night',     route: '/discover/games',       apiType: 'gaming',  locBased: false },
   { key: 'arts',        label: 'Arts',        emoji: '🎨', color: '#ec4899', headline: 'see',       eyebrow: 'Explore culture',       route: '/discover/arts',        apiType: 'arts'    },
 ]
 

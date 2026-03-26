@@ -188,6 +188,16 @@ export default function EventDetail() {
       alert('Could not send reminder. Try again.')
     }
   }
+
+  const handleEndEvent = async () => {
+    if (!window.confirm('Mark this event as completed? This cannot be undone.')) return
+    try {
+      const updated = await eventsApi.endEvent(id)
+      setEvent(updated)
+    } catch {
+      alert('Could not end event. Try again.')
+    }
+  }
   const hostName = attendees.find(a => String(a.user_id) === String(event.host_user_id))?.full_name || null
   const isScheduled = event.status === 'scheduled' || event.status === 'in_progress'
   const myAttendee = attendees.find(a => String(a.user_id) === String(user?.id))
@@ -207,6 +217,7 @@ export default function EventDetail() {
 
   const heroActions = [
     ...(event.status === 'scheduled' && isHost ? [{ label: '✏️ Edit', onClick: () => setShowEditEvent(true) }] : []),
+    ...(isScheduled && (isHost || isCreator) ? [{ label: '🏁 End', onClick: handleEndEvent }] : []),
     ...(isScheduled && isCreator ? [{ label: '📣 Remind', onClick: handleRsvpReminder }] : []),
     ...((event.status === 'completed' || (event.scheduled_date && new Date(event.scheduled_date) < new Date())) ? [{ label: '⭐ Rate', onClick: () => setShowRateModal(true) }] : []),
     ...(event.bill_split_enabled ? [{ label: '💳 Split', onClick: () => setShowBillSplit(true) }] : []),
@@ -314,6 +325,7 @@ export default function EventDetail() {
         event={event}
         currentUser={user}
         onSubmitted={fetchAll}
+        existingRating={ratings.find(r => String(r.rater_user_id || r.reviewer_id || r.rater_id) === String(user?.id))}
       />
     </AppShell>
   )

@@ -95,12 +95,18 @@ async def _igdb_headers() -> Optional[dict]:
 async def places_text_search(
     query: str, place_type: Optional[str] = None, radius: int = 5000,
     location: Optional[str] = None,
+    lat: Optional[float] = None, lng: Optional[float] = None,
 ) -> list:
     if not GOOGLE_API_KEY:
         return []
-    # Append location to query so Google biases results to that area
-    search_query = f"{query} in {location}" if location else query
-    params: dict = {"query": search_query, "radius": radius, "key": GOOGLE_API_KEY}
+    if lat is not None and lng is not None:
+        # Geocoded lat/lng: use as location bias with clean query
+        params: dict = {"query": query, "location": f"{lat},{lng}", "radius": radius, "key": GOOGLE_API_KEY}
+    elif location:
+        # Fallback: append city name to query text
+        params: dict = {"query": f"{query} in {location}", "radius": radius, "key": GOOGLE_API_KEY}
+    else:
+        params: dict = {"query": query, "radius": radius, "key": GOOGLE_API_KEY}
     if place_type:
         params["type"] = place_type
     async with httpx.AsyncClient(timeout=10.0) as c:

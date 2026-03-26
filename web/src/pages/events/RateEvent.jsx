@@ -123,13 +123,13 @@ export default function RateEvent() {
     setError('')
     setSubmitting(true)
     try {
-      await ratingsClient.post(`/events/${id}/ratings`, {
-        rater_user_id: user.id,
+      await ratingsClient.post('/ratings', {
+        event_id: parseInt(id),
         rated_user_id: ratedUserId,
         score,
-        review_text: review.trim() || null,
+        comment: review.trim() || null,
         tags,
-      })
+      }, { params: { user_id: user.id } })
       navigate(`/events/${id}`)
     } catch (e) {
       setError(e.response?.data?.detail || 'Failed to submit rating.')

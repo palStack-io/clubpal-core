@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Button from '../ui/Button'
 import { ratingsClient } from '../../api/client'
 
@@ -94,15 +94,26 @@ const SCORE_LABELS = {
   6: 'Decent', 7: 'Good', 8: 'Great', 9: 'Excellent', 10: 'Perfect',
 }
 
-export default function RateEventModal({ isOpen, onClose, event, currentUser, onSubmitted }) {
+export default function RateEventModal({ isOpen, onClose, event, currentUser, onSubmitted, existingRating }) {
   // Always rate the event host/picker — no attendee picker needed
   const ratedUserId = event?.host_user_id || event?.created_by || null
+  const isEditing = !!existingRating
 
   const [score, setScore] = useState(0)
   const [comment, setComment] = useState('')
   const [tags, setTags] = useState([])
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+
+  // Pre-populate state when opening in edit mode
+  useEffect(() => {
+    if (isOpen) {
+      setScore(existingRating?.score ?? 0)
+      setComment(existingRating?.comment ?? '')
+      setTags(existingRating?.tags ?? [])
+      setError('')
+    }
+  }, [isOpen, existingRating?.id])
 
   if (!isOpen) return null
 
@@ -111,17 +122,24 @@ export default function RateEventModal({ isOpen, onClose, event, currentUser, on
 
   const handleSubmit = async () => {
     if (!score) { setError('Please select a score.'); return }
-    if (!ratedUserId) { setError('Could not determine who to rate.'); return }
+    if (!isEditing && !ratedUserId) { setError('Could not determine who to rate.'); return }
     setError('')
     setSubmitting(true)
     try {
-      await ratingsClient.post(`/ratings`, {
-        event_id: parseInt(event.id),
-        rated_user_id: ratedUserId,
-        score,
-        comment: comment.trim() || null,
-        tags,
-      }, { params: { user_id: currentUser.id } })
+      if (isEditing) {
+        await ratingsClient.patch(`/ratings/${existingRating.id}`, {
+          score,
+          comment: comment.trim() || null,
+        }, { params: { user_id: currentUser.id } })
+      } else {
+        await ratingsClient.post('/ratings', {
+          event_id: parseInt(event.id),
+          rated_user_id: ratedUserId,
+          score,
+          comment: comment.trim() || null,
+          tags,
+        }, { params: { user_id: currentUser.id } })
+      }
       onSubmitted?.()
       onClose()
     } catch (e) {
@@ -138,26 +156,24 @@ export default function RateEventModal({ isOpen, onClose, event, currentUser, on
         position: 'fixed', inset: 0, zIndex: 1000,
         background: 'rgba(0,0,0,0.6)',
         backdropFilter: 'blur(4px)',
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: '20px',
       }}
     >
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          width: '100%', maxWidth: '520px',
+          width: '100%', maxWidth: '480px',
           background: 'var(--s2)',
           border: '1px solid var(--glass)',
-          borderRadius: '20px 20px 0 0',
-          padding: '24px',
+          borderRadius: '20px',
+          padding: '28px',
           maxHeight: '90vh',
           overflowY: 'auto',
         }}
       >
-        {/* Handle */}
-        <div style={{ width: '36px', height: '4px', background: 'var(--glass)', borderRadius: '2px', margin: '0 auto 20px' }} />
-
         <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--t1)', marginBottom: '4px' }}>
-          {copy.heading}
+          {isEditing ? `Update: ${copy.heading}` : copy.heading}
         </div>
         <div style={{ fontSize: '13px', color: 'var(--t3)', marginBottom: '20px' }}>
           {event?.title || event?.venue_name || 'Event'}
@@ -221,7 +237,7 @@ export default function RateEventModal({ isOpen, onClose, event, currentUser, on
             disabled={!score}
             style={{ flex: 2 }}
           >
-            Submit Rating
+            {isEditing ? 'Update Rating' : 'Submit Rating'}
           </Button>
         </div>
       </div>

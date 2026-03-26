@@ -211,24 +211,36 @@ class EmailService:
 
     def send_event_created(self, to_email: str, username: str, event_title: str,
                            event_date: str, group_name: str,
-                           creator_name: str, event_id: int) -> bool:
+                           creator_name: str, event_id: int, has_rsvp: bool = True) -> bool:
         """Notify group member that a new event has been scheduled."""
         url = f"{self.frontend_url}/events/{event_id}"
-        subject = f"New event in {group_name}: {event_title}"
+        if has_rsvp:
+            subject = f"RSVP: {event_title} in {group_name}"
+            heading = "Are you in? 📅"
+            body_line = (f"<strong>{creator_name}</strong> just scheduled a new event in "
+                         f"<strong>{group_name}</strong>. Let everyone know if you're coming!")
+            btn_label = "RSVP Now"
+        else:
+            subject = f"New event: {event_title} in {group_name}"
+            heading = "New event planned 📅"
+            body_line = (f"<strong>{creator_name}</strong> just scheduled a new event in "
+                         f"<strong>{group_name}</strong>.")
+            btn_label = "View Event"
         content = (
-            _h1(f"New event: {event_title}")
+            _h1(heading)
             + _p(f"Hey <strong>{username}</strong>,")
-            + _p(f"<strong>{creator_name}</strong> just scheduled a new event in "
-                 f"<strong>{group_name}</strong>.")
+            + _p(body_line)
             + f"""
 <div style="background:#f9f9fb;border-left:3px solid #f43f5e;border-radius:0 8px 8px 0;
             padding:14px 18px;margin:20px 0;">
   <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{event_title}</p>
   <p style="margin:4px 0 0;font-size:13px;color:#666;">{event_date}</p>
+  <p style="margin:4px 0 0;font-size:12px;color:#aaa;">{group_name}</p>
 </div>"""
-            + _btn("View Event", url, "#f43f5e")
+            + _btn(btn_label, url, "#f43f5e")
             + _note("You're receiving this because you're a member of "
-                    f"<strong>{group_name}</strong>.")
+                    f"<strong>{group_name}</strong>. Update preferences in "
+                    f'<a href="{self.frontend_url}/settings" style="color:#f43f5e;">settings</a>.')
         )
         return self._send(to_email, subject, _base(subject, content, self.frontend_url))
 

@@ -251,7 +251,16 @@ async def search_places(
         return cached
 
     track_call("google_places", False)
-    results = await external.places_text_search(query, place_type=type, radius=radius, location=location)
+    geo_lat, geo_lng = None, None
+    if location:
+        geo = await external.geocode_address(location)
+        if geo:
+            geo_lat, geo_lng = geo.get('lat'), geo.get('lng')
+    results = await external.places_text_search(
+        query, place_type=type,
+        radius=25000 if geo_lat is not None else radius,
+        location=location, lat=geo_lat, lng=geo_lng,
+    )
 
     # Apply client-side filters (Places API free-tier doesn't support all filters)
     if open_now:
@@ -682,8 +691,15 @@ async def search_hikes(query: str, location: Optional[str] = None, radius: int =
         return cached
 
     track_call("google_places", False)
+    geo_lat, geo_lng = None, None
+    if location:
+        geo = await external.geocode_address(location)
+        if geo:
+            geo_lat, geo_lng = geo.get('lat'), geo.get('lng')
     results = await external.places_text_search(
-        query or "hiking trail park", place_type="park", radius=radius, location=location
+        query or "hiking trail park", place_type="park",
+        radius=25000 if geo_lat is not None else radius,
+        location=location, lat=geo_lat, lng=geo_lng,
     )
     payload = {"results": results}
     cache_set(ck, "hikes", payload, CACHE_TTL_SEARCH)
@@ -783,7 +799,16 @@ async def search_arts(
         return cached
 
     track_call("google_places", False)
-    results = await external.places_text_search(query, place_type=type, radius=radius, location=location)
+    geo_lat, geo_lng = None, None
+    if location:
+        geo = await external.geocode_address(location)
+        if geo:
+            geo_lat, geo_lng = geo.get('lat'), geo.get('lng')
+    results = await external.places_text_search(
+        query, place_type=type,
+        radius=25000 if geo_lat is not None else radius,
+        location=location, lat=geo_lat, lng=geo_lng,
+    )
     payload = {"results": results}
     cache_set(ck, "arts", payload, CACHE_TTL_SEARCH)
     return payload

@@ -60,6 +60,46 @@ jobs:
           no-cache: true
 
   # ──────────────────────────────────────────────────────────────────────────
+  # Backup — Alpine + supercronic + rclone + pg_dumpall
+  # Context must be repo root to access backup/ scripts.
+  # ──────────────────────────────────────────────────────────────────────────
+  build-backup:
+    name: Build backup image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set lowercase owner
+        run: echo "OWNER_LC=${OWNER,,}" >> $GITHUB_ENV
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        if: env.PUSH_IMAGE == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backup image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: backup/Dockerfile
+          push: ${{ env.PUSH_IMAGE == 'true' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/clubpal-backup:latest
+            ${{ env.REGISTRY }}/${{ env.OWNER_LC }}/clubpal-backup:${{ github.sha }}
+          no-cache: true
+
+  # ──────────────────────────────────────────────────────────────────────────
   # Backend microservices — matrix runs all six in parallel
   # ──────────────────────────────────────────────────────────────────────────
   build-services:

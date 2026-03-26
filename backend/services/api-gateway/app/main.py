@@ -1272,6 +1272,7 @@ class EventNotifyRequest(BaseModel):
     hours_until: Optional[int] = None
     deadline: Optional[str] = None
     going_count: Optional[int] = None
+    has_rsvp: bool = True   # False when event has no RSVP deadline — changes email framing
     maybe_count: Optional[int] = None
     not_going_count: Optional[int] = None
 
@@ -1431,14 +1432,21 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
             )
 
         else:  # "created"
+            # Skip the creator — they made the event, no need to notify themselves
+            if req.creator_id and uid == req.creator_id:
+                continue
             if not prefs["notify_events"] or not user.get("email"):
                 continue
+            if req.has_rsvp:
+                notif_body = f"{creator_name} scheduled an event in {group_name} — RSVP now"
+            else:
+                notif_body = f"{creator_name} scheduled an event in {group_name}"
             create_notification(uid, "event", f"📅 New event: {req.event_title}",
-                                f"{creator_name} scheduled an event in {group_name}",
+                                notif_body,
                                 link_type="event", link_id=req.event_id)
             email_service.send_event_created(
                 user["email"], name, req.event_title, req.event_date, group_name,
-                creator_name, req.event_id,
+                creator_name, req.event_id, has_rsvp=req.has_rsvp,
             )
 
         results.append(uid)

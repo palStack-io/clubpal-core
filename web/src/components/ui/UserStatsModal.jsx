@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import Avatar from './Avatar'
 import { ratingsClient } from '../../api/client'
 
@@ -33,7 +34,7 @@ export default function UserStatsModal({ member, canManage, onRoleChange, onRemo
     : member.role === 'admin' ? { text: 'Admin', color: 'var(--amber)' }
     : null
 
-  return (
+  return createPortal(
     <div
       style={{
         position: 'fixed', inset: 0, zIndex: 1000,
@@ -126,6 +127,7 @@ export default function UserStatsModal({ member, canManage, onRoleChange, onRemo
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }

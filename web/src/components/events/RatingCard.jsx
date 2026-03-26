@@ -184,7 +184,7 @@ export default function RatingCard({
       <Card.Header
         title={`Ratings${ratings.length > 0 ? ` (${ratings.length})` : ''}`}
         action={
-          isCompleted ? (
+          isCompleted && onAddRating ? (
             <Button variant="primary" size="sm" onClick={onAddRating}>
               {rateLabel}
             </Button>

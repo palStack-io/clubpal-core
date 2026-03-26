@@ -66,4 +66,7 @@ export const eventsApi = {
 
   sendRsvpReminder: (eventId) =>
     eventsClient.post(`/events/${eventId}/rsvp-reminder`).then(r => r.data),
+
+  endEvent: (eventId) =>
+    eventsClient.post(`/events/${eventId}/end`).then(r => r.data),
 }

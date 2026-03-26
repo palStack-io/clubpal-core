@@ -111,7 +111,8 @@ def _next_occurrence(rule: str, day_of_week: Optional[int], from_date: date) -> 
 
 async def _notify_group_members(group_id: int, event_id: int, event_title: str,
                                  event_date: str, event_type: str = 'event',
-                                 deadline: str = None):
+                                 deadline: str = None, creator_id: int = None,
+                                 has_rsvp: bool = True):
     """Hit the internal gateway notify endpoint for all group members."""
     try:
         payload = {
@@ -120,9 +121,12 @@ async def _notify_group_members(group_id: int, event_id: int, event_title: str,
             "event_title": event_title,
             "event_date": event_date,
             "type": event_type,
+            "has_rsvp": has_rsvp,
         }
         if deadline:
             payload["deadline"] = deadline
+        if creator_id:
+            payload["creator_id"] = creator_id
         async with httpx.AsyncClient(timeout=10) as client:
             await client.post(
                 f"{GATEWAY_URL}/internal/notify/event",
@@ -226,7 +230,7 @@ async def send_rsvp_deadline_final_counts():
 
 
 async def auto_complete_past_events():
-    """Hourly job: mark scheduled events as completed once their date has passed (2-hour buffer)."""
+    """Hourly job: mark scheduled events as completed 10 hours after their start time."""
     logger.info("Running auto-complete past events job")
     conn = get_db()
     cursor = conn.cursor()
@@ -235,7 +239,7 @@ async def auto_complete_past_events():
         SET status = 'completed', updated_at = NOW()
         WHERE status = 'scheduled'
           AND scheduled_date IS NOT NULL
-          AND scheduled_date < NOW() - INTERVAL '2 hours'
+          AND scheduled_date < NOW() - INTERVAL '10 hours'
     """)
     count = cursor.rowcount
     conn.commit()
@@ -439,12 +443,29 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(
             logger.error(f"Failed to create recurring schedule for event {event_id}: {e}")
 
     # Auto-RSVP the creator and host as "going" so the event appears in their list
+    already_rsvped = {creator_id}
     try:
         upsert_attendee(event_id, creator_id, "going")
         if host_user_id and host_user_id != creator_id:
             upsert_attendee(event_id, host_user_id, "going")
+            already_rsvped.add(host_user_id)
     except Exception as e:
         logger.warning(f"Could not auto-RSVP creator for event {event_id}: {e}")
+
+    # Add all other group members as "pending" so the event appears on their dashboards
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(f"{GROUPS_SERVICE_URL}/groups/{event_data.group_id}/members")
+            if r.status_code == 200:
+                for member in r.json():
+                    uid = member.get("user_id")
+                    if uid and uid not in already_rsvped:
+                        try:
+                            upsert_attendee(event_id, uid, "pending")
+                        except Exception as e:
+                            logger.warning(f"Could not add pending attendee {uid} for event {event_id}: {e}")
+    except Exception as e:
+        logger.warning(f"Could not fetch group members to add pending attendees for event {event_id}: {e}")
 
     # Increment hosted-events counter in ratings service
     try:
@@ -471,8 +492,10 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(
         event_id=event_id,
         event_title=event_data.title,
         event_date=sched_str,
-        event_type='new_event',
+        event_type='created',
         deadline=deadline_str,
+        creator_id=creator_id,
+        has_rsvp=bool(event_data.rsvp_deadline),
     )
 
     event = get_event(event_id)
@@ -556,6 +579,20 @@ async def update_event_endpoint(event_id: int, event_data: EventUpdate, user_id:
 
     event = get_event(event_id)
     return EventResponse(**event)
+
+
+@app.post("/events/{event_id}/end", response_model=EventResponse)
+async def end_event(event_id: int, user_id: int = Depends(get_current_user_id)):
+    """Host or creator manually marks an event as completed."""
+    event = get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if event["created_by"] != user_id and event["host_user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Only the host or creator can end this event")
+    if event["status"] not in ("scheduled", "in_progress"):
+        raise HTTPException(status_code=400, detail="Event is already completed or cancelled")
+    update_event(event_id, status="completed")
+    return EventResponse(**get_event(event_id))
 
 
 @app.delete("/events/{event_id}/cover", status_code=204)

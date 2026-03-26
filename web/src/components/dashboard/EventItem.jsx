@@ -42,8 +42,9 @@ export default function EventItem({ event, onClick }) {
     try { dateLabel = format(new Date(event.scheduled_date), 'MMM d') } catch {}
   }
 
-  const chipStatus = event.is_user_turn ? 'date-warning' : 'date-chip'
-  const chipLabel  = event.is_user_turn ? `Pick by ${dateLabel}` : dateLabel
+  const isPending = event.my_rsvp_status === 'pending'
+  const chipStatus = event.is_user_turn ? 'date-warning' : isPending ? 'pending' : 'date-chip'
+  const chipLabel  = event.is_user_turn ? `Pick by ${dateLabel}` : isPending ? 'RSVP' : dateLabel
 
   return (
     <button type="button" onClick={onClick} className="cp-event-item">

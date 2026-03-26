@@ -340,6 +340,54 @@ services:
       retries: 3
       start_period: 15s
 
+  # ===========================================
+  # Backup — Postgres + MinIO → remote storage
+  # Configured entirely via env vars (see .env)
+  # ===========================================
+  backup:
+    build:
+      context: .
+      dockerfile: backup/Dockerfile
+    container_name: clubpal-backup
+    environment:
+      # ── Postgres connection ──────────────────
+      - POSTGRES_HOST=db
+      - POSTGRES_USER=clubpal
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-clubpal}
+      # ── Schedule (cron expressions) ─────────
+      - BACKUP_PG_SCHEDULE=${BACKUP_PG_SCHEDULE:-0 3 * * *}
+      - BACKUP_MINIO_SCHEDULE=${BACKUP_MINIO_SCHEDULE:-0 4 * * *}
+      # ── Local retention ─────────────────────
+      - BACKUP_PG_RETENTION_DAYS=${BACKUP_PG_RETENTION_DAYS:-14}
+      - BACKUP_MINIO_RETENTION_DAYS=${BACKUP_MINIO_RETENTION_DAYS:-7}
+      # ── Remote bucket name ──────────────────
+      - BACKUP_REMOTE_BUCKET=${BACKUP_REMOTE_BUCKET:-}
+      # ── rclone remote — Backblaze B2 ────────
+      #    Set RCLONE_CONFIG_REMOTE_TYPE=b2 to use B2
+      - RCLONE_CONFIG_REMOTE_TYPE=${RCLONE_CONFIG_REMOTE_TYPE:-}
+      - RCLONE_CONFIG_REMOTE_ACCOUNT=${RCLONE_CONFIG_REMOTE_ACCOUNT:-}
+      - RCLONE_CONFIG_REMOTE_KEY=${RCLONE_CONFIG_REMOTE_KEY:-}
+      # ── rclone remote — Cloudflare R2 / S3 ──
+      #    Set RCLONE_CONFIG_REMOTE_TYPE=s3 to use R2/S3
+      - RCLONE_CONFIG_REMOTE_PROVIDER=${RCLONE_CONFIG_REMOTE_PROVIDER:-}
+      - RCLONE_CONFIG_REMOTE_ACCESS_KEY_ID=${RCLONE_CONFIG_REMOTE_ACCESS_KEY_ID:-}
+      - RCLONE_CONFIG_REMOTE_SECRET_ACCESS_KEY=${RCLONE_CONFIG_REMOTE_SECRET_ACCESS_KEY:-}
+      - RCLONE_CONFIG_REMOTE_ENDPOINT=${RCLONE_CONFIG_REMOTE_ENDPOINT:-}
+      - RCLONE_CONFIG_REMOTE_REGION=${RCLONE_CONFIG_REMOTE_REGION:-auto}
+      # ── Optional monitoring ping ─────────────
+      - BACKUP_HEALTHCHECK_URL=${BACKUP_HEALTHCHECK_URL:-}
+    volumes:
+      - minio_data:/minio-data:ro
+      - backup_data:/backups
+    networks:
+      - clubpal-network
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
 networks:
   clubpal-network:
     driver: bridge
@@ -347,3 +395,4 @@ networks:
 volumes:
   pgdata:
   minio_data:
+  backup_data:

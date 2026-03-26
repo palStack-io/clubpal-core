@@ -422,6 +422,57 @@ services:
       retries: 3
       start_period: 15s
 
+  # ===========================================================================
+  # Backup — Postgres + MinIO snapshots → optional remote storage
+  # Runs on cron inside the container (supercronic). No host cron needed.
+  # ===========================================================================
+  backup:
+    image: ghcr.io/palstack-io/clubpal-backup:latest
+    container_name: clubpal-backup
+    environment:
+      # ── Postgres connection ──────────────────────────────────────────────
+      POSTGRES_HOST: db
+      POSTGRES_USER: clubpal
+      POSTGRES_PASSWORD: CHANGEME_DB_PASSWORD    # ← must match db above
+
+      # ── Cron schedules (UTC) ────────────────────────────────────────────
+      BACKUP_PG_SCHEDULE: "0 3 * * *"            # daily at 03:00 UTC
+      BACKUP_MINIO_SCHEDULE: "0 4 * * *"         # daily at 04:00 UTC
+
+      # ── Local retention ─────────────────────────────────────────────────
+      BACKUP_PG_RETENTION_DAYS: "14"
+      BACKUP_MINIO_RETENTION_DAYS: "7"
+
+      # ── Remote storage (leave BACKUP_REMOTE_BUCKET blank = local only) ──
+      BACKUP_REMOTE_BUCKET: ""                   # e.g. my-backup-bucket
+
+      # Option A — Backblaze B2
+      RCLONE_CONFIG_REMOTE_TYPE: ""              # set to: b2
+      RCLONE_CONFIG_REMOTE_ACCOUNT: ""           # B2 account ID
+      RCLONE_CONFIG_REMOTE_KEY: ""               # B2 application key
+
+      # Option B — Cloudflare R2 / AWS S3 (uncomment and fill in)
+      # RCLONE_CONFIG_REMOTE_TYPE: s3
+      # RCLONE_CONFIG_REMOTE_PROVIDER: Cloudflare   # or: AWS
+      # RCLONE_CONFIG_REMOTE_ACCESS_KEY_ID: ""
+      # RCLONE_CONFIG_REMOTE_SECRET_ACCESS_KEY: ""
+      # RCLONE_CONFIG_REMOTE_ENDPOINT: ""            # R2 only
+      # RCLONE_CONFIG_REMOTE_REGION: auto
+
+      # ── Dead man's switch ping after each successful backup (optional) ───
+      BACKUP_HEALTHCHECK_URL: ""                 # e.g. https://hc-ping.com/xxx
+    volumes:
+      - minio_data:/minio-data:ro
+      - backup_data:/backups
+    networks:
+      - clubpal-network
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
 # =============================================================================
 networks:
   clubpal-network:
@@ -430,3 +481,4 @@ networks:
 volumes:
   pgdata:
   minio_data:
+  backup_data:

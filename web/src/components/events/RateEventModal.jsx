@@ -95,8 +95,6 @@ const SCORE_LABELS = {
 }
 
 export default function RateEventModal({ isOpen, onClose, event, currentUser, onSubmitted, existingRating }) {
-  // Always rate the event host/picker — no attendee picker needed
-  const ratedUserId = event?.host_user_id || event?.created_by || null
   const isEditing = !!existingRating
 
   const [score, setScore] = useState(0)
@@ -122,7 +120,6 @@ export default function RateEventModal({ isOpen, onClose, event, currentUser, on
 
   const handleSubmit = async () => {
     if (!score) { setError('Please select a score.'); return }
-    if (!isEditing && !ratedUserId) { setError('Could not determine who to rate.'); return }
     setError('')
     setSubmitting(true)
     try {
@@ -134,7 +131,6 @@ export default function RateEventModal({ isOpen, onClose, event, currentUser, on
       } else {
         await ratingsClient.post('/ratings', {
           event_id: parseInt(event.id),
-          rated_user_id: ratedUserId,
           score,
           comment: comment.trim() || null,
           tags,

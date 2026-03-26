@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react'
 import Card from '../ui/Card'
 import Button from '../ui/Button'
+import { resolveMediaUrl as resolvePhotoUrl } from '../../utils/resolveMediaUrl'
 
 const MAX_GRID = 9
 
@@ -102,7 +103,7 @@ export default function PhotoGalleryCard({ photos = [], currentUserId, onUpload,
                 onClick={() => setSelectedIndex(i)}
               >
                 <img
-                  src={photo.public_url}
+                  src={resolvePhotoUrl(photo.public_url)}
                   alt={photo.caption || ''}
                   onError={e => {
                     e.currentTarget.style.display = 'none'
@@ -200,7 +201,7 @@ export default function PhotoGalleryCard({ photos = [], currentUserId, onUpload,
         >
           {/* Image */}
           <img
-            src={currentPhoto.public_url}
+            src={resolvePhotoUrl(currentPhoto.public_url)}
             alt={currentPhoto.caption || ''}
             onError={e => { e.currentTarget.src = ''; e.currentTarget.style.display = 'none' }}
             style={{

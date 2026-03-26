@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import { format } from 'date-fns'
 import StatusChip from '../ui/StatusChip'
 import AnimatedBackground from '../ui/AnimatedBackground'
+import { resolveMediaUrl } from '../../utils/resolveMediaUrl'
 
 const activityMeta = {
   dining:  { emoji: '🍽️', bg: 'rgba(244,63,94,0.1)' },
@@ -57,7 +58,7 @@ export default function EventListRow({ event }) {
         </div>
       ) : event.cover_url ? (
         <img
-          src={event.cover_url}
+          src={resolveMediaUrl(event.cover_url)}
           alt=""
           style={{
             width: '44px',

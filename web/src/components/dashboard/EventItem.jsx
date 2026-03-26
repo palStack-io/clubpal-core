@@ -1,5 +1,6 @@
 import { format } from 'date-fns'
 import StatusChip from '../ui/StatusChip'
+import { resolveMediaUrl } from '../../utils/resolveMediaUrl'
 
 // Light-mode-friendly tints — opacity keeps them subtle on white too
 const activityBg = {
@@ -50,7 +51,7 @@ export default function EventItem({ event, onClick }) {
     <button type="button" onClick={onClick} className="cp-event-item">
       {event.cover_url ? (
         <img
-          src={event.cover_url}
+          src={resolveMediaUrl(event.cover_url)}
           alt=""
           style={{
             width: '38px',

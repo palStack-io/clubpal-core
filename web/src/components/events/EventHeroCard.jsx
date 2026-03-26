@@ -1,6 +1,7 @@
 import AvatarStack from '../ui/AvatarStack'
 import AnimatedBackground from '../ui/AnimatedBackground'
 import StatusChip from '../ui/StatusChip'
+import { resolveMediaUrl } from '../../utils/resolveMediaUrl'
 
 const ACTIVITY = {
   dining: { emoji: '🍽️', color: '#f43f5e', rgb: '244,63,94',  gradient: 'linear-gradient(135deg, rgba(244,63,94,0.10), rgba(244,63,94,0.04))' },
@@ -111,7 +112,7 @@ export default function EventHeroCard({ event, attendees = [], onBack, actions =
       <div style={{ padding: '16px 24px 40px', position: 'relative', zIndex: 1 }}>
         {hasCover && (
           <img
-            src={event.cover_url}
+            src={resolveMediaUrl(event.cover_url)}
             alt={event.title}
             onError={e => { e.currentTarget.style.display = 'none' }}
             style={{ width: '100%', height: '150px', objectFit: 'cover', borderRadius: '14px', marginBottom: '16px', display: 'block' }}

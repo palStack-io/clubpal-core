@@ -1,5 +1,6 @@
 import AvatarStack from '../ui/AvatarStack'
 import AnimatedBackground from '../ui/AnimatedBackground'
+import { resolveMediaUrl } from '../../utils/resolveMediaUrl'
 
 const ACTIVITY = {
   dining: { emoji: '🍽️', color: '#f43f5e', rgb: '244,63,94',  gradient: 'linear-gradient(135deg, rgba(244,63,94,0.10), rgba(244,63,94,0.04))' },
@@ -93,7 +94,7 @@ export default function GroupHeroCard({ group, members = [], rotation, currentUs
       <div style={{ padding: '16px 24px 40px', position: 'relative', zIndex: 1 }}>
         {group.banner_url ? (
           <img
-            src={group.banner_url}
+            src={resolveMediaUrl(group.banner_url)}
             alt={group.name}
             onError={e => { e.currentTarget.style.display = 'none' }}
             style={{ width: '100%', height: '150px', objectFit: 'cover', borderRadius: '14px', marginBottom: '16px', display: 'block' }}

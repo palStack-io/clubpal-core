@@ -6,7 +6,7 @@ from datetime import datetime
 # Rating models
 class RatingCreate(BaseModel):
     event_id: int
-    rated_user_id: int
+    rated_user_id: Optional[int] = None
     score: int = Field(..., ge=1, le=10)
     comment: Optional[str] = Field(None, max_length=500)
     tags: list[str] = []
@@ -21,7 +21,7 @@ class RatingResponse(BaseModel):
     id: int
     event_id: int
     rater_user_id: int
-    rated_user_id: int
+    rated_user_id: Optional[int] = None
     score: int
     comment: Optional[str]
     tags: list[str] = []

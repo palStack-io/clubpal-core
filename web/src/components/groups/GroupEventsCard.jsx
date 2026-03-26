@@ -3,6 +3,7 @@ import { format } from 'date-fns'
 import Card from '../ui/Card'
 import Button from '../ui/Button'
 import StatusChip from '../ui/StatusChip'
+import { resolveMediaUrl } from '../../utils/resolveMediaUrl'
 
 const ACTIVITY = {
   dining: { emoji: '🍽️', color: '#f43f5e', rgb: '244,63,94',  gradient: 'linear-gradient(135deg, rgba(244,63,94,0.10), rgba(244,63,94,0.04))' },
@@ -46,7 +47,7 @@ function EventRow({ event, onClick, onSplitBill }) {
       {/* Activity icon / cover thumbnail */}
       {event.cover_url ? (
         <img
-          src={event.cover_url}
+          src={resolveMediaUrl(event.cover_url)}
           alt=""
           style={{
             width: '40px',

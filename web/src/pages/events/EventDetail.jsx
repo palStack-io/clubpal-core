@@ -207,7 +207,9 @@ export default function EventDetail() {
   else if (event.status === 'cancelled')   statusLabel = 'Cancelled'
   else if (event.status === 'in_progress') statusLabel = 'In Progress'
 
-  const avgRating = event.avg_rating ? Number(event.avg_rating).toFixed(1) : '—'
+  const avgRating = ratings.length > 0
+    ? (ratings.reduce((s, r) => s + (r.score || 0), 0) / ratings.length).toFixed(1)
+    : '—'
 
   const stats = [
     { label: 'Attendees',   value: attendees.length || event.attendee_count || 0 },

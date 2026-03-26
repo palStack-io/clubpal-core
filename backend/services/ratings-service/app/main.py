@@ -9,7 +9,7 @@ from app.models import (
     GroupLeaderboardResponse, LeaderboardEntry
 )
 from app.database import (
-    init_db, create_rating, get_rating, get_rating_by_event_and_users,
+    init_db, create_rating, get_rating, get_rating_by_event_and_rater,
     get_ratings_for_event, get_ratings_by_rater, get_ratings_for_user,
     update_rating, delete_rating, get_user_stats, get_event_stats,
     get_group_leaderboard, increment_hosted_events
@@ -59,13 +59,8 @@ async def create_rating_endpoint(rating_data: RatingCreate, user_id: int):
         except httpx.RequestError:
             raise HTTPException(status_code=503, detail="Events service unavailable")
 
-    # Check if rating already exists
-    existing = get_rating_by_event_and_users(
-        rating_data.event_id,
-        user_id,
-        rating_data.rated_user_id
-    )
-
+    # Check if rating already exists (one per user per event)
+    existing = get_rating_by_event_and_rater(rating_data.event_id, user_id)
     if existing:
         raise HTTPException(status_code=400, detail="Rating already exists for this event and user")
 

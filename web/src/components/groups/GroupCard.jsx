@@ -1,6 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import AvatarStack from '../ui/AvatarStack'
 import AnimatedBackground from '../ui/AnimatedBackground'
+import { resolveMediaUrl } from '../../utils/resolveMediaUrl'
 
 const activityMeta = {
   dining:  { emoji: '🍽️', label: 'Dining',  gradient: 'linear-gradient(135deg, rgba(244,63,94,0.1), rgba(244,63,94,0.04))',  glow: '#f43f5e', color: '#f43f5e' },
@@ -65,7 +66,7 @@ export default function GroupCard({ group, currentUserId }) {
         ) : group.banner_url ? (
           <>
             <img
-              src={group.banner_url}
+              src={resolveMediaUrl(group.banner_url)}
               alt=""
               style={{
                 position: 'absolute',

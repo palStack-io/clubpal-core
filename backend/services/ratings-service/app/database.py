@@ -18,13 +18,25 @@ def init_db():
             id SERIAL PRIMARY KEY,
             event_id INTEGER NOT NULL,
             rater_user_id INTEGER NOT NULL,
-            rated_user_id INTEGER NOT NULL,
+            rated_user_id INTEGER,
             score INTEGER NOT NULL CHECK(score >= 1 AND score <= 10),
             comment TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(event_id, rater_user_id, rated_user_id)
+            UNIQUE(event_id, rater_user_id)
         )
+    """)
+    # Migrate existing constraint: drop old 3-column unique, add 2-column unique
+    cursor.execute("ALTER TABLE ratings DROP CONSTRAINT IF EXISTS ratings_event_id_rater_user_id_rated_user_id_key")
+    cursor.execute("ALTER TABLE ratings ALTER COLUMN rated_user_id DROP NOT NULL")
+    cursor.execute("""
+        DO $$ BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_constraint WHERE conname = 'ratings_event_id_rater_user_id_key'
+            ) THEN
+                ALTER TABLE ratings ADD CONSTRAINT ratings_event_id_rater_user_id_key UNIQUE(event_id, rater_user_id);
+            END IF;
+        END $$
     """)
 
     # User statistics cache table
@@ -89,11 +101,11 @@ def create_rating(event_id: int, rater_user_id: int, rated_user_id: int,
 
         rating_id = cursor.fetchone()['id']
         conn.commit()
-
-        # Update stats
-        update_user_stats(rated_user_id)
-
         conn.close()
+
+        # Update stats for the rater (tracks ratings given per user)
+        update_user_stats(rater_user_id)
+
         return rating_id
     except psycopg2.IntegrityError as e:
         conn.rollback()
@@ -110,6 +122,19 @@ def get_rating(rating_id: int) -> Optional[dict]:
     row = cursor.fetchone()
     conn.close()
 
+    return dict(row) if row else None
+
+
+def get_rating_by_event_and_rater(event_id: int, rater_user_id: int) -> Optional[dict]:
+    """Get rating by event and rater (one rating per user per event)."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT * FROM ratings WHERE event_id = %s AND rater_user_id = %s",
+        (event_id, rater_user_id)
+    )
+    row = cursor.fetchone()
+    conn.close()
     return dict(row) if row else None
 
 
@@ -184,15 +209,15 @@ def update_rating(rating_id: int, score: int = None, comment: str = None) -> boo
     conn = get_db()
     cursor = conn.cursor()
 
-    # Get rated_user_id for stats update
-    cursor.execute("SELECT rated_user_id FROM ratings WHERE id = %s", (rating_id,))
+    # Get rater_user_id for stats update
+    cursor.execute("SELECT rater_user_id FROM ratings WHERE id = %s", (rating_id,))
     row = cursor.fetchone()
 
     if not row:
         conn.close()
         return False
 
-    rated_user_id = row['rated_user_id']
+    rater_user_id = row['rater_user_id']
 
     updates = []
     params = []
@@ -222,8 +247,7 @@ def update_rating(rating_id: int, score: int = None, comment: str = None) -> boo
     conn.close()
 
     if success:
-        # Update stats
-        update_user_stats(rated_user_id)
+        update_user_stats(rater_user_id)
 
     return success
 
@@ -233,15 +257,15 @@ def delete_rating(rating_id: int) -> bool:
     conn = get_db()
     cursor = conn.cursor()
 
-    # Get rated_user_id for stats update
-    cursor.execute("SELECT rated_user_id FROM ratings WHERE id = %s", (rating_id,))
+    # Get rater_user_id for stats update
+    cursor.execute("SELECT rater_user_id FROM ratings WHERE id = %s", (rating_id,))
     row = cursor.fetchone()
 
     if not row:
         conn.close()
         return False
 
-    rated_user_id = row['rated_user_id']
+    rater_user_id = row['rater_user_id']
 
     cursor.execute("DELETE FROM ratings WHERE id = %s", (rating_id,))
 
@@ -250,8 +274,7 @@ def delete_rating(rating_id: int) -> bool:
     conn.close()
 
     if success:
-        # Update stats
-        update_user_stats(rated_user_id)
+        update_user_stats(rater_user_id)
 
     return success
 
@@ -279,7 +302,7 @@ def update_user_stats(user_id: int):
                SUM(CASE WHEN score = 9  THEN 1 ELSE 0 END) as score_9_count,
                SUM(CASE WHEN score = 10 THEN 1 ELSE 0 END) as score_10_count
            FROM ratings
-           WHERE rated_user_id = %s""",
+           WHERE rater_user_id = %s""",
         (user_id,)
     )
 

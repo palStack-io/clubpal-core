@@ -117,7 +117,8 @@ export default function EventMetaCard({ event, groupName, hostName }) {
   const rows = []
 
   const rawDate = event.scheduled_date || event.event_date
-  const parsedDate = rawDate ? (() => { try { return new Date(rawDate) } catch { return null } })() : null
+  const toUTC = (s) => s && /Z$|[+-]\d{2}:?\d{2}$/.test(s) ? s : s ? `${s}Z` : s
+  const parsedDate = rawDate ? (() => { try { return new Date(toUTC(rawDate)) } catch { return null } })() : null
 
   if (parsedDate) {
     rows.push({

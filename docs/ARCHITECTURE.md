@@ -287,6 +287,47 @@ Logout         → delete_session(token)
 Startup        → cleanup_expired_sessions() (prunes old rows)
 ```
 
+### Social / OIDC Login (Google + Apple)
+
+The api-gateway supports sign-in via external identity providers using the OIDC standard.
+
+**Endpoint:** `POST /auth/oidc`
+**Body:** `{ "provider": "google"|"apple", "id_token": "...", "access_token": "..." }`
+
+Either `id_token` (a signed JWT) or `access_token` (opaque — the gateway calls the provider's userinfo endpoint) may be sent. The mobile app sends an **access token** for Google (via `expo-auth-session`) and an **id_token** for Apple (via `expo-apple-authentication`). The web app sends an **id_token** for Google (via `@react-oauth/google`).
+
+**Provider configuration:**
+
+| Provider | How to enable | Config location |
+|---|---|---|
+| Google | Set `GOOGLE_CLIENT_ID` env var | api-gateway environment |
+| Apple | Add to `OIDC_PROVIDERS` JSON array | api-gateway environment |
+| Other OIDC | Add to `OIDC_PROVIDERS` JSON array | api-gateway environment |
+
+`OIDC_PROVIDERS` format:
+```json
+[{"name":"apple","client_id":"io.palstack.clubpal","discovery_url":"https://appleid.apple.com/.well-known/openid-configuration"}]
+```
+
+**Account linking behaviour:**
+- **Google:** if the provider email matches an existing account, the accounts are auto-linked (Google is a trusted email-verified provider).
+- **Apple + others:** a `409` response is returned with a `link_token`. The client presents a confirmation prompt; the user confirms by calling `POST /auth/oidc/confirm-link` with `{ link_token }`.
+
+**Web frontend:** Google button only renders when `VITE_GOOGLE_CLIENT_ID` is set at Vite build time (passed as a Docker build arg from `GOOGLE_CLIENT_ID`). No Google button = `VITE_GOOGLE_CLIENT_ID` is empty.
+
+**Mobile:** Google uses `expo-auth-session`; Apple uses `expo-apple-authentication` (native module — requires dev build or production binary, not Expo Go). Apple Sign In requires the `com.apple.developer.applesignin` entitlement in `app.json` and "Sign In with Apple" capability enabled in the Apple Developer portal for bundle ID `io.palstack.clubpal`.
+
+### Member invite flows
+
+Two parallel flows for adding someone to a group:
+
+| Flow | Trigger | Backend call | Result |
+|---|---|---|---|
+| **Username search → direct add** | Admin types username in "Add Member" modal, selects from dropdown | `POST /groups/{id}/members { user_id }` | User added immediately; "Added to Group" notification sent |
+| **Email invite** | Admin types an email address in the same modal, queues it, clicks "Send Invites" | `POST /invites/send { email, group_id, group_name }` (api-gateway) | Invite email sent with a join link; user added when they accept |
+
+Both flows share the same unified `InviteMemberModal` component (web) — the input auto-detects username vs email based on whether the typed value contains `@`.
+
 ### Email flows
 
 All email is sent from the api-gateway via SMTP. Templates are embedded in `email_service.py`.
@@ -355,6 +396,13 @@ Rate limit zones:
 |---|---|---|---|
 | `INTERNAL_API_SECRET` | _(empty)_ | api-gateway, enrichment-service, bill-split-service | Shared secret that protects internal endpoints. When set, the enrichment service and bill-split service must include it as an `X-Internal-Secret` header; requests without a matching header are rejected with 403. Safe to leave blank on a private LAN — the gateway will log a warning at startup as a reminder. Generate a value with `openssl rand -hex 32`. |
 
+### Social / OIDC login (optional — app works without it)
+
+| Variable | Default | Service | Purpose |
+|---|---|---|---|
+| `GOOGLE_CLIENT_ID` | _(empty)_ | api-gateway | Web OAuth 2.0 client ID — enables Google Sign-In. Also passed as the Vite build arg `VITE_GOOGLE_CLIENT_ID` so the web login page renders the Google button. Without this, the Google button is hidden on the web and the backend rejects Google tokens. |
+| `OIDC_PROVIDERS` | `[]` | api-gateway | JSON array of additional OIDC providers. **Required for Apple Sign-In.** Format: `[{"name":"apple","client_id":"io.palstack.clubpal","discovery_url":"https://appleid.apple.com/.well-known/openid-configuration"}]`. Without this, Apple login returns `400 Unknown or unconfigured OIDC provider: apple`. |
+
 ### Email delivery (optional — app works without it)
 
 | Variable | Default | Purpose |
@@ -401,6 +449,7 @@ All Radarr/Sonarr vars can alternatively be set at runtime by an admin via **Set
 | `VITE_ACTIVITIES_URL` | `/api/activities` | Activities Service base URL |
 | `VITE_ENRICH_URL` | `/api/enrich` | Enrichment Service base URL |
 | `VITE_BILL_SPLITS_URL` | `/api/bill-splits` | Bill Split Service base URL |
+| `VITE_GOOGLE_CLIENT_ID` | _(empty)_ | Google OAuth client ID — when set, renders the Google Sign-In button on `/login`. Automatically sourced from `GOOGLE_CLIENT_ID` by the Docker build arg in `docker-compose.yml`. |
 | `VITE_TENOR_API_KEY` | _(empty)_ | Tenor GIF search — alternative to per-user localStorage key |
 
 > **Note on Tenor:** end users can also supply their own Tenor API key via **Settings → Integrations** in the UI. The key is saved to `localStorage` in the browser and takes precedence over the build-time env var. This means GIF search works per-user without a server restart.

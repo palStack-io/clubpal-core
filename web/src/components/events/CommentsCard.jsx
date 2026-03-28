@@ -4,9 +4,16 @@ import Avatar from '../ui/Avatar'
 import EmojiPicker from '../ui/EmojiPicker'
 import GifPicker from '../ui/GifPicker'
 
+function toUTC(str) {
+  if (!str) return str
+  return /Z$|[+-]\d{2}:?\d{2}$/.test(str) ? str : `${str}Z`
+}
+
 function timeAgo(dateStr) {
-  const diff = (Date.now() - new Date(dateStr)) / 1000
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`
+  const diff = (Date.now() - new Date(toUTC(dateStr))) / 1000
+  const m = Math.floor(diff / 60)
+  if (m < 1) return 'just now'
+  if (diff < 3600) return `${m}m ago`
   if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`
   return `${Math.floor(diff / 86400)}d ago`
 }
@@ -170,8 +177,10 @@ export default function CommentsCard({
   }
 
   const handleGifSelect = (gifContent) => {
-    onAdd && onAdd(gifContent)
+    // Insert GIF token into text field rather than auto-sending
+    setInput(prev => (prev.trim() ? `${prev} ${gifContent}` : gifContent))
     setShowGif(false)
+    setTimeout(() => inputRef.current?.focus(), 0)
   }
 
   return (

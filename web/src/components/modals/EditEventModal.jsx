@@ -13,6 +13,12 @@ const ACTIVITY = {
   arts:   { emoji: '🎨', color: '#f59e0b', rgb: '245,158,11' },
 }
 
+const toggleStyle = (active) => ({
+  width: '40px', height: '22px', borderRadius: '11px',
+  background: active ? 'var(--rose)' : 'var(--glass)',
+  position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0,
+})
+
 const inputStyle = {
   background: 'var(--s2)',
   border: '1px solid var(--glass)',
@@ -49,11 +55,20 @@ const sectionTitleStyle = {
   marginBottom: '14px',
 }
 
+function toUTC(str) {
+  if (!str) return str
+  return /Z$|[+-]\d{2}:?\d{2}$/.test(str) ? str : `${str}Z`
+}
+
 function extractDateParts(dateStr) {
   if (!dateStr) return { date: '', time: '' }
   try {
-    const d = new Date(dateStr)
-    const date = d.toISOString().split('T')[0] // YYYY-MM-DD
+    const d = new Date(toUTC(dateStr))
+    // Use local date components so the form shows the user's local time
+    const year = d.getFullYear()
+    const month = String(d.getMonth() + 1).padStart(2, '0')
+    const day = String(d.getDate()).padStart(2, '0')
+    const date = `${year}-${month}-${day}`
     const hours = String(d.getHours()).padStart(2, '0')
     const mins = String(d.getMinutes()).padStart(2, '0')
     const time = `${hours}:${mins}`
@@ -75,6 +90,8 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
   const [bgType, setBgType] = useState('default')
   const [bgValue, setBgValue] = useState('')
   const [bgScope, setBgScope] = useState('hero')
+  const [ratingsEnabled, setRatingsEnabled] = useState(true)
+  const [billSplitEnabled, setBillSplitEnabled] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const coverRef = useRef()
@@ -98,6 +115,8 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
         setRsvpDeadlineTime('')
       }
       setMaxAttendees(event.max_attendees ? String(event.max_attendees) : '')
+      setRatingsEnabled(event.ratings_enabled !== false)
+      setBillSplitEnabled(event.bill_split_enabled === true)
     }
   }, [event])
 
@@ -112,15 +131,13 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
     try {
       let scheduledDateTime = null
       if (scheduledDate) {
-        scheduledDateTime = scheduledTime
-          ? `${scheduledDate}T${scheduledTime}:00`
-          : `${scheduledDate}T00:00:00`
+        const localStr = scheduledTime ? `${scheduledDate}T${scheduledTime}:00` : `${scheduledDate}T00:00:00`
+        scheduledDateTime = new Date(localStr).toISOString()
       }
       let rsvpDeadlineISO = null
       if (rsvpDeadlineDate) {
-        rsvpDeadlineISO = rsvpDeadlineTime
-          ? `${rsvpDeadlineDate}T${rsvpDeadlineTime}:00`
-          : `${rsvpDeadlineDate}T23:59:00`
+        const localStr = rsvpDeadlineTime ? `${rsvpDeadlineDate}T${rsvpDeadlineTime}:00` : `${rsvpDeadlineDate}T23:59:00`
+        rsvpDeadlineISO = new Date(localStr).toISOString()
       }
       await eventsApi.update(event.id, {
         scheduled_date: scheduledDateTime,
@@ -130,6 +147,10 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
         bg_type: bgType,
         bg_value: bgValue,
         bg_scope: bgScope,
+        // Sync cover_url so mobile (which only reads cover_url) always sees the image
+        cover_url: bgType === 'image' && bgValue ? bgValue : (coverPreview || null),
+        ratings_enabled: ratingsEnabled,
+        bill_split_enabled: billSplitEnabled,
       })
       onSaved && onSaved()
     } catch (err) {
@@ -348,6 +369,28 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
           onImageUpload={handleBgImageUpload}
           imageUploading={coverUploading}
         />
+      </div>
+
+      {/* Bill Split toggle */}
+      <div style={{ ...sectionStyle, display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }} onClick={() => setBillSplitEnabled(v => !v)}>
+        <div style={toggleStyle(billSplitEnabled)}>
+          <div style={{ position: 'absolute', top: '2px', left: billSplitEnabled ? '20px' : '2px', width: '18px', height: '18px', borderRadius: '9px', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
+        </div>
+        <div>
+          <div style={{ fontSize: '13px', fontWeight: 600, color: billSplitEnabled ? 'var(--rose-soft)' : 'var(--t2)' }}>💳 Enable Bill Split</div>
+          <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>Allow members to split and track expenses for this event</div>
+        </div>
+      </div>
+
+      {/* Ratings toggle */}
+      <div style={{ ...sectionStyle, display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }} onClick={() => setRatingsEnabled(v => !v)}>
+        <div style={toggleStyle(ratingsEnabled)}>
+          <div style={{ position: 'absolute', top: '2px', left: ratingsEnabled ? '20px' : '2px', width: '18px', height: '18px', borderRadius: '9px', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
+        </div>
+        <div>
+          <div style={{ fontSize: '13px', fontWeight: 600, color: ratingsEnabled ? 'var(--rose-soft)' : 'var(--t2)' }}>⭐ Enable Ratings</div>
+          <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>Allow members to rate and review this event after it ends</div>
+        </div>
       </div>
 
       {/* Section 5: Danger Zone */}

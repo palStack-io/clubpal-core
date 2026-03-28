@@ -97,6 +97,7 @@ def init_db():
     cur.execute("ALTER TABLE ocr_log ADD COLUMN IF NOT EXISTS duration_ms INTEGER")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_bill_claims_split ON bill_claims(split_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_bill_splits_claim_token ON bill_splits(claim_token)")
+    cur.execute("ALTER TABLE bill_shares ADD COLUMN IF NOT EXISTS unpaid_reminder_sent BOOLEAN DEFAULT FALSE")
 
     conn.commit()
     cur.close()
@@ -113,23 +114,92 @@ def create_bill_split(
     payment_note: Optional[str],
 ) -> dict:
     conn = get_conn()
-    cur = conn.cursor()
-    cur.execute(
-        """
-        INSERT INTO bill_splits
+    try:
+        cur = conn.cursor()
+        cur.execute(
+            """
+            INSERT INTO bill_splits
+                (event_id, paid_by_user_id, subtotal, tax_amount, tip_amount,
+                 total_amount, payment_note)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            RETURNING *
+            """,
             (event_id, paid_by_user_id, subtotal, tax_amount, tip_amount,
-             total_amount, payment_note)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
-        RETURNING *
-        """,
-        (event_id, paid_by_user_id, subtotal, tax_amount, tip_amount,
-         total_amount, payment_note),
-    )
-    row = dict(cur.fetchone())
-    conn.commit()
-    cur.close()
-    conn.close()
-    return row
+             total_amount, payment_note),
+        )
+        row = dict(cur.fetchone())
+        conn.commit()
+        return row
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def create_bill_split_full(
+    event_id: int,
+    paid_by_user_id: int,
+    subtotal: float,
+    tax_amount: float,
+    tip_amount: float,
+    total_amount: float,
+    payment_note: Optional[str],
+    items: list,
+    shares: list,
+) -> tuple:
+    """Create split, items, and shares atomically in a single transaction.
+
+    Returns (split_row, item_rows, share_rows).
+    Rolls back and re-raises on any failure so no orphaned rows are left.
+    """
+    conn = get_conn()
+    try:
+        cur = conn.cursor()
+
+        cur.execute(
+            """INSERT INTO bill_splits
+                   (event_id, paid_by_user_id, subtotal, tax_amount, tip_amount,
+                    total_amount, payment_note)
+               VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+            (event_id, paid_by_user_id, subtotal, tax_amount, tip_amount,
+             total_amount, payment_note),
+        )
+        split_row = dict(cur.fetchone())
+        split_id = split_row["id"]
+
+        item_rows = []
+        for it in items:
+            cur.execute(
+                """INSERT INTO bill_items (split_id, name, price, assigned_to)
+                   VALUES (%s, %s, %s, %s) RETURNING *""",
+                (split_id, it["name"], it["price"],
+                 json.dumps(it.get("assigned_to") or [])),
+            )
+            row = dict(cur.fetchone())
+            if not isinstance(row.get("assigned_to"), list):
+                row["assigned_to"] = json.loads(row["assigned_to"]) if row["assigned_to"] else []
+            item_rows.append(row)
+
+        share_rows = []
+        for s in shares:
+            cur.execute(
+                """INSERT INTO bill_shares
+                       (split_id, user_id, items_subtotal, tax_share, tip_share,
+                        total_owed, payment_token, paid)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+                (split_id, s["user_id"], s["items_subtotal"], s["tax_share"],
+                 s["tip_share"], s["total_owed"], s["payment_token"], s["paid"]),
+            )
+            share_rows.append(dict(cur.fetchone()))
+
+        conn.commit()
+        return split_row, item_rows, share_rows
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def create_bill_item(
@@ -435,6 +505,34 @@ def delete_shares_by_split(split_id: int) -> None:
     conn = get_conn()
     cur = conn.cursor()
     cur.execute("DELETE FROM bill_shares WHERE split_id = %s", (split_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
+def get_unpaid_shares_for_reminder() -> list:
+    """Return unpaid shares older than 3 days that haven't had a reminder sent."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("""
+        SELECT bs.*, sp.event_id, sp.paid_by_user_id, sp.payment_note
+        FROM bill_shares bs
+        JOIN bill_splits sp ON bs.split_id = sp.id
+        WHERE bs.paid = FALSE
+          AND (bs.unpaid_reminder_sent IS NULL OR bs.unpaid_reminder_sent = FALSE)
+          AND sp.created_at < NOW() - INTERVAL '3 days'
+          AND bs.user_id != sp.paid_by_user_id
+    """)
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def mark_unpaid_reminder_sent(share_id: int) -> None:
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("UPDATE bill_shares SET unpaid_reminder_sent = TRUE WHERE id = %s", (share_id,))
     conn.commit()
     cur.close()
     conn.close()

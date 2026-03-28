@@ -10,7 +10,6 @@ import ConfirmDeleteModal from '../../components/modals/ConfirmDeleteModal'
 import TurnQueueItem from '../../components/dashboard/TurnQueueItem'
 import { groupsApi } from '../../api/groups'
 import { useAuth } from '../../contexts/AuthContext'
-import { gatewayClient } from '../../api/client'
 
 export default function ManageMembers() {
   const { id } = useParams()
@@ -22,7 +21,6 @@ export default function ManageMembers() {
   const [rotation, setRotation] = useState(null)
   const [loading, setLoading] = useState(true)
   const [showInvite, setShowInvite] = useState(false)
-  const [inviteLoading, setInviteLoading] = useState(false)
   const [removeTarget, setRemoveTarget] = useState(null)
   const [removeLoading, setRemoveLoading] = useState(false)
 
@@ -44,15 +42,6 @@ export default function ManageMembers() {
 
   const myRole = members.find(m => m.user_id === user?.id)?.role
   const isAdmin = myRole === 'owner' || myRole === 'admin'
-
-  const handleInvite = async (email) => {
-    setInviteLoading(true)
-    try {
-      await gatewayClient.post(`/groups/${id}/invite`, { email })
-      setShowInvite(false)
-    } catch {}
-    finally { setInviteLoading(false) }
-  }
 
   const handleRemove = async () => {
     if (!removeTarget) return
@@ -161,8 +150,10 @@ export default function ManageMembers() {
       <InviteMemberModal
         isOpen={showInvite}
         onClose={() => setShowInvite(false)}
-        onInvite={handleInvite}
-        loading={inviteLoading}
+        groupId={id}
+        groupName={group?.name}
+        onAdded={fetchAll}
+        currentMemberIds={members.map(m => m.user_id)}
       />
       <ConfirmDeleteModal
         isOpen={!!removeTarget}

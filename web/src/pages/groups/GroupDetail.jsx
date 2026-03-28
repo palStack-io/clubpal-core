@@ -60,12 +60,14 @@ export default function GroupDetail() {
   const [showEdit, setShowEdit] = useState(false)
   const [showCreateEvent, setShowCreateEvent] = useState(false)
   const [showCreatePoll, setShowCreatePoll] = useState(false)
+  const [pollToConvert, setPollToConvert] = useState(null)
   const [polls, setPolls] = useState([])
   const [showAllPolls, setShowAllPolls] = useState(false)
   const [showPastPolls, setShowPastPolls] = useState(false)
   const [comments, setComments] = useState([])
   const [leaderboard, setLeaderboard] = useState([])
   const [pendingInvites, setPendingInvites] = useState([])
+  const [pendingRequests, setPendingRequests] = useState([])
   const [inviteSuccess, setInviteSuccess] = useState(null)
   const [inviteCode, setInviteCode] = useState(null)
 
@@ -94,6 +96,10 @@ export default function GroupDetail() {
     groupsApi.getGroupPolls(id, user?.id).then(p => setPolls(Array.isArray(p) ? p : [])).catch(() => {})
     ratingsApi.getLeaderboard(id).then(d => setLeaderboard(d?.leaderboard || [])).catch(() => {})
     gatewayClient.get(`/groups/${id}/pending-invites`).then(r => setPendingInvites(Array.isArray(r.data) ? r.data : [])).catch(() => {})
+    groupsApi.getJoinRequests(id).then(async rows => {
+      const enriched = await enrichWithProfiles(Array.isArray(rows) ? rows : [], 'user_id')
+      setPendingRequests(enriched)
+    }).catch(() => {})
   }
 
   useEffect(() => { fetchAll() }, [id])
@@ -239,7 +245,7 @@ export default function GroupDetail() {
                     </div>
                   )}
                   {(showAllPolls ? openPolls : openPolls.slice(0, 3)).map(poll => (
-                    <PollCard key={poll.id} poll={poll} currentUserId={user?.id} onUpdated={handleUpdate} />
+                    <PollCard key={poll.id} poll={poll} currentUserId={user?.id} onUpdated={handleUpdate} onConvertToEvent={p => setPollToConvert(p)} />
                   ))}
                   {openPolls.length > 3 && (
                     <button onClick={() => setShowAllPolls(v => !v)} style={{ width: '100%', padding: '8px', fontSize: '12px', fontWeight: 700, color: 'var(--t3)', background: 'none', border: '1px solid var(--glass)', borderRadius: '10px', cursor: 'pointer', marginBottom: '8px' }}>
@@ -257,7 +263,7 @@ export default function GroupDetail() {
                         {showPastPolls ? '▲' : '▼'} Past Polls ({pastPolls.length})
                       </button>
                       {showPastPolls && pastPolls.map(poll => (
-                        <PollCard key={poll.id} poll={poll} currentUserId={user?.id} onUpdated={handleUpdate} />
+                        <PollCard key={poll.id} poll={poll} currentUserId={user?.id} onUpdated={handleUpdate} onConvertToEvent={p => setPollToConvert(p)} />
                       ))}
                     </>
                   )}
@@ -292,6 +298,46 @@ export default function GroupDetail() {
               rotation={rotation}
               rotationType={group?.rotation_type}
             />
+            {isAdmin && pendingRequests.length > 0 && (
+              <div style={{ background: 'var(--s3)', border: '1px solid var(--rose-border)', borderRadius: '16px', padding: '18px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--t1)', marginBottom: '14px' }}>
+                  ✋ Join Requests ({pendingRequests.length})
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                  {pendingRequests.map(req => (
+                    <div key={req.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', background: 'var(--s2)', borderRadius: '10px', padding: '10px 12px', border: '1px solid var(--glass)' }}>
+                      <span style={{ fontSize: '20px' }}>👤</span>
+                      <span style={{ flex: 1, fontSize: '13px', fontWeight: 600, color: 'var(--t1)' }}>
+                        {req.full_name || req.username || `User #${req.user_id}`}
+                      </span>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await groupsApi.reviewJoinRequest(req.id, 'approve')
+                            setPendingRequests(prev => prev.filter(r => r.id !== req.id))
+                            fetchAll()
+                          } catch {}
+                        }}
+                        style={{ padding: '5px 12px', borderRadius: '8px', border: '1px solid rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.1)', color: '#16a34a', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await groupsApi.reviewJoinRequest(req.id, 'decline')
+                            setPendingRequests(prev => prev.filter(r => r.id !== req.id))
+                          } catch {}
+                        }}
+                        style={{ padding: '5px 12px', borderRadius: '8px', border: '1px solid rgba(248,113,113,0.3)', background: 'rgba(248,113,113,0.1)', color: '#f87171', fontSize: '12px', fontWeight: 700, cursor: 'pointer' }}
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -342,6 +388,19 @@ export default function GroupDetail() {
         groupName={group?.name}
         activityType={group?.activity_type}
         onCreated={(eventId) => { setShowCreateEvent(false); navigate(`/events/${eventId}`) }}
+      />
+      <CreateEventModal
+        isOpen={!!pollToConvert}
+        onClose={() => setPollToConvert(null)}
+        groupId={id}
+        groupName={group?.name}
+        activityType={pollToConvert?.activity_type || group?.activity_type}
+        initialTitle={pollToConvert?.activity_name}
+        onCreated={(eventId) => {
+          if (pollToConvert) groupsApi.closePoll(pollToConvert.id, user?.id).catch(() => {})
+          setPollToConvert(null)
+          navigate(`/events/${eventId}`)
+        }}
       />
       <CreatePollModal
         isOpen={showCreatePoll}

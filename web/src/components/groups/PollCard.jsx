@@ -1,15 +1,24 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Button from '../ui/Button'
 import { groupsApi } from '../../api/groups'
-import { eventsApi } from '../../api/events'
 
-const RESPONSES = [
+const DEFAULT_RESPONSES = [
   { value: 'in', emoji: '🙌', label: "I'm in!", color: '#22d3a0' },
   { value: 'done_loved', emoji: '❤️', label: 'Done it, loved it', color: '#f43f5e' },
   { value: 'done_pass', emoji: '👎', label: 'Done it, pass', color: '#f59e0b' },
   { value: 'cant_make_it', emoji: '🚫', label: "Can't make it", color: 'var(--t3)' },
 ]
+
+function buildOptions(customOptions) {
+  if (!customOptions || !customOptions.length) return DEFAULT_RESPONSES
+  return customOptions.map((opt, i) => ({
+    value: opt.value || `opt_${i}`,
+    emoji: opt.emoji || '⭐',
+    label: opt.label,
+    color: 'var(--rose)',
+  }))
+}
 
 const TYPE_EMOJI = {
   dining: '🍽️', movies: '🎬', books: '📚', hiking: '🥾', gaming: '🎮', arts: '🎨',
@@ -40,24 +49,9 @@ function ResponseBar({ label, emoji, count, total, highlighted }) {
   )
 }
 
-export default function PollCard({ poll, currentUserId, onUpdated }) {
+export default function PollCard({ poll, currentUserId, onUpdated, onConvertToEvent }) {
   const navigate = useNavigate()
   const [responding, setResponding] = useState(false)
-  const [converting, setConverting] = useState(false)
-  const [showConvertForm, setShowConvertForm] = useState(false)
-  const [convertDate, setConvertDate] = useState('')
-  const [convertLocation, setConvertLocation] = useState('')
-  const [convertMaxAttendees, setConvertMaxAttendees] = useState('')
-  const [recurringSchedules, setRecurringSchedules] = useState([])
-  const [selectedScheduleId, setSelectedScheduleId] = useState('')
-
-  useEffect(() => {
-    if (showConvertForm && poll.group_id) {
-      eventsApi.getGroupRecurringSchedules(poll.group_id)
-        .then(s => setRecurringSchedules((s || []).filter(r => r.is_active)))
-        .catch(() => {})
-    }
-  }, [showConvertForm, poll.group_id])
 
   const summary = poll.summary || {}
   const hasResponded = summary.has_responded
@@ -70,6 +64,8 @@ export default function PollCard({ poll, currentUserId, onUpdated }) {
 
   const activityEmoji = TYPE_EMOJI[poll.activity_type] || '📋'
   const deadlineExpired = new Date(poll.deadline) <= Date.now()
+  const options = buildOptions(poll.custom_options)
+  const creatorLabel = poll.creator_username || `#${poll.created_by}`
 
   const handleRespond = async (responseValue) => {
     setResponding(true)
@@ -85,23 +81,6 @@ export default function PollCard({ poll, currentUserId, onUpdated }) {
       const updated = await groupsApi.closePoll(poll.id, currentUserId)
       onUpdated?.(updated)
     } catch {}
-  }
-
-  const handleConvert = async () => {
-    setConverting(true)
-    try {
-      const updated = await groupsApi.convertPoll(poll.id, currentUserId, {
-        scheduled_date: convertDate ? `${convertDate}T12:00:00` : null,
-        location: convertLocation || null,
-        recurring_schedule_id: selectedScheduleId ? parseInt(selectedScheduleId) : null,
-        max_attendees: convertMaxAttendees ? parseInt(convertMaxAttendees, 10) : null,
-      })
-      onUpdated?.(updated)
-      if (updated.converted_event_id) {
-        navigate(`/events/${updated.converted_event_id}`)
-      }
-    } catch {}
-    finally { setConverting(false) }
   }
 
   const statusChipStyle = (color, bg) => ({
@@ -128,10 +107,10 @@ export default function PollCard({ poll, currentUserId, onUpdated }) {
         <span style={{ fontSize: '24px', lineHeight: 1 }}>{activityEmoji}</span>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: '15px', fontWeight: 800, color: 'var(--t1)', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {poll.activity_name}
+            {poll.note || poll.activity_name}
           </div>
           <div style={{ fontSize: '11px', color: 'var(--t3)' }}>
-            by #{poll.created_by} ·{' '}
+            by {creatorLabel} ·{' '}
             <span style={{ color: deadlineExpired ? 'var(--amber)' : 'var(--t3)' }}>
               {deadlineExpired ? '⚠️ ' : '⏱ '}{deadlineLabel(poll.deadline)}
             </span>
@@ -149,12 +128,6 @@ export default function PollCard({ poll, currentUserId, onUpdated }) {
         </span>
       </div>
 
-      {/* Note */}
-      {poll.note && (
-        <div style={{ fontSize: '12px', color: 'var(--t2)', background: 'var(--s3)', borderRadius: '10px', padding: '8px 12px', marginBottom: '12px', borderLeft: '3px solid var(--glass)' }}>
-          {poll.note}
-        </div>
-      )}
 
       {/* Response count */}
       <div style={{ fontSize: '12px', color: 'var(--t3)', marginBottom: '12px' }}>
@@ -164,7 +137,7 @@ export default function PollCard({ poll, currentUserId, onUpdated }) {
       {/* Tap buttons (before responding) */}
       {!showBreakdown && !isPollClosed && (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
-          {RESPONSES.map(r => (
+          {options.map(r => (
             <button
               key={r.value}
               disabled={responding}
@@ -192,7 +165,7 @@ export default function PollCard({ poll, currentUserId, onUpdated }) {
       {/* Response breakdown (after responding or closed) */}
       {showBreakdown && (
         <div style={{ marginBottom: '12px' }}>
-          {RESPONSES.map(r => (
+          {options.map(r => (
             <ResponseBar
               key={r.value}
               emoji={r.emoji}
@@ -217,67 +190,11 @@ export default function PollCard({ poll, currentUserId, onUpdated }) {
 
       {/* Picker actions */}
       {isCreator && poll.status === 'open' && (
-        <div style={{ borderTop: '1px solid var(--glass)', paddingTop: '12px', marginTop: '4px' }}>
-          {!showConvertForm ? (
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <Button variant="primary" style={{ flex: 1 }} onClick={() => setShowConvertForm(true)}>
-                🎯 Convert to Event
-              </Button>
-              <Button variant="ghost" onClick={handleClose}>Close</Button>
-            </div>
-          ) : (
-            <div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-                <input
-                  type="date"
-                  value={convertDate}
-                  onChange={e => setConvertDate(e.target.value)}
-                  placeholder="Date (optional)"
-                  style={{ background: 'var(--s3)', border: '1px solid var(--glass)', borderRadius: '8px', padding: '8px', fontSize: '12px', color: 'var(--t1)', outline: 'none' }}
-                />
-                <input
-                  type="text"
-                  value={convertLocation}
-                  onChange={e => setConvertLocation(e.target.value)}
-                  placeholder="Location (optional)"
-                  style={{ background: 'var(--s3)', border: '1px solid var(--glass)', borderRadius: '8px', padding: '8px', fontSize: '12px', color: 'var(--t1)', outline: 'none' }}
-                />
-              </div>
-              <input
-                type="number"
-                min="1"
-                value={convertMaxAttendees}
-                onChange={e => setConvertMaxAttendees(e.target.value)}
-                placeholder="Max seats (optional, leave blank for unlimited)"
-                style={{ width: '100%', background: 'var(--s3)', border: '1px solid var(--glass)', borderRadius: '8px', padding: '8px', fontSize: '12px', color: 'var(--t1)', outline: 'none', marginBottom: '8px', boxSizing: 'border-box' }}
-              />
-              {recurringSchedules.length > 0 && (
-                <div style={{ marginBottom: '8px' }}>
-                  <select
-                    value={selectedScheduleId}
-                    onChange={e => setSelectedScheduleId(e.target.value)}
-                    style={{ width: '100%', background: 'var(--s3)', border: '1px solid var(--glass)', borderRadius: '8px', padding: '8px', fontSize: '12px', color: 'var(--t1)', outline: 'none' }}
-                  >
-                    <option value="">🗓 Standalone event</option>
-                    {recurringSchedules.map(s => (
-                      <option key={s.id} value={s.id}>🔁 {s.title} ({s.recurrence_rule})</option>
-                    ))}
-                  </select>
-                  {selectedScheduleId && (
-                    <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '4px', paddingLeft: '4px' }}>
-                      This will become the next occurrence of the selected series
-                    </div>
-                  )}
-                </div>
-              )}
-              <div style={{ display: 'flex', gap: '8px' }}>
-                <Button variant="primary" style={{ flex: 1 }} loading={converting} onClick={handleConvert}>
-                  Create Event →
-                </Button>
-                <Button variant="ghost" onClick={() => setShowConvertForm(false)}>Cancel</Button>
-              </div>
-            </div>
-          )}
+        <div style={{ borderTop: '1px solid var(--glass)', paddingTop: '12px', marginTop: '4px', display: 'flex', gap: '8px' }}>
+          <Button variant="primary" style={{ flex: 1 }} onClick={() => onConvertToEvent?.(poll)}>
+            🎯 Convert to Event
+          </Button>
+          <Button variant="ghost" onClick={handleClose}>Close</Button>
         </div>
       )}
     </div>

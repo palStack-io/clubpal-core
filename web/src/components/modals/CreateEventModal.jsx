@@ -4,6 +4,7 @@ import Button from '../ui/Button'
 import { eventsApi } from '../../api/events'
 import { groupsApi } from '../../api/groups'
 import { useAuth } from '../../contexts/AuthContext'
+import { enrichClient } from '../../api/client'
 
 const toggleStyle = (active) => ({
   width: '40px', height: '22px', borderRadius: '11px',
@@ -75,14 +76,17 @@ export default function CreateEventModal({
   initialTitle,
   initialLocation,
   initialImageUrl,
+  initialDescription,
   onPollGroup,
 }) {
   const { user } = useAuth()
   const [title, setTitle] = useState(initialTitle || '')
   const [location, setLocation] = useState(initialLocation || '')
+  const [locationSuggestions, setLocationSuggestions] = useState([])
+  const locationDebounceRef = useRef(null)
   const [scheduledDate, setScheduledDate] = useState('')
   const [scheduledTime, setScheduledTime] = useState('')
-  const [notes, setNotes] = useState('')
+  const [notes, setNotes] = useState(initialDescription || '')
   const [selectedGroupId, setSelectedGroupId] = useState(groupId || '')
   const [selectedActivity, setSelectedActivity] = useState(activityType || '')
   const [userGroups, setUserGroups] = useState([])
@@ -93,6 +97,7 @@ export default function CreateEventModal({
   const [maxAttendees, setMaxAttendees] = useState('')
   const [pulseCheck, setPulseCheck] = useState(false)
   const [billSplitEnabled, setBillSplitEnabled] = useState(false)
+  const [ratingsEnabled, setRatingsEnabled] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const coverRef = useRef()
@@ -111,6 +116,20 @@ export default function CreateEventModal({
         .catch(() => {})
     }
   }, [groupId, user?.id])
+
+  const handleLocationChange = (value) => {
+    setLocation(value)
+    clearTimeout(locationDebounceRef.current)
+    if (!value.trim()) { setLocationSuggestions([]); return }
+    locationDebounceRef.current = setTimeout(async () => {
+      try {
+        const res = await enrichClient.get('/places/autocomplete', { params: { query: value } })
+        setLocationSuggestions(res.data?.predictions || res.data?.results || [])
+      } catch {
+        setLocationSuggestions([])
+      }
+    }, 350)
+  }
 
   const resolvedGroupId = groupId || selectedGroupId
   const resolvedActivity = activityType || selectedActivity
@@ -133,16 +152,14 @@ export default function CreateEventModal({
 
     let scheduledDateTime = null
     if (scheduledDate) {
-      scheduledDateTime = scheduledTime
-        ? `${scheduledDate}T${scheduledTime}:00`
-        : `${scheduledDate}T00:00:00`
+      const localStr = scheduledTime ? `${scheduledDate}T${scheduledTime}:00` : `${scheduledDate}T00:00:00`
+      scheduledDateTime = new Date(localStr).toISOString()
     }
 
     let rsvpDeadlineISO = null
     if (rsvpDeadlineDate) {
-      rsvpDeadlineISO = rsvpDeadlineTime
-        ? `${rsvpDeadlineDate}T${rsvpDeadlineTime}:00`
-        : `${rsvpDeadlineDate}T23:59:00`
+      const localStr = rsvpDeadlineTime ? `${rsvpDeadlineDate}T${rsvpDeadlineTime}:00` : `${rsvpDeadlineDate}T23:59:00`
+      rsvpDeadlineISO = new Date(localStr).toISOString()
     }
 
     setLoading(true)
@@ -159,6 +176,7 @@ export default function CreateEventModal({
         rsvp_deadline: rsvpDeadlineISO,
         max_attendees: maxAttendees ? parseInt(maxAttendees, 10) : null,
         bill_split_enabled: billSplitEnabled,
+        ratings_enabled: ratingsEnabled,
         // Pass discover item image as default banner (user may have kept or cleared it)
         banner_url: coverUrlOverride || null,
         ...(isRecurring && recurrence.end_date ? {
@@ -293,14 +311,50 @@ export default function CreateEventModal({
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: '12px' }}>
           <FormGroup label="Location (optional)">
-            <input
-              value={location}
-              onChange={(e) => setLocation(e.target.value)}
-              placeholder="123 Main St"
-              style={inputStyle}
-              onFocus={focusBorder}
-              onBlur={blurBorder}
-            />
+            <div style={{ position: 'relative' }}>
+              <input
+                value={location}
+                onChange={(e) => handleLocationChange(e.target.value)}
+                placeholder="123 Main St"
+                style={inputStyle}
+                onFocus={focusBorder}
+                onBlur={(e) => {
+                  blurBorder(e)
+                  // delay hide so click on suggestion registers first
+                  setTimeout(() => setLocationSuggestions([]), 200)
+                }}
+                autoComplete="off"
+              />
+              {locationSuggestions.length > 0 && (
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 100,
+                  background: 'var(--s2)', border: '1px solid var(--glass)',
+                  borderRadius: '10px', marginTop: '4px', overflow: 'hidden',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+                }}>
+                  {locationSuggestions.map((s, i) => {
+                    const label = s.description || s.name || s
+                    return (
+                      <div
+                        key={i}
+                        onMouseDown={() => {
+                          setLocation(label)
+                          setLocationSuggestions([])
+                        }}
+                        style={{
+                          padding: '9px 12px', fontSize: '13px', color: 'var(--t1)',
+                          cursor: 'pointer', borderBottom: i < locationSuggestions.length - 1 ? '1px solid var(--glass)' : 'none',
+                        }}
+                        onMouseEnter={e => e.currentTarget.style.background = 'var(--s3)'}
+                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                      >
+                        📍 {label}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           </FormGroup>
           <FormGroup label="Max Seats">
             <input
@@ -514,6 +568,17 @@ export default function CreateEventModal({
         <div>
           <div style={{ fontSize: '13px', fontWeight: 600, color: billSplitEnabled ? 'var(--green)' : 'var(--t2)' }}>💸 Enable Bill Splitting</div>
           <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>Let the host split and track costs with attendees after the event</div>
+        </div>
+      </div>
+
+      {/* Ratings toggle */}
+      <div style={{ ...sectionStyle, display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }} onClick={() => setRatingsEnabled(v => !v)}>
+        <div style={toggleStyle(ratingsEnabled)}>
+          <div style={{ position: 'absolute', top: '2px', left: ratingsEnabled ? '20px' : '2px', width: '18px', height: '18px', borderRadius: '9px', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
+        </div>
+        <div>
+          <div style={{ fontSize: '13px', fontWeight: 600, color: ratingsEnabled ? 'var(--rose-soft)' : 'var(--t2)' }}>⭐ Enable Ratings</div>
+          <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>Allow members to rate and review this event after it ends</div>
         </div>
       </div>
 

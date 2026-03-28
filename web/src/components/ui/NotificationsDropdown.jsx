@@ -13,8 +13,13 @@ const TYPE_ICON = {
   system:   '🔔',
 }
 
+function toUTC(str) {
+  if (!str) return str
+  return /Z$|[+-]\d{2}:?\d{2}$/.test(str) ? str : `${str}Z`
+}
+
 function timeAgo(dateStr) {
-  const diff = Date.now() - new Date(dateStr).getTime()
+  const diff = Date.now() - new Date(toUTC(dateStr)).getTime()
   const m = Math.floor(diff / 60000)
   if (m < 1) return 'just now'
   if (m < 60) return `${m}m ago`

@@ -45,6 +45,9 @@ export default function EventDetail() {
   const [showEditEvent, setShowEditEvent] = useState(false)
   const [showRateModal, setShowRateModal] = useState(false)
   const [showBillSplit, setShowBillSplit] = useState(false)
+  const [isBookmarked, setIsBookmarked] = useState(false)
+  const [showEndConfirm, setShowEndConfirm] = useState(false)
+  const [remindToast, setRemindToast] = useState(null)
 
   const fetchAll = async () => {
     try {
@@ -80,7 +83,29 @@ export default function EventDetail() {
 
   useEffect(() => {
     fetchAll()
+    gatewayClient.get('/users/me/saved', { params: { item_type: 'event' } })
+      .then(r => setIsBookmarked((r.data || []).some(s => String(s.item_id) === String(id))))
+      .catch(() => setIsBookmarked(false))
   }, [id])
+
+  const toggleBookmark = async () => {
+    const next = !isBookmarked
+    setIsBookmarked(next)
+    try {
+      if (next) {
+        await gatewayClient.post('/users/me/saved', {
+          item_type: 'event',
+          item_id: String(id),
+          item_name: event?.title || `Event ${id}`,
+          item_meta: { subtitle: event?.location || null, photo: event?.cover_image_url || null },
+        })
+      } else {
+        await gatewayClient.delete(`/users/me/saved/event/${id}`)
+      }
+    } catch {
+      setIsBookmarked(!next) // revert on failure
+    }
+  }
 
   const handleRsvp = async (status) => {
     if (status === 'rate') {
@@ -183,20 +208,22 @@ export default function EventDetail() {
     try {
       const res = await eventsApi.sendRsvpReminder(id)
       const count = res?.nudged ?? 0
-      alert(count > 0 ? `Reminder sent to ${count} member${count !== 1 ? 's' : ''}.` : 'Everyone has already RSVPed.')
+      setRemindToast(count > 0 ? `Reminder sent to ${count} member${count !== 1 ? 's' : ''}.` : 'Everyone has already RSVPed.')
     } catch {
-      alert('Could not send reminder. Try again.')
+      setRemindToast('Could not send reminder. Try again.')
     }
+    setTimeout(() => setRemindToast(null), 4000)
   }
 
   const handleEndEvent = async () => {
-    if (!window.confirm('Mark this event as completed? This cannot be undone.')) return
     try {
       const updated = await eventsApi.endEvent(id)
       setEvent(updated)
     } catch {
-      alert('Could not end event. Try again.')
+      setRemindToast('Could not end event. Try again.')
+      setTimeout(() => setRemindToast(null), 4000)
     }
+    setShowEndConfirm(false)
   }
   const hostName = attendees.find(a => String(a.user_id) === String(event.host_user_id))?.full_name || null
   const isScheduled = event.status === 'scheduled' || event.status === 'in_progress'
@@ -219,11 +246,12 @@ export default function EventDetail() {
 
   const heroActions = [
     ...(event.status === 'scheduled' && isHost ? [{ label: '✏️ Edit', onClick: () => setShowEditEvent(true) }] : []),
-    ...(isScheduled && (isHost || isCreator) ? [{ label: '🏁 End', onClick: handleEndEvent }] : []),
-    ...(isScheduled && isCreator ? [{ label: '📣 Remind', onClick: handleRsvpReminder }] : []),
-    ...((event.status === 'completed' || (event.scheduled_date && new Date(event.scheduled_date) < new Date())) ? [{ label: '⭐ Rate', onClick: () => setShowRateModal(true) }] : []),
-    ...(event.bill_split_enabled ? [{ label: '💳 Split', onClick: () => setShowBillSplit(true) }] : []),
-    ...(isScheduled && myAttendee?.status !== 'going' ? [{ label: '✓ RSVP', onClick: () => handleRsvp('going'), loading: rsvpLoading }] : []),
+    ...(isScheduled && (isHost || isCreator) ? [{ label: '🏁 End Event', onClick: () => setShowEndConfirm(true) }] : []),
+    ...(isScheduled && isCreator && !!event.rsvp_deadline ? [{ label: '📣 Send Reminder', onClick: handleRsvpReminder }] : []),
+    ...(event.ratings_enabled !== false && (event.status === 'completed' || (event.scheduled_date && new Date(event.scheduled_date) < new Date())) ? [{ label: '⭐ Rate', onClick: () => setShowRateModal(true) }] : []),
+    ...(event.bill_split_enabled ? [{ label: '💳 Split Bill', onClick: () => setShowBillSplit(true) }] : []),
+    ...(isScheduled && myAttendee?.status !== 'going' ? [{ label: '✓ RSVP Going', onClick: () => handleRsvp('going'), loading: rsvpLoading }] : []),
+    { label: isBookmarked ? '🔖 Bookmarked' : '🔖 Bookmark', onClick: toggleBookmark },
   ]
 
   return (
@@ -263,14 +291,16 @@ export default function EventDetail() {
         >
           {/* Left column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <RatingCard
-              ratings={ratings}
-              eventStatus={event.status}
-              scheduledDate={event.scheduled_date}
-              currentUserId={user?.id}
-              eventId={id}
-              onAddRating={() => setShowRateModal(true)}
-            />
+            {event.ratings_enabled !== false && (
+              <RatingCard
+                ratings={ratings}
+                eventStatus={event.status}
+                scheduledDate={event.scheduled_date}
+                currentUserId={user?.id}
+                eventId={id}
+                onAddRating={() => setShowRateModal(true)}
+              />
+            )}
             <PhotoGalleryCard
               photos={photos}
               currentUserId={user?.id}
@@ -322,13 +352,54 @@ export default function EventDetail() {
         onCancel={handleCancelEvent}
       />
       <RateEventModal
-        isOpen={showRateModal}
+        isOpen={showRateModal && event.ratings_enabled !== false}
         onClose={() => setShowRateModal(false)}
         event={event}
         currentUser={user}
         onSubmitted={fetchAll}
         existingRating={ratings.find(r => String(r.rater_user_id || r.reviewer_id || r.rater_id) === String(user?.id))}
       />
+
+      {/* End Event Confirm Modal */}
+      {showEndConfirm && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px' }}>
+          <div style={{ background: 'var(--s2)', border: '1px solid var(--glass)', borderRadius: '20px', padding: '28px', maxWidth: '380px', width: '100%' }}>
+            <div style={{ fontSize: '32px', marginBottom: '12px', textAlign: 'center' }}>🏁</div>
+            <div style={{ fontSize: '16px', fontWeight: 800, color: 'var(--t1)', textAlign: 'center', marginBottom: '8px' }}>End this event?</div>
+            <div style={{ fontSize: '13px', color: 'var(--t3)', textAlign: 'center', marginBottom: '24px', lineHeight: 1.5 }}>
+              This will mark the event as completed. This action cannot be undone.
+            </div>
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                onClick={() => setShowEndConfirm(false)}
+                style={{ flex: 1, padding: '10px', borderRadius: '12px', background: 'var(--s3)', border: '1px solid var(--glass)', color: 'var(--t2)', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleEndEvent}
+                style={{ flex: 1, padding: '10px', borderRadius: '12px', background: 'var(--rose)', border: 'none', color: '#fff', fontSize: '13px', fontWeight: 700, cursor: 'pointer' }}
+              >
+                Yes, End It
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remind / action toast */}
+      {remindToast && (
+        <div style={{
+          position: 'fixed', bottom: '32px', left: '50%', transform: 'translateX(-50%)',
+          background: 'var(--s2)', border: '1px solid var(--glass)',
+          borderRadius: '12px', padding: '12px 20px',
+          fontSize: '13px', fontWeight: 600, color: 'var(--t1)',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.4)', zIndex: 1100,
+          whiteSpace: 'nowrap',
+        }}>
+          {remindToast}
+        </div>
+      )}
     </AppShell>
   )
 }

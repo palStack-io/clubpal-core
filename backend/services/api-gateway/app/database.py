@@ -154,10 +154,14 @@ def init_db():
             notify_events INTEGER DEFAULT 1,
             notify_reminders INTEGER DEFAULT 1,
             notify_invites INTEGER DEFAULT 1,
+            push_enabled INTEGER DEFAULT 1,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
         )
     """)
+    # Migrations for existing notification prefs table
+    cursor.execute("ALTER TABLE user_notification_prefs ADD COLUMN IF NOT EXISTS notify_invites INTEGER DEFAULT 1")
+    cursor.execute("ALTER TABLE user_notification_prefs ADD COLUMN IF NOT EXISTS push_enabled INTEGER DEFAULT 1")
 
     # User discover preferences (onboarding)
     cursor.execute("""
@@ -334,6 +338,21 @@ def get_user_by_email(email: str) -> dict:
     conn.close()
 
     return dict(row) if row else None
+
+
+def search_users_by_username(query: str, limit: int = 10) -> list:
+    """Search users by partial username match."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        """SELECT id, username, full_name, avatar_url FROM users
+           WHERE username ILIKE %s AND is_active = TRUE
+           ORDER BY username ASC LIMIT %s""",
+        (f"%{query.lower()}%", limit)
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 def get_user_count() -> int:
@@ -802,6 +821,7 @@ _DEFAULT_PREFS = {
     "notify_events":    True,
     "notify_reminders": True,
     "notify_invites":   True,
+    "push_enabled":     True,
 }
 
 
@@ -820,28 +840,30 @@ def get_notification_prefs(user_id: int) -> dict:
             "notify_events":    bool(row["notify_events"]),
             "notify_reminders": bool(row["notify_reminders"]),
             "notify_invites":   bool(row["notify_invites"]),
+            "push_enabled":     bool(row["push_enabled"]) if row.get("push_enabled") is not None else True,
         }
     return dict(_DEFAULT_PREFS)
 
 
 def set_notification_prefs(user_id: int, notify_rotation: bool = True,
                             notify_events: bool = True, notify_reminders: bool = True,
-                            notify_invites: bool = True) -> None:
+                            notify_invites: bool = True, push_enabled: bool = True) -> None:
     """Upsert notification preferences for a user."""
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO user_notification_prefs
-            (user_id, notify_rotation, notify_events, notify_reminders, notify_invites, updated_at)
-        VALUES (%s, %s, %s, %s, %s, NOW())
+            (user_id, notify_rotation, notify_events, notify_reminders, notify_invites, push_enabled, updated_at)
+        VALUES (%s, %s, %s, %s, %s, %s, NOW())
         ON CONFLICT (user_id) DO UPDATE SET
             notify_rotation  = EXCLUDED.notify_rotation,
             notify_events    = EXCLUDED.notify_events,
             notify_reminders = EXCLUDED.notify_reminders,
             notify_invites   = EXCLUDED.notify_invites,
+            push_enabled     = EXCLUDED.push_enabled,
             updated_at       = NOW()
     """, (user_id, int(notify_rotation), int(notify_events),
-          int(notify_reminders), int(notify_invites)))
+          int(notify_reminders), int(notify_invites), int(push_enabled)))
     conn.commit()
     conn.close()
 

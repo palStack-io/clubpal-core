@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react'
 import AvatarStack from '../ui/AvatarStack'
 import AnimatedBackground from '../ui/AnimatedBackground'
 import StatusChip from '../ui/StatusChip'
@@ -12,9 +13,14 @@ const ACTIVITY = {
   arts:   { emoji: '🎨', color: '#f59e0b', rgb: '245,158,11',  gradient: 'linear-gradient(135deg, rgba(245,158,11,0.10), rgba(245,158,11,0.04))' },
 }
 
+function toUTC(str) {
+  if (!str) return str
+  return /Z$|[+-]\d{2}:?\d{2}$/.test(str) ? str : `${str}Z`
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return null
-  const d = new Date(dateStr)
+  const d = new Date(toUTC(dateStr))
   return (
     d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
     ' @ ' +
@@ -23,6 +29,16 @@ function formatDate(dateStr) {
 }
 
 export default function EventHeroCard({ event, attendees = [], onBack, actions = [] }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const handler = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [menuOpen])
+
   if (!event) return null
 
   const type = (event.activity_type || 'dining').toLowerCase()
@@ -63,15 +79,36 @@ export default function EventHeroCard({ event, attendees = [], onBack, actions =
   return (
     <div
       style={{
-        background: hasCustomBg ? '#0a0a0f' : act.gradient,
+        background: (hasCustomBg || hasCover) ? '#0a0a0f' : act.gradient,
         position: 'relative',
         overflow: 'hidden',
-        borderBottom: hasCustomBg ? '1px solid rgba(255,255,255,0.08)' : '1px solid var(--glass)',
+        borderBottom: (hasCustomBg || hasCover) ? '1px solid rgba(255,255,255,0.08)' : '1px solid var(--glass)',
       }}
     >
       {hasCustomBg && <AnimatedBackground bgType={event.bg_type} bgValue={event.bg_value} />}
 
-      {!hasCustomBg && (
+      {hasCover && (
+        <>
+          <div
+            style={{
+              position: 'absolute', inset: 0,
+              backgroundImage: `url(${resolveMediaUrl(event.cover_url)})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              zIndex: 0,
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute', inset: 0,
+              background: 'linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.62) 100%)',
+              zIndex: 0,
+            }}
+          />
+        </>
+      )}
+
+      {!hasCustomBg && !hasCover && (
         <div
           style={{
             position: 'absolute',
@@ -99,27 +136,45 @@ export default function EventHeroCard({ event, attendees = [], onBack, actions =
         {onBack ? (
           <button onClick={onBack} style={btnStyle}>← Back</button>
         ) : <div />}
-        <div style={{ display: 'flex', gap: '6px' }}>
-          {actions.map((a, i) => (
-            <button key={i} onClick={a.onClick} style={btnStyle} disabled={a.loading}>
-              {a.label}
+        {actions.length > 0 && (
+          <div ref={menuRef} style={{ position: 'relative' }}>
+            <button onClick={() => setMenuOpen(v => !v)} style={{ ...btnStyle, padding: '6px 14px', fontSize: '16px', letterSpacing: '2px' }}>
+              ···
             </button>
-          ))}
-        </div>
+            {menuOpen && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+                background: 'var(--s2)', border: '1px solid var(--glass)',
+                borderRadius: '12px', padding: '6px', minWidth: '170px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.35)', zIndex: 100,
+              }}>
+                {actions.map((a, i) => (
+                  <button
+                    key={i}
+                    disabled={a.loading}
+                    onClick={() => { setMenuOpen(false); a.onClick() }}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '9px 12px', borderRadius: '8px',
+                      background: 'transparent', border: 'none',
+                      fontSize: '13px', fontWeight: 600, color: 'var(--t1)',
+                      cursor: 'pointer', transition: 'background 0.12s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--s3)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Content */}
       <div style={{ padding: '16px 24px 40px', position: 'relative', zIndex: 1 }}>
-        {hasCover && (
-          <img
-            src={resolveMediaUrl(event.cover_url)}
-            alt={event.title}
-            onError={e => { e.currentTarget.style.display = 'none' }}
-            style={{ width: '100%', height: '150px', objectFit: 'cover', borderRadius: '14px', marginBottom: '16px', display: 'block' }}
-          />
-        )}
-
-        <div style={{ fontSize: '48px', display: hasCover ? 'none' : 'block', marginBottom: '10px', lineHeight: 1 }}>
+        <div style={{ fontSize: '48px', display: (hasCover || hasCustomBg) ? 'none' : 'block', marginBottom: '10px', lineHeight: 1 }}>
           {act.emoji}
         </div>
 
@@ -148,6 +203,15 @@ export default function EventHeroCard({ event, attendees = [], onBack, actions =
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '14px' }}>
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: '3px',
+            background: `${act.color}dd`, color: '#fff',
+            fontSize: '9px', fontWeight: 900,
+            padding: '2px 7px', borderRadius: '100px',
+            letterSpacing: '0.5px', textTransform: 'uppercase',
+          }}>
+            📅 Event
+          </span>
           <StatusChip status={statusVariant} label={statusLabel} />
           <span
             style={{

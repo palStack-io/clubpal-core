@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react'
 import AvatarStack from '../ui/AvatarStack'
 import AnimatedBackground from '../ui/AnimatedBackground'
 import { resolveMediaUrl } from '../../utils/resolveMediaUrl'
@@ -12,6 +13,16 @@ const ACTIVITY = {
 }
 
 export default function GroupHeroCard({ group, members = [], rotation, currentUserId, onBack, actions = [], inviteCode }) {
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuRef = useRef(null)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const handler = (e) => { if (menuRef.current && !menuRef.current.contains(e.target)) setMenuOpen(false) }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [menuOpen])
+
   if (!group) return null
 
   const type = (group.activity_type || 'dining').toLowerCase()
@@ -81,13 +92,40 @@ export default function GroupHeroCard({ group, members = [], rotation, currentUs
         {onBack ? (
           <button onClick={onBack} style={btnStyle}>← Back</button>
         ) : <div />}
-        <div style={{ display: 'flex', gap: '6px' }}>
-          {actions.map((a, i) => (
-            <button key={i} onClick={a.onClick} style={btnStyle} disabled={a.loading}>
-              {a.label}
+        {actions.length > 0 && (
+          <div ref={menuRef} style={{ position: 'relative' }}>
+            <button onClick={() => setMenuOpen(v => !v)} style={{ ...btnStyle, padding: '6px 14px', fontSize: '16px', letterSpacing: '2px' }}>
+              ···
             </button>
-          ))}
-        </div>
+            {menuOpen && (
+              <div style={{
+                position: 'absolute', top: 'calc(100% + 6px)', right: 0,
+                background: 'var(--s2)', border: '1px solid var(--glass)',
+                borderRadius: '12px', padding: '6px', minWidth: '170px',
+                boxShadow: '0 8px 24px rgba(0,0,0,0.35)', zIndex: 100,
+              }}>
+                {actions.map((a, i) => (
+                  <button
+                    key={i}
+                    disabled={a.loading}
+                    onClick={() => { setMenuOpen(false); a.onClick() }}
+                    style={{
+                      display: 'block', width: '100%', textAlign: 'left',
+                      padding: '9px 12px', borderRadius: '8px',
+                      background: 'transparent', border: 'none',
+                      fontSize: '13px', fontWeight: 600, color: 'var(--t1)',
+                      cursor: 'pointer', transition: 'background 0.12s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = 'var(--s3)' }}
+                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                  >
+                    {a.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Content */}

@@ -26,9 +26,15 @@ export default function EventListRow({ event }) {
   const type = event.activity_type?.toLowerCase() || 'dining'
   const meta = activityMeta[type] || activityMeta.dining
   const rawDate = event.event_date || event.scheduled_date
+  const toUTC = (s) => s && /Z$|[+-]\d{2}:?\d{2}$/.test(s) ? s : s ? `${s}Z` : s
   const dateStr = rawDate
-    ? format(new Date(rawDate), 'MMM d · h:mm a')
+    ? format(new Date(toUTC(rawDate)), 'MMM d · h:mm a')
     : 'TBD'
+
+  // Resolve thumbnail: prefer cover_url, fall back to bg_value when bg_type is 'image'
+  const thumbUrl = event.cover_url || (event.bg_type === 'image' && event.bg_value ? event.bg_value : null)
+  // Show animated bg tile only for non-image animated types scoped to cards
+  const showAnimatedBg = !thumbUrl && event.bg_scope === 'cards_hero' && event.bg_type && event.bg_type !== 'default' && event.bg_type !== 'image'
 
   return (
     <div
@@ -49,16 +55,9 @@ export default function EventListRow({ event }) {
       onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--glass)'}
     >
       {/* Thumbnail */}
-      {event.bg_scope === 'cards_hero' && event.bg_type && event.bg_type !== 'default' ? (
-        <div style={{ width: '44px', height: '44px', borderRadius: '10px', flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
-          <AnimatedBackground bgType={event.bg_type} bgValue={event.bg_value} />
-          <span style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', fontSize: '20px' }}>
-            {meta.emoji}
-          </span>
-        </div>
-      ) : event.cover_url ? (
+      {thumbUrl ? (
         <img
-          src={resolveMediaUrl(event.cover_url)}
+          src={resolveMediaUrl(thumbUrl)}
           alt=""
           style={{
             width: '44px',
@@ -68,6 +67,13 @@ export default function EventListRow({ event }) {
             flexShrink: 0,
           }}
         />
+      ) : showAnimatedBg ? (
+        <div style={{ width: '44px', height: '44px', borderRadius: '10px', flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
+          <AnimatedBackground bgType={event.bg_type} bgValue={event.bg_value} />
+          <span style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%', height: '100%', fontSize: '20px' }}>
+            {meta.emoji}
+          </span>
+        </div>
       ) : (
         <div
           style={{

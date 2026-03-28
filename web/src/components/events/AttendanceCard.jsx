@@ -4,6 +4,11 @@ import Avatar from '../ui/Avatar'
 import StatusChip from '../ui/StatusChip'
 import UserStatsModal from '../ui/UserStatsModal'
 
+function toUTC(str) {
+  if (!str) return str
+  return /Z$|[+-]\d{2}:?\d{2}$/.test(str) ? str : `${str}Z`
+}
+
 const rsvpStatusMap = {
   going: 'going',
   maybe: 'maybe',
@@ -74,7 +79,7 @@ export default function AttendanceCard({
 
   const deadlineLabel = (() => {
     if (!rsvpDeadline || eventStatus !== 'scheduled') return null
-    const d = new Date(rsvpDeadline)
+    const d = new Date(toUTC(rsvpDeadline))
     const now = new Date()
     if (d <= now) return null
     const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']

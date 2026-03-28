@@ -1,7 +1,14 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List
+from fastapi.encoders import ENCODERS_BY_TYPE
+from typing import List, Optional
+from datetime import datetime
+ENCODERS_BY_TYPE[datetime] = lambda dt: dt.strftime('%Y-%m-%dT%H:%M:%SZ') if dt else None
 import httpx
+import os
+import logging
+
+logger = logging.getLogger(__name__)
 
 from app.models import (
     RatingCreate, RatingUpdate, RatingResponse,
@@ -18,17 +25,37 @@ from app.database import (
 app = FastAPI(title="ClubPal Ratings Service", version="1.0.0")
 
 # CORS
+_ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "*").split(",")]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Service URLs
-GROUPS_SERVICE_URL = "http://groups-service:8002"
-EVENTS_SERVICE_URL = "http://events-service:8003"
+GROUPS_SERVICE_URL = os.getenv("GROUPS_SERVICE_URL", "http://groups-service:8002")
+EVENTS_SERVICE_URL = os.getenv("EVENTS_SERVICE_URL", "http://events-service:8003")
+GATEWAY_URL = os.getenv("GATEWAY_URL", "http://api-gateway:8001")
+INTERNAL_API_SECRET = os.getenv("INTERNAL_API_SECRET", "")
+
+
+def get_current_user_id(authorization: Optional[str] = Header(None)) -> int:
+    """Validate Bearer token against gateway and return the authenticated user's ID."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid authorization")
+    try:
+        r = httpx.get(
+            f"{GATEWAY_URL}/auth/me",
+            headers={"Authorization": authorization},
+            timeout=5.0,
+        )
+        if r.status_code == 200:
+            return r.json()["id"]
+    except Exception:
+        logger.warning("Could not reach gateway for auth validation")
+    raise HTTPException(status_code=401, detail="Invalid or expired session")
 
 
 @app.on_event("startup")
@@ -48,7 +75,7 @@ async def health_check():
 # ===== Rating Endpoints =====
 
 @app.post("/ratings", response_model=RatingResponse, status_code=201)
-async def create_rating_endpoint(rating_data: RatingCreate, user_id: int):
+async def create_rating_endpoint(rating_data: RatingCreate, user_id: int = Depends(get_current_user_id)):
     """Create a new rating."""
     # Verify event exists via events service
     async with httpx.AsyncClient() as client:
@@ -121,7 +148,7 @@ async def get_user_ratings_received(user_id: int):
 
 
 @app.patch("/ratings/{rating_id}", response_model=RatingResponse)
-async def update_rating_endpoint(rating_id: int, rating_data: RatingUpdate, user_id: int):
+async def update_rating_endpoint(rating_id: int, rating_data: RatingUpdate, user_id: int = Depends(get_current_user_id)):
     """Update a rating."""
     # Get existing rating
     rating = get_rating(rating_id)
@@ -137,7 +164,8 @@ async def update_rating_endpoint(rating_id: int, rating_data: RatingUpdate, user
     success = update_rating(
         rating_id,
         score=rating_data.score,
-        comment=rating_data.comment
+        comment=rating_data.comment,
+        tags=rating_data.tags,
     )
 
     if not success:
@@ -148,7 +176,7 @@ async def update_rating_endpoint(rating_id: int, rating_data: RatingUpdate, user
 
 
 @app.delete("/ratings/{rating_id}", status_code=204)
-async def delete_rating_endpoint(rating_id: int, user_id: int):
+async def delete_rating_endpoint(rating_id: int, user_id: int = Depends(get_current_user_id)):
     """Delete a rating."""
     # Get existing rating
     rating = get_rating(rating_id)
@@ -184,11 +212,6 @@ async def get_user_stats_endpoint(user_id: int):
             score_3_count=0,
             score_4_count=0,
             score_5_count=0,
-            score_6_count=0,
-            score_7_count=0,
-            score_8_count=0,
-            score_9_count=0,
-            score_10_count=0,
             total_hosted_events=0
         )
 
@@ -251,8 +274,10 @@ async def get_group_leaderboard_endpoint(group_id: int):
 
 
 @app.post("/users/{user_id}/hosted-events/increment", status_code=200)
-async def increment_hosted_events_endpoint(user_id: int):
+async def increment_hosted_events_endpoint(user_id: int, x_internal_secret: Optional[str] = Header(None)):
     """Increment hosted events count for a user (called by events service)."""
+    if not INTERNAL_API_SECRET or x_internal_secret != INTERNAL_API_SECRET:
+        raise HTTPException(status_code=403, detail="Internal access only")
     increment_hosted_events(user_id)
     return {"message": "Hosted events count incremented"}
 

@@ -1,6 +1,9 @@
 from fastapi import FastAPI, HTTPException, Header, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.encoders import ENCODERS_BY_TYPE
 from typing import List, Optional
+from datetime import datetime
+ENCODERS_BY_TYPE[datetime] = lambda dt: dt.strftime('%Y-%m-%dT%H:%M:%SZ') if dt else None
 import uuid
 import httpx
 import os
@@ -37,8 +40,8 @@ GATEWAY_SERVICE_URL = os.getenv("GATEWAY_SERVICE_URL", "http://api-gateway:8001"
 EVENTS_SERVICE_URL = os.getenv("EVENTS_SERVICE_URL", "http://events-service:8003")
 
 
-def get_current_user_id(authorization: Optional[str] = Header(None)) -> int:
-    """Validate Bearer token against gateway and return the authenticated user's ID."""
+def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
+    """Validate Bearer token against gateway and return the full user dict."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(status_code=401, detail="Missing or invalid authorization")
     try:
@@ -48,10 +51,15 @@ def get_current_user_id(authorization: Optional[str] = Header(None)) -> int:
             timeout=5.0,
         )
         if r.status_code == 200:
-            return r.json()["id"]
+            return r.json()
     except Exception:
         pass
     raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+
+def get_current_user_id(user: dict = Depends(get_current_user)) -> int:
+    """Return just the authenticated user's ID (backward-compat shim)."""
+    return user["id"]
 
 app = FastAPI(title="ClubPal Groups Service", version="1.0.0")
 
@@ -146,6 +154,14 @@ async def update_group_endpoint(group_id: int, group_data: GroupUpdate, user_id:
     if not get_group(group_id):
         raise HTTPException(status_code=404, detail="Group not found")
 
+    # If switching to instant, auto-approve any pending join requests
+    old_group = get_group(group_id)
+    switching_to_instant = (
+        group_data.join_behavior == "instant"
+        and old_group
+        and old_group.get("join_behavior") == "approval"
+    )
+
     # Update group
     success = update_group(
         group_id,
@@ -157,10 +173,41 @@ async def update_group_endpoint(group_id: int, group_data: GroupUpdate, user_id:
         bg_value=group_data.bg_value,
         bg_scope=group_data.bg_scope,
         activity_type=group_data.activity_type,
+        join_behavior=group_data.join_behavior,
     )
 
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update group")
+
+    # Auto-approve pending requests when switching to instant join
+    if switching_to_instant:
+        pending = get_pending_join_requests(group_id)
+        group = get_group(group_id)
+        group_name = group["name"] if group else f"Group {group_id}"
+        internal_secret = os.getenv("INTERNAL_API_SECRET", "")
+        for req in pending:
+            try:
+                update_join_request(req["id"], "approved", user_id)
+                add_member(group_id, req["user_id"])
+                await _auto_rsvp_new_member(group_id, req["user_id"])
+                async with httpx.AsyncClient() as client:
+                    try:
+                        await client.post(
+                            f"{GATEWAY_SERVICE_URL}/internal/notify/event",
+                            json={
+                                "user_ids": [req["user_id"]],
+                                "group_id": group_id,
+                                "event_title": f"🎉 You're in! Welcome to {group_name}",
+                                "group_name": group_name,
+                                "type": "invite",
+                            },
+                            headers={"x-internal-secret": internal_secret},
+                            timeout=5.0,
+                        )
+                    except Exception:
+                        pass
+            except Exception:
+                pass
 
     group = get_group(group_id)
     return GroupResponse(**group)
@@ -216,6 +263,27 @@ async def add_member_endpoint(group_id: int, member_data: MemberAdd):
         raise HTTPException(status_code=400, detail="User is already a member")
 
     await _auto_rsvp_new_member(group_id, member_data.user_id)
+
+    # Notify new member they were added
+    group = get_group(group_id)
+    group_name = group["name"] if group else f"Group {group_id}"
+    internal_secret = os.getenv("INTERNAL_API_SECRET", "")
+    async with httpx.AsyncClient() as client:
+        try:
+            await client.post(
+                f"{GATEWAY_SERVICE_URL}/internal/notify/event",
+                json={
+                    "user_ids": [member_data.user_id],
+                    "group_id": group_id,
+                    "event_title": f"🤝 You've been added to {group_name}",
+                    "group_name": group_name,
+                    "type": "invite",
+                },
+                headers={"x-internal-secret": internal_secret},
+                timeout=5.0,
+            )
+        except Exception:
+            pass
 
     member = get_member(group_id, member_data.user_id)
     return MemberResponse(**member)
@@ -557,11 +625,19 @@ def _build_poll_summary(poll_id: int, user_id: int, member_count: int) -> dict:
     responded_count = len(responses)
     has_responded = my_response is not None
     poll_is_closed = poll and poll['status'] != 'open'
-    counts = {'in': 0, 'done_loved': 0, 'done_pass': 0, 'cant_make_it': 0}
+
+    # Build counts keyed by option value — dynamic for custom options, fixed for default
+    custom_opts = poll.get('custom_options') if poll else None
+    if custom_opts:
+        counts = {opt.get('value', f"opt_{i}"): 0 for i, opt in enumerate(custom_opts)}
+    else:
+        counts = {'in': 0, 'done_loved': 0, 'done_pass': 0, 'cant_make_it': 0}
+
     if has_responded or poll_is_closed:
         for r in responses:
-            if r['response'] in counts:
-                counts[r['response']] += 1
+            key = r['response']
+            counts[key] = counts.get(key, 0) + 1
+
     return {
         'total_members': member_count,
         'responded': responded_count,
@@ -576,6 +652,7 @@ def _poll_to_model(poll: dict, summary: dict) -> PollResponseModel:
         id=poll['id'],
         group_id=poll['group_id'],
         created_by=poll['created_by'],
+        creator_username=poll.get('creator_username'),
         activity_name=poll['activity_name'],
         activity_type=poll.get('activity_type'),
         activity_id=poll.get('activity_id'),
@@ -585,19 +662,28 @@ def _poll_to_model(poll: dict, summary: dict) -> PollResponseModel:
         converted_event_id=poll.get('converted_event_id'),
         created_at=poll['created_at'],
         summary=summary,
+        custom_options=poll.get('custom_options'),
     )
 
 
 # ===== Poll Endpoints =====
 
 @app.post("/groups/{group_id}/polls", response_model=PollResponseModel, status_code=201)
-async def create_poll_endpoint(group_id: int, data: PollCreate, user_id: int = Depends(get_current_user_id)):
+async def create_poll_endpoint(group_id: int, data: PollCreate, user: dict = Depends(get_current_user)):
     """Create a poll for a group (picker only)."""
+    user_id = user["id"]
+    creator_username = user.get("username") or user.get("full_name") or f"#{user_id}"
+
     group = get_group(group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
     if not is_member(group_id, user_id):
         raise HTTPException(status_code=403, detail="Only members can create polls")
+
+    # Stamp each custom option with a stable value key (index-based)
+    opts = None
+    if data.custom_options:
+        opts = [dict(opt, value=f"opt_{i}") for i, opt in enumerate(data.custom_options)]
 
     poll_id = create_poll(
         group_id=group_id,
@@ -607,6 +693,8 @@ async def create_poll_endpoint(group_id: int, data: PollCreate, user_id: int = D
         activity_id=data.activity_id,
         note=data.note,
         deadline=data.deadline,
+        custom_options=opts,
+        creator_username=creator_username,
     )
 
     # Notify group via gateway (best-effort)
@@ -833,12 +921,37 @@ async def join_via_invite_code(code: str, user_id: int = Depends(get_current_use
     if is_member(group_id, user_id):
         raise HTTPException(status_code=409, detail="You are already a member of this group")
 
+    group = get_group(group_id)
+    group_name = group["name"] if group else f"Group {group_id}"
+    members = get_members(group_id)
+    admin_ids = [m["user_id"] for m in members if m["role"] in ("owner", "admin")]
+    internal_secret = os.getenv("INTERNAL_API_SECRET", "")
+
     if row["join_behavior"] == "instant":
         success = add_member(group_id, user_id)
         if not success:
             raise HTTPException(status_code=409, detail="Could not add member")
         increment_invite_used_count(row["id"])
         await _auto_rsvp_new_member(group_id, user_id)
+
+        # Notify admins that someone new joined
+        async with httpx.AsyncClient() as client:
+            try:
+                await client.post(
+                    f"{GATEWAY_SERVICE_URL}/internal/notify/event",
+                    json={
+                        "user_ids": admin_ids,
+                        "group_id": group_id,
+                        "event_title": f"🤝 New member joined {group_name}",
+                        "group_name": group_name,
+                        "type": "invite",
+                    },
+                    headers={"x-internal-secret": internal_secret},
+                    timeout=5.0,
+                )
+            except Exception:
+                pass
+
         return {"joined": True, "group_id": group_id}
 
     else:  # approval
@@ -850,24 +963,17 @@ async def join_via_invite_code(code: str, user_id: int = Depends(get_current_use
         req = create_join_request(group_id, user_id, row["id"])
         increment_invite_used_count(row["id"])
 
-        # Notify group admin(s)
-        group = get_group(group_id)
-        group_name = group["name"] if group else f"Group {group_id}"
-        members = get_members(group_id)
-        admin_ids = [m["user_id"] for m in members if m["role"] in ("owner", "admin")]
-        internal_secret = os.getenv("INTERNAL_API_SECRET", "")
+        # Notify group admin(s) — pending approval needed
         async with httpx.AsyncClient() as client:
             try:
                 await client.post(
                     f"{GATEWAY_SERVICE_URL}/internal/notify/event",
                     json={
-                        "group_id": group_id,
                         "user_ids": admin_ids,
-                        "event_title": f"Someone wants to join {group_name}",
+                        "group_id": group_id,
+                        "event_title": f"✋ Join request for {group_name}",
                         "group_name": group_name,
-                        "event_date": "",
-                        "link_type": "group",
-                        "link_id": str(group_id),
+                        "type": "invite",
                     },
                     headers={"x-internal-secret": internal_secret},
                     timeout=5.0,
@@ -893,6 +999,32 @@ async def join_requests_count(group_id: int, user_id: int = Depends(get_current_
     if not is_admin_or_owner(group_id, user_id):
         raise HTTPException(status_code=403, detail="Not authorized")
     return {"count": get_pending_join_requests_count(group_id)}
+
+
+@app.post("/groups/{group_id}/notify-join-request", status_code=200)
+async def notify_join_request(group_id: int, user_id: int = Depends(get_current_user_id)):
+    """Notify group admins that a join request was submitted. Best-effort."""
+    group = get_group(group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Group not found")
+    admins = [m for m in get_members(group_id) if m['role'] in ('owner', 'admin')]
+    async with httpx.AsyncClient() as client:
+        for admin in admins:
+            try:
+                await client.post(
+                    f"{GATEWAY_SERVICE_URL}/internal/notify/push",
+                    json={
+                        "user_id": admin['user_id'],
+                        "title": f"New join request — {group['name']}",
+                        "body": "Someone wants to join your club. Tap to review.",
+                        "link_type": "group",
+                        "link_id": group_id,
+                    },
+                    timeout=3.0,
+                )
+            except Exception:
+                pass
+    return {"notified": len(admins)}
 
 
 @app.patch("/join-requests/{request_id}", response_model=JoinRequestResponse)
@@ -933,13 +1065,11 @@ async def review_join_request(
             await client.post(
                 f"{GATEWAY_SERVICE_URL}/internal/notify/event",
                 json={
-                    "group_id": req["group_id"],
                     "user_ids": [req["user_id"]],
+                    "group_id": req["group_id"],
                     "event_title": notif_title,
                     "group_name": group_name,
-                    "event_date": "",
-                    "link_type": link_type,
-                    "link_id": str(req["group_id"]),
+                    "type": "invite",
                 },
                 headers={"x-internal-secret": internal_secret},
                 timeout=5.0,

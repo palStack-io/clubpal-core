@@ -1040,7 +1040,7 @@ function NotificationsSection() {
   useEffect(() => {
     gatewayClient.get('/users/me/notification-prefs')
       .then(r => setPrefs(r.data))
-      .catch(() => setPrefs({ notify_rotation: true, notify_events: true, notify_reminders: true, notify_invites: true }))
+      .catch(() => setPrefs({ notify_rotation: true, notify_events: true, notify_reminders: true, notify_invites: true, push_enabled: true }))
       .finally(() => setLoading(false))
   }, [])
 
@@ -1060,13 +1060,22 @@ function NotificationsSection() {
     <div>
       <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--t1)', marginBottom: '4px' }}>Notifications</div>
       <p style={{ fontSize: '12px', color: 'var(--t3)', marginBottom: '20px' }}>
-        Choose which emails clubPal sends you. Transactional emails (invites, verification, password reset) are always sent.
+        Control how clubPal notifies you. Transactional messages (password reset, verification) are always sent.
       </p>
 
       {loading ? (
         <div style={{ color: 'var(--t3)', fontSize: '13px' }}>Loading…</div>
       ) : prefs && (
         <>
+          <FormSection title="Push Notifications">
+            <NotificationRow
+              label="Enable push notifications"
+              description="Receive push alerts on your mobile device for all events, reminders, and updates."
+              checked={prefs.push_enabled ?? true}
+              onChange={() => toggle('push_enabled')}
+            />
+          </FormSection>
+
           <FormSection title="Email Notifications">
             <NotificationRow
               label="Rotation alerts"
@@ -1075,21 +1084,21 @@ function NotificationsSection() {
               onChange={() => toggle('notify_rotation')}
             />
             <NotificationRow
-              label="New events"
-              description="Email when someone schedules a new event in one of your clubs."
+              label="New events &amp; cancellations"
+              description="Email when someone creates or cancels an event in one of your clubs."
               checked={prefs.notify_events}
               onChange={() => toggle('notify_events')}
             />
             <NotificationRow
               label="Event reminders"
-              description="Reminder email before an upcoming event you're attending."
+              description="Reminder email 24h and 1h before an upcoming event, and when RSVP deadlines approach."
               checked={prefs.notify_reminders}
               onChange={() => toggle('notify_reminders')}
             />
             <div style={{ paddingTop: '14px' }}>
               <NotificationRow
-                label="Club invitations"
-                description="Email when someone invites you to join a club."
+                label="Club membership"
+                description="Email when you are added to a club, or when your join request is approved or declined."
                 checked={prefs.notify_invites}
                 onChange={() => toggle('notify_invites')}
               />
@@ -1492,6 +1501,8 @@ function DiscoverSection({ user }) {
         location_address: geoAddress || prefs.location_address,
       })
       setPrefs(updated)
+      // Clear cached discover state so the feed reloads with new prefs on next visit
+      try { sessionStorage.removeItem('discover_explore') } catch {}
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
     } catch (e) {

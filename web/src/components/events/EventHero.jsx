@@ -22,9 +22,14 @@ const GRADIENTS = {
   arts:   'linear-gradient(135deg, rgba(245,158,11,0.12) 0%, rgba(245,158,11,0.04) 100%)',
 }
 
+function toUTC(str) {
+  if (!str) return str
+  return /Z$|[+-]\d{2}:?\d{2}$/.test(str) ? str : `${str}Z`
+}
+
 function formatDate(dateStr) {
   if (!dateStr) return null
-  const d = new Date(dateStr)
+  const d = new Date(toUTC(dateStr))
   return (
     d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) +
     ' @ ' +
@@ -65,6 +70,9 @@ export default function EventHero({ event, onRsvp, onEdit, currentUserId }) {
       : { background: bg }
 
   return (
+    <div style={{ position: 'relative', overflow: 'hidden' }}>
+    {/* Event accent bar */}
+    <div style={{ height: '3px', background: `linear-gradient(90deg, ${act.color}, transparent)`, opacity: 0.65 }} />
     <div
       style={{
         position: 'relative',
@@ -219,6 +227,15 @@ export default function EventHero({ event, onRsvp, onEdit, currentUserId }) {
             alignItems: 'center',
           }}
         >
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: '3px',
+            background: `${act.color}dd`, color: '#fff',
+            fontSize: '9px', fontWeight: 900,
+            padding: '2px 7px', borderRadius: '100px',
+            letterSpacing: '0.5px', textTransform: 'uppercase',
+          }}>
+            📅 Event
+          </span>
           <StatusChip status={statusVariant} label={statusLabel} />
 
           {/* Activity chip */}
@@ -269,6 +286,7 @@ export default function EventHero({ event, onRsvp, onEdit, currentUserId }) {
           )}
         </div>
       </div>
+    </div>
     </div>
   )
 }

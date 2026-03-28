@@ -9,6 +9,7 @@ import { enrichApi } from '../../api/enrich'
 import { groupsApi } from '../../api/groups'
 import { eventsApi } from '../../api/events'
 import { useAuth } from '../../contexts/AuthContext'
+import { gatewayClient } from '../../api/client'
 
 // ─── Per-tab data shape ───────────────────────────────────────────────────────
 const TAB_SCHEMA = {
@@ -118,28 +119,10 @@ function loadExploreState() {
   } catch { return null }
 }
 
-// ─── Starred items via localStorage ──────────────────────────────────────────
-const STAR_KEY      = 'clubpal_starred'
-const STAR_DATA_KEY = 'clubpal_starred_data'
-
-function loadStarred() {
-  try { return new Set(JSON.parse(localStorage.getItem(STAR_KEY) || '[]')) } catch { return new Set() }
-}
-function loadStarredItems() {
-  try { return Object.values(JSON.parse(localStorage.getItem(STAR_DATA_KEY) || '{}')) } catch { return [] }
-}
-function toggleStarred(id, item) {
-  const set  = loadStarred()
-  const data = (() => { try { return JSON.parse(localStorage.getItem(STAR_DATA_KEY) || '{}') } catch { return {} } })()
-  if (set.has(id)) { set.delete(id); delete data[id] }
-  else             { set.add(id);    if (item) data[id] = item }
-  localStorage.setItem(STAR_KEY,      JSON.stringify([...set]))
-  localStorage.setItem(STAR_DATA_KEY, JSON.stringify(data))
-  return new Set(set)
-}
+// ─── Bookmarked items via backend API ────────────────────────────────────────
 
 // ─── Starred tab definition ───────────────────────────────────────────────────
-const STARRED_TAB = { key: 'starred', label: 'Saved', emoji: '★', color: '#f59e0b', headline: 'revisit', eyebrow: 'Your Saved Items' }
+const STARRED_TAB = { key: 'starred', label: 'Bookmarked', emoji: '🔖', color: '#f43f5e', headline: 'revisit', eyebrow: 'Your Bookmarks' }
 
 // ─── Tab strip ────────────────────────────────────────────────────────────────
 function TabStrip({ tabs, activeKey, onSelect, starredCount }) {
@@ -231,22 +214,23 @@ function PickCard({ item, tabKey, tabColor, starred, onStar, onPick, onPoll, onN
         {/* Gradient overlay for readability */}
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.6) 0%, transparent 50%)' }} />
 
-        {/* Star button */}
+        {/* Bookmark button */}
         <button
           onClick={e => { e.stopPropagation(); onStar(item.id, item) }}
+          title={starred ? 'Remove bookmark' : 'Bookmark'}
           style={{
             position: 'absolute', top: '8px', right: '8px',
             width: '28px', height: '28px', borderRadius: '50%',
-            background: starred ? 'rgba(245,158,11,0.9)' : 'rgba(0,0,0,0.45)',
+            background: starred ? 'rgba(244,63,94,0.85)' : 'rgba(0,0,0,0.45)',
             backdropFilter: 'blur(6px)',
-            border: `1px solid ${starred ? '#f59e0b' : 'rgba(255,255,255,0.15)'}`,
+            border: `1px solid ${starred ? '#f43f5e' : 'rgba(255,255,255,0.15)'}`,
             color: starred ? '#fff' : 'rgba(255,255,255,0.6)',
             fontSize: '13px', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             transition: 'all 0.15s',
           }}
         >
-          {starred ? '★' : '☆'}
+          {starred ? '🔖' : '🔖'}
         </button>
 
         {/* Category chip */}
@@ -479,21 +463,27 @@ async function fetchTabItems(userId, tab) {
   }
 }
 
+// Pref activity keys → tab apiType (they already match except these)
+const PREF_TO_APITYPE = { hiking: 'hiking', gaming: 'gaming' }
+const apiTypeFromPref = (p) => PREF_TO_APITYPE[p] ?? p
+
 // ─── Main page ────────────────────────────────────────────────────────────────
 export default function DiscoverExplore() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const [activeTabKey, setActiveTabKey] = useState(() => loadExploreState()?.tabKey || 'all')
+  const [preferredActivities, setPreferredActivities] = useState([])
   const [picks, setPicks] = useState({})
   const [loading, setLoading] = useState({})
   const [searchResults, setSearchResults] = useState(() => loadExploreState()?.searchResults ?? null)
-  const [starred, setStarred] = useState(loadStarred)
+  const [starred, setStarred] = useState(() => new Set())
+  const [starredItemsList, setStarredItemsList] = useState([])
   const [pickItem, setPickItem] = useState(null)  // { name, location, tabKey }
   const [pollItem, setPollItem] = useState(null)  // { name, tabKey }
   const [trendingItems, setTrendingItems] = useState([])
   const [trendingLoaded, setTrendingLoaded] = useState(false)
 
-  const activeTab = TABS.find(t => t.key === activeTabKey)
+  const activeTab = TABS.find(t => t.key === activeTabKey) || TABS[0]
 
   // Map tab key → apiType (for modals)
   const tabApiType = activeTab?.apiType
@@ -505,7 +495,43 @@ export default function DiscoverExplore() {
   }
 
   const isStarredView = activeTabKey === 'starred'
-  const starredItemsList = isStarredView ? loadStarredItems() : []
+
+  // Load bookmarks from backend on mount
+  useEffect(() => {
+    if (!user?.id) return
+    gatewayClient.get('/users/me/saved')
+      .then(res => {
+        const raw = Array.isArray(res.data) ? res.data : []
+        setStarred(new Set(raw.map(it => String(it.item_id))))
+        setStarredItemsList(raw.map(it => ({
+          id: it.item_id,
+          _tabKey: it.item_type,
+          title: it.item_name,
+          name: it.item_name,
+          img: it.item_meta?.photo || null,
+          sub: it.item_meta?.subtitle || null,
+          rating: it.item_meta?.rating || null,
+        })))
+      })
+      .catch(() => {})
+  }, [user?.id])
+
+  // Load user prefs to filter tabs
+  useEffect(() => {
+    if (!user?.id) return
+    gatewayClient.get(`/users/${user.id}/preferences`)
+      .then(res => {
+        const acts = res.data?.activities ?? res.data?.prefs?.activities ?? []
+        if (Array.isArray(acts) && acts.length > 0) setPreferredActivities(acts)
+      })
+      .catch(() => {})
+  }, [user?.id])
+
+  // Tabs visible to user — always show "all"; show others only if in user prefs (or no prefs set)
+  const visibleTabs = TABS.filter(t =>
+    t.key === 'all' || !preferredActivities.length ||
+    preferredActivities.some(p => apiTypeFromPref(p) === t.apiType)
+  )
 
   // Load real popular data for the "All" tab on mount
   useEffect(() => {
@@ -618,10 +644,36 @@ export default function DiscoverExplore() {
     } catch { setSearchResults([]) }
   }, [activeTabKey])
 
-  const handleStar = (id, item) => setStarred(toggleStarred(id, item))
+  const handleStar = (id, item) => {
+    const strId = String(id)
+    const itemType = item?._tabKey || activeTabKey || 'dining'
+    if (starred.has(strId)) {
+      setStarred(prev => { const next = new Set(prev); next.delete(strId); return next })
+      setStarredItemsList(prev => prev.filter(it => String(it.id) !== strId))
+      gatewayClient.delete(`/users/me/saved/${itemType}/${encodeURIComponent(strId)}`).catch(() => {})
+    } else {
+      setStarred(prev => new Set([...prev, strId]))
+      setStarredItemsList(prev => [{
+        id: strId, _tabKey: itemType,
+        title: item?.name || item?.title || strId,
+        name: item?.name || item?.title || strId,
+        img: item?.img || null,
+        sub: item?.sub || null,
+        rating: item?.rating || null,
+      }, ...prev])
+      gatewayClient.post('/users/me/saved', {
+        item_type: itemType,
+        item_id: strId,
+        item_name: item?.name || item?.title || strId,
+        item_meta: { photo: item?.img, subtitle: item?.sub, rating: item?.rating },
+      }).catch(() => {})
+    }
+  }
 
   const handlePick = (item) => {
-    setPickItem({ name: item.name, location: item.location, imageUrl: item.imageUrl || null, tabKey: item._tabKey || activeTabKey })
+    const raw = item._raw || {}
+    const description = (raw.overview || raw.synopsis || raw.description || raw.about || raw.summary || '').trim() || null
+    setPickItem({ name: item.name, location: item.location, imageUrl: item.imageUrl || null, tabKey: item._tabKey || activeTabKey, description })
   }
   const handlePoll = (item) => {
     setPollItem({ name: item.name, tabKey: item._tabKey || activeTabKey })
@@ -659,20 +711,20 @@ export default function DiscoverExplore() {
         @keyframes cpShimmer { 0%,100%{opacity:.5} 50%{opacity:.9} }
       `}</style>
 
-      <TabStrip tabs={TABS} activeKey={activeTabKey} onSelect={handleTabSelect} starredCount={starred.size} />
+      <TabStrip tabs={visibleTabs} activeKey={activeTabKey} onSelect={handleTabSelect} starredCount={starred.size} />
 
       {/* ── Starred view ── */}
       {isStarredView ? (
         <div style={{ padding: '28px 24px 40px', maxWidth: '1200px', position: 'relative', zIndex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
-            <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t1)', margin: 0 }}>★ Saved Items</h2>
-            <span style={{ fontSize: '12px', color: 'var(--t4)' }}>{starredItemsList.length} saved</span>
+            <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t1)', margin: 0 }}>🔖 Bookmarks</h2>
+            <span style={{ fontSize: '12px', color: 'var(--t4)' }}>{starredItemsList.length} bookmarked</span>
           </div>
           {starredItemsList.length === 0 ? (
             <div style={{ padding: '60px 24px', textAlign: 'center', background: 'var(--s1)', border: '1px solid var(--glass)', borderRadius: '16px' }}>
-              <div style={{ fontSize: '40px', marginBottom: '10px' }}>☆</div>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--t2)', marginBottom: '4px' }}>Nothing saved yet</div>
-              <div style={{ fontSize: '12px', color: 'var(--t3)' }}>Tap the ★ on any card to save it here</div>
+              <div style={{ fontSize: '40px', marginBottom: '10px' }}>🔖</div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--t2)', marginBottom: '4px' }}>No bookmarks yet</div>
+              <div style={{ fontSize: '12px', color: 'var(--t3)' }}>Tap 🔖 on any card to bookmark it</div>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: '14px' }}>
@@ -755,7 +807,7 @@ export default function DiscoverExplore() {
                   item={item}
                   tabKey={activeTabKey}
                   tabColor={activeTab?.color}
-                  starred={starred.has(item.id)}
+                  starred={starred.has(String(item.id))}
                   onStar={handleStar}
                   onPick={handlePick}
                   onPoll={handlePoll}
@@ -792,6 +844,7 @@ export default function DiscoverExplore() {
           initialTitle={pickItem.name}
           initialLocation={pickItem.location}
           initialImageUrl={pickItem.imageUrl}
+          initialDescription={pickItem.description}
           activityType={getApiType(pickItem.tabKey)}
           onClose={() => setPickItem(null)}
           onCreated={(id) => { setPickItem(null); navigate(`/events/${id}`) }}

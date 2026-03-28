@@ -4,6 +4,7 @@ import Button from '../ui/Button'
 import Avatar from '../ui/Avatar'
 import { groupsApi } from '../../api/groups'
 import { gatewayClient } from '../../api/client'
+import InviteMemberModal from './InviteMemberModal'
 import BackgroundPicker from '../ui/BackgroundPicker'
 
 const ACTIVITY_OPTIONS = [
@@ -228,10 +229,10 @@ export default function EditGroupModal({
   onDeleted,
   onMembersChanged,
 }) {
-  const [form, setForm] = useState({ name: '', description: '', rotation_mode: 'sequential', activity_type: 'dining', bg_type: 'default', bg_value: '', bg_scope: 'hero' })
+  const [form, setForm] = useState({ name: '', description: '', rotation_mode: 'sequential', activity_type: 'dining', bg_type: 'default', bg_value: '', bg_scope: 'hero', join_behavior: 'instant' })
   const [bannerPreview, setBannerPreview] = useState(null)
   const [bannerUploading, setBannerUploading] = useState(false)
-  const [inviteEmail, setInviteEmail] = useState('')
+  const [showAddMember, setShowAddMember] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState(false)
@@ -250,6 +251,7 @@ export default function EditGroupModal({
         bg_type: group.bg_type || 'default',
         bg_value: group.bg_value || '',
         bg_scope: group.bg_scope || 'hero',
+        join_behavior: group.join_behavior || 'instant',
       })
       setBannerPreview(group.banner_url || null)
       setError('')
@@ -337,15 +339,6 @@ export default function EditGroupModal({
     } catch { /* silent */ }
   }
 
-  const handleSendInvite = async () => {
-    const email = inviteEmail.trim()
-    if (!email) return
-    try {
-      await gatewayClient.post(`/groups/${group.id}/invite`, { email })
-      setInviteEmail('')
-    } catch { /* silent */ }
-  }
-
   // ── Save ───────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!form.name.trim()) { setError('Club name is required.'); return }
@@ -361,6 +354,7 @@ export default function EditGroupModal({
         bg_type: form.bg_type,
         bg_value: form.bg_value,
         bg_scope: form.bg_scope,
+        join_behavior: form.join_behavior,
       })
       // Persist turn order when sequential
       if (form.rotation_mode === 'sequential' && memberOrder.length > 0) {
@@ -391,7 +385,7 @@ export default function EditGroupModal({
   const focusBorder = (e) => (e.target.style.borderColor = 'var(--rose-border)')
   const blurBorder  = (e) => (e.target.style.borderColor = 'var(--glass)')
 
-  return (
+  return (<>
     <Modal isOpen={isOpen} onClose={onClose} title="Edit Club" size="lg">
       {/* Section 1 – Club Details */}
       <div style={sectionStyle}>
@@ -441,6 +435,40 @@ export default function EditGroupModal({
             )
           })}
         </div>
+      </div>
+
+      {/* Section 1b – Join Behavior */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>New Member Joining</div>
+        <div style={{ display: 'flex', background: 'var(--s4)', borderRadius: '10px', padding: '3px' }}>
+          {[
+            { value: 'instant', label: '⚡ Instant' },
+            { value: 'approval', label: '✋ Approval' },
+          ].map(opt => {
+            const isActive = form.join_behavior === opt.value
+            return (
+              <button
+                key={opt.value}
+                onClick={() => setField('join_behavior', opt.value)}
+                style={{
+                  flex: 1, padding: '7px', borderRadius: '8px', textAlign: 'center',
+                  fontSize: '12px', fontWeight: 600, cursor: 'pointer', border: 'none',
+                  transition: 'all 0.15s',
+                  background: isActive ? 'var(--s2)' : 'transparent',
+                  color: isActive ? 'var(--t1)' : 'var(--t3)',
+                  boxShadow: isActive ? '0 1px 4px rgba(0,0,0,0.3)' : 'none',
+                }}
+              >
+                {opt.label}
+              </button>
+            )
+          })}
+        </div>
+        <p style={{ fontSize: '11px', color: 'var(--t3)', margin: '8px 0 0' }}>
+          {form.join_behavior === 'approval'
+            ? "You'll review and approve each join request before they can access the club."
+            : 'Anyone with an invite link or code can join immediately.'}
+        </p>
       </div>
 
       {/* Section 2 – Turn Order (sequential only) */}
@@ -517,19 +545,11 @@ export default function EditGroupModal({
             onRemove={handleRemoveMember}
           />
         ))}
-        {/* Invite new member */}
-        <div style={{ display: 'flex', gap: '8px', marginTop: '10px' }}>
-          <input
-            type="email"
-            value={inviteEmail}
-            onChange={e => setInviteEmail(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && handleSendInvite()}
-            placeholder="Invite by email…"
-            style={{ ...inputStyle, flex: 1 }}
-            onFocus={focusBorder}
-            onBlur={blurBorder}
-          />
-          <Button variant="subtle" size="sm" onClick={handleSendInvite}>Send Invite</Button>
+        {/* Add member by username */}
+        <div style={{ marginTop: '10px' }}>
+          <Button variant="subtle" size="sm" onClick={() => setShowAddMember(true)}>
+            + Add Member
+          </Button>
         </div>
       </div>
 
@@ -584,5 +604,14 @@ export default function EditGroupModal({
         <Button variant="primary" loading={loading} onClick={handleSave}>Save Changes</Button>
       </div>
     </Modal>
-  )
+
+    <InviteMemberModal
+      isOpen={showAddMember}
+      onClose={() => setShowAddMember(false)}
+      groupId={group?.id}
+      groupName={group?.name}
+      onAdded={() => { onMembersChanged?.(); setShowAddMember(false) }}
+      currentMemberIds={members.map(m => m.user_id)}
+    />
+  </> )
 }

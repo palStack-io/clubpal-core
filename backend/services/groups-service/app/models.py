@@ -36,6 +36,7 @@ class GroupUpdate(BaseModel):
     bg_value: Optional[str] = None
     bg_scope: Optional[str] = None
     activity_type: Optional[str] = None
+    join_behavior: Optional[str] = Field(None, pattern="^(instant|approval)$")
 
 
 class GroupResponse(BaseModel):
@@ -48,6 +49,7 @@ class GroupResponse(BaseModel):
     bg_scope: Optional[str] = "hero"
     rotation_type: RotationType
     activity_type: Optional[str] = None
+    join_behavior: Optional[str] = None
     created_by: int
     created_at: datetime
     updated_at: datetime
@@ -133,11 +135,12 @@ class PollCreate(BaseModel):
     activity_id: Optional[int] = None
     note: Optional[str] = Field(None, max_length=500)
     deadline: datetime
+    custom_options: Optional[List[dict]] = None
 
 
 class PollRespond(BaseModel):
     user_id: int
-    response: str = Field(..., pattern="^(in|done_loved|done_pass|cant_make_it)$")
+    response: str = Field(..., min_length=1, max_length=200)
 
 
 class PollConvert(BaseModel):
@@ -152,6 +155,7 @@ class PollResponseModel(BaseModel):
     id: int
     group_id: int
     created_by: int
+    creator_username: Optional[str] = None
     activity_name: str
     activity_type: Optional[str]
     activity_id: Optional[int]
@@ -161,6 +165,7 @@ class PollResponseModel(BaseModel):
     converted_event_id: Optional[int]
     created_at: datetime
     summary: Optional[dict] = None
+    custom_options: Optional[List[dict]] = None
 
 
 # Invite code models

@@ -43,6 +43,12 @@ Check off items as you go. Items marked **[admin]** require an admin account.
 - [ ] Submit with unverified account — appropriate error or warning shown
 - [ ] Submit valid credentials — redirected to `/dashboard`
 - [ ] "Forgot password?" link visible and navigates to `/forgot-password`
+- [ ] **Google Sign-In** (requires `GOOGLE_CLIENT_ID` env var set at build time)
+  - [ ] "or continue with" divider and Google button visible when `VITE_GOOGLE_CLIENT_ID` is set
+  - [ ] Google button hidden when env var is not set (no error shown)
+  - [ ] Clicking Google button opens Google OAuth popup
+  - [ ] Successful Google auth → redirected to `/dashboard`
+  - [ ] Google auth failure → inline error shown
 
 ### 1.4 Forgot Password
 - [ ] Submit email that exists — success message shown
@@ -176,10 +182,23 @@ Check off items as you go. Items marked **[admin]** require an admin account.
 - [ ] Cannot delete another user's comment
 - [ ] "Invite member" button opens InviteMemberModal
 
-### 5.4 InviteMemberModal
-- [ ] Email input renders
-- [ ] Submitting invalid email — error shown
-- [ ] Submitting valid email — success message, invite sent
+### 5.4 InviteMemberModal (unified username + email)
+**Username flow:**
+- [ ] Typing a username (no `@`) triggers debounced search after 300 ms
+- [ ] Dropdown shows matching users not already in the group
+- [ ] Selecting a user shows preview card with "Will be added directly"
+- [ ] Click "Add Member" → user added immediately, success screen shown
+- [ ] Success screen: user avatar, name, "✓ Added to club" chip
+- [ ] "Add Another" resets modal; "Done" closes it
+
+**Email invite flow:**
+- [ ] Typing a value containing `@` switches input icon to `✉` and shows `+ Add` button
+- [ ] Press Enter or click `+ Add` with a valid email → email added to pending list as a chip
+- [ ] Invalid email format → inline error shown
+- [ ] Multiple emails can be queued; each shows `×` to remove
+- [ ] Footer button label updates to "Send N Invite(s)"
+- [ ] Click "Send N Invite(s)" → all invites sent via `/invites/send`; success screen shows list of addresses
+- [ ] "They'll receive an email link to join the club" note visible on success screen
 
 ### 5.5 Edit Group (`/groups/:id/edit`)
 - [ ] Form pre-populated with current values

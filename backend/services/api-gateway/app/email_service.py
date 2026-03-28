@@ -371,6 +371,40 @@ class EmailService:
         )
         return self._send(to_email, subject, _base(subject, content, self.frontend_url))
 
+    def send_event_cancelled(self, to_email: str, username: str, event_title: str,
+                             event_date: str, group_name: str, group_id: int) -> bool:
+        """Notify an attendee that an event they RSVPed to has been cancelled."""
+        url = f"{self.frontend_url}/groups/{group_id}"
+        subject = f"Cancelled: {event_title}"
+        content = (
+            _h1(f"❌ {event_title} has been cancelled")
+            + _p(f"Hi <strong>{username}</strong>,")
+            + _p(f"Unfortunately, <strong>{event_title}</strong> in "
+                 f"<strong>{group_name}</strong> has been cancelled.")
+            + (f"""
+<div style="background:#fff5f7;border-left:3px solid #f43f5e;border-radius:0 8px 8px 0;
+            padding:14px 18px;margin:20px 0;">
+  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{event_title}</p>
+  <p style="margin:4px 0 0;font-size:13px;color:#666;">{event_date}</p>
+</div>""" if event_date else "")
+            + _p(f"Stay tuned for future events in <strong>{group_name}</strong>.")
+            + _btn("View Group", url, "#f43f5e")
+        )
+        return self._send(to_email, subject, _base(subject, content, self.frontend_url))
+
+    def send_group_membership(self, to_email: str, username: str, group_name: str,
+                               group_id: int, message: str) -> bool:
+        """Generic membership email — added to group, approved, declined."""
+        url = f"{self.frontend_url}/groups/{group_id}"
+        subject = f"clubPal: {group_name}"
+        content = (
+            _h1(message)
+            + _p(f"Hi <strong>{username}</strong>,")
+            + _p(f"This update is about your membership in <strong>{group_name}</strong>.")
+            + _btn("Open Group", url, "#f43f5e")
+        )
+        return self._send(to_email, subject, _base(subject, content, self.frontend_url))
+
     def send_event_reminder(self, to_email: str, username: str, event_title: str,
                             event_date: str, group_name: str,
                             hours_until: int, event_id: int) -> bool:

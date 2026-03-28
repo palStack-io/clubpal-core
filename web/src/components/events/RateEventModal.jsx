@@ -30,8 +30,8 @@ function getRatingCopy(activityType) {
 
 function ScoreInput({ value, onChange }) {
   return (
-    <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
-      {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => (
+    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+      {[1, 2, 3, 4, 5].map(n => (
         <button
           key={n}
           type="button"
@@ -40,7 +40,7 @@ function ScoreInput({ value, onChange }) {
             background: 'none',
             border: 'none',
             cursor: 'pointer',
-            fontSize: '24px',
+            fontSize: '36px',
             color: n <= value ? 'var(--rose)' : 'var(--t4)',
             padding: '2px',
             transition: 'color 0.1s, transform 0.1s',
@@ -90,8 +90,7 @@ function TagPicker({ selected, onChange, tagList }) {
 }
 
 const SCORE_LABELS = {
-  1: 'Terrible', 2: 'Bad', 3: 'Poor', 4: 'Below Average', 5: 'Average',
-  6: 'Decent', 7: 'Good', 8: 'Great', 9: 'Excellent', 10: 'Perfect',
+  1: 'Poor', 2: 'Below Average', 3: 'Average', 4: 'Good', 5: 'Excellent',
 }
 
 export default function RateEventModal({ isOpen, onClose, event, currentUser, onSubmitted, existingRating }) {
@@ -127,6 +126,7 @@ export default function RateEventModal({ isOpen, onClose, event, currentUser, on
         await ratingsClient.patch(`/ratings/${existingRating.id}`, {
           score,
           comment: comment.trim() || null,
+          tags,
         }, { params: { user_id: currentUser.id } })
       } else {
         await ratingsClient.post('/ratings', {
@@ -139,7 +139,12 @@ export default function RateEventModal({ isOpen, onClose, event, currentUser, on
       onSubmitted?.()
       onClose()
     } catch (e) {
-      setError(e.response?.data?.detail || 'Failed to submit rating.')
+      const detail = e.response?.data?.detail
+      setError(
+        typeof detail === 'string' ? detail
+        : Array.isArray(detail) ? detail.map(d => d?.msg ?? String(d)).join(', ')
+        : 'Failed to submit rating.'
+      )
     } finally {
       setSubmitting(false)
     }
@@ -189,7 +194,7 @@ export default function RateEventModal({ isOpen, onClose, event, currentUser, on
           <ScoreInput value={score} onChange={setScore} />
           {score > 0 && (
             <div style={{ textAlign: 'center', fontSize: '13px', fontWeight: 700, color: 'var(--rose)', marginTop: '10px' }}>
-              {score}/10 — {SCORE_LABELS[score]}
+              {score}/5 — {SCORE_LABELS[score]}
             </div>
           )}
         </div>
@@ -222,9 +227,13 @@ export default function RateEventModal({ isOpen, onClose, event, currentUser, on
           />
         </div>
 
+        <div style={{ fontSize: '11px', color: 'var(--t3)', textAlign: 'center', marginBottom: '14px' }}>
+          Rating is optional — you can always come back and rate later
+        </div>
+
         <div style={{ display: 'flex', gap: '10px' }}>
           <Button variant="ghost" onClick={onClose} style={{ flex: 1 }}>
-            Cancel
+            Skip
           </Button>
           <Button
             variant="primary"

@@ -7,14 +7,15 @@ from datetime import datetime
 class RatingCreate(BaseModel):
     event_id: int
     rated_user_id: Optional[int] = None
-    score: int = Field(..., ge=1, le=10)
+    score: int = Field(..., ge=1, le=5)
     comment: Optional[str] = Field(None, max_length=500)
     tags: list[str] = []
 
 
 class RatingUpdate(BaseModel):
-    score: Optional[int] = Field(None, ge=1, le=10)
+    score: Optional[int] = Field(None, ge=1, le=5)
     comment: Optional[str] = Field(None, max_length=500)
+    tags: Optional[list[str]] = None
 
 
 class RatingResponse(BaseModel):
@@ -39,11 +40,6 @@ class UserStatsResponse(BaseModel):
     score_3_count: int
     score_4_count: int
     score_5_count: int
-    score_6_count: int
-    score_7_count: int
-    score_8_count: int
-    score_9_count: int
-    score_10_count: int
     total_hosted_events: int
 
 

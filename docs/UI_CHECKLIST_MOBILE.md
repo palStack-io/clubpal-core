@@ -43,6 +43,30 @@ The mobile app is built with Expo Router (React Native). Test on a real device w
 - [ ] Valid credentials → navigates to Home tab
 - [ ] "Register" / sign-up link navigates to register screen
 - [ ] Keyboard dismisses on scroll or tapping outside field
+- [ ] **Biometric quick sign-in** — shown only when `biometric_enabled` SecureStore key is set and hardware is enrolled
+  - [ ] Face ID label + scan icon on iPhone with Face ID
+  - [ ] Touch ID label + fingerprint icon on other devices
+  - [ ] Successful biometric → navigates to Home tab
+  - [ ] Failed biometric → error message shown, password form remains available
+
+**Google Sign-In** (requires `EXPO_PUBLIC_GOOGLE_CLIENT_ID_IOS` / `ANDROID` / `WEB` set in `.env`)
+- [ ] "Sign in with Google" button visible below password form
+- [ ] Tapping opens Google OAuth browser session
+- [ ] Successful Google auth → navigates to Home tab, haptic success
+- [ ] Failure / cancel → inline error shown (no crash on cancel)
+- [ ] **Android:** requires `EXPO_PUBLIC_GOOGLE_CLIENT_ID_ANDROID` set and SHA-1 fingerprint registered in Google Cloud Console
+- [ ] **OAuth consent screen** must be published in Google Cloud Console (not "Testing") for non-test-users
+
+**Apple Sign-In** (iOS physical device only — dev build or production required)
+- [ ] Apple button visible on iOS (hidden on Android)
+- [ ] Tapping triggers native Apple Sign In sheet
+- [ ] First sign-in: name + email returned by Apple; subsequent sign-ins: email only (expected)
+- [ ] Successful auth → navigates to Home tab, haptic success
+- [ ] User cancels → no error shown, stays on login screen
+- [ ] **Account link prompt:** if Apple email matches an existing account, "Link your Apple account?" modal shown
+  - [ ] "Link Account" button links and signs in
+  - [ ] "Cancel" dismisses without signing in
+- [ ] **Requires:** `expo-apple-authentication` native module (dev build / production — NOT Expo Go)
 
 ### 1.2 Register Screen
 - [ ] All fields present (username, email, full name, password)
@@ -99,11 +123,16 @@ The mobile app is built with Expo Router (React Native). Test on a real device w
 ## 3. Home Tab (`/(tabs)/index`)
 
 ### 3.1 Header
-- [ ] "Good morning / afternoon / evening 👋" greeting shown correctly based on time
+- [ ] Dynamic greeting: "Up late / Good morning / Good afternoon / Good evening / Good night 👋" updates based on hour (refreshes every 60 s while screen is focused)
 - [ ] When user has turns in multiple groups: header shows "You have X picks due" + "Your Turns" title
 - [ ] User initials avatar (top-right) renders with rose background
 - [ ] Tapping avatar navigates to Profile tab
 - [ ] Notification bell icon (top-right) navigates to `/notifications`
+- [ ] **Unread badge:** red/rose circle with count appears when there are unread notifications
+  - [ ] Badge shows exact count up to 9; shows "9+" for 10 or more
+  - [ ] Badge absent when all notifications are read
+  - [ ] Bell icon switches to filled variant + rose colour when unread count > 0
+  - [ ] Badge count updates automatically (React Query `staleTime: 30 s`, shared with Notifications screen — marking as read on that screen also clears the badge)
 
 ### 3.2 Turn Card (single group — it's your turn)
 - [ ] Full TurnCard shown with group name, activity emoji, member count

@@ -1,16 +1,21 @@
 import asyncio
+import logging
 import os
 import uuid
 from typing import Optional
 
 import httpx
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from cachetools import TTLCache
 from fastapi import FastAPI, HTTPException, Header, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 
+logger = logging.getLogger(__name__)
+
 from app.database import (
     init_db,
     create_bill_split,
+    create_bill_split_full,
     create_bill_item,
     create_bill_items_bulk,
     create_bill_share,
@@ -30,6 +35,8 @@ from app.database import (
     get_claims_by_split,
     apply_claims_to_items,
     delete_shares_by_split,
+    get_unpaid_shares_for_reminder,
+    mark_unpaid_reminder_sent,
 )
 from app.models import (
     CreateBillSplitRequest,
@@ -64,6 +71,7 @@ _session_cache: TTLCache = TTLCache(maxsize=256, ttl=60)
 # ── App ────────────────────────────────────────────────────────────────────────
 
 app = FastAPI(title="ClubPal Bill Split Service", version="1.0.0")
+scheduler = AsyncIOScheduler()
 
 app.add_middleware(
     CORSMiddleware,
@@ -76,10 +84,54 @@ app.add_middleware(
 
 # ── Startup ───────────────────────────────────────────────────────────────────
 
+async def send_unpaid_reminders():
+    """Daily job: remind users with unpaid shares older than 3 days."""
+    logger.info("Running unpaid bill share reminder job")
+    shares = get_unpaid_shares_for_reminder()
+    for share in shares:
+        try:
+            event_id = share.get("event_id", 0)
+            # Fetch event name best-effort
+            event_title = f"Event {event_id}"
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    r = await client.get(f"{EVENTS_SERVICE_URL}/events/{event_id}",
+                                         params={"user_id": share["paid_by_user_id"]})
+                    if r.status_code == 200:
+                        event_data = r.json()
+                        event_title = event_data.get("title") or event_title
+            except Exception:
+                pass
+
+            payer_profile = await _fetch_user_profile(share["paid_by_user_id"])
+            payer_name = payer_profile.get("full_name") or f"User {share['paid_by_user_id']}"
+
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                await client.post(
+                    f"{API_GATEWAY_URL}/internal/notify/push",
+                    headers={"x-internal-secret": INTERNAL_API_SECRET},
+                    json={
+                        "user_id": share["user_id"],
+                        "title": f"💸 Still owe {payer_name}",
+                        "body": f"${float(share['total_owed']):.2f} for {event_title} is unpaid",
+                        "link_type": "event",
+                        "link_id": event_id,
+                    },
+                )
+            mark_unpaid_reminder_sent(share["id"])
+            logger.info(f"Sent unpaid reminder to user {share['user_id']} for share {share['id']}")
+        except Exception as e:
+            logger.error(f"Failed to send unpaid reminder for share {share['id']}: {e}")
+
+
 @app.on_event("startup")
 async def startup():
     init_db()
     await reload_config()
+    # Daily job: remind users with 3-day-old unpaid shares
+    scheduler.add_job(send_unpaid_reminders, 'cron', hour=10, minute=0,
+                      id='unpaid_reminders', replace_existing=True)
+    scheduler.start()
     print("Bill split service started")
 
 
@@ -207,6 +259,35 @@ def _build_split_response(split: dict, items: list, shares: list, profiles: dict
         shares=share_responses,
         created_at=str(split["created_at"]),
     )
+
+
+async def _send_bill_split_notifications(
+    participant_ids: list,
+    payer_id: int,
+    payer_name: str,
+    event_id: int,
+    event_name: str,
+    share_by_user: dict,
+):
+    """Fire per-user in-app + push notifications for each participant in a new bill split."""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        for uid in participant_ids:
+            amount = share_by_user.get(uid)
+            try:
+                await client.post(
+                    f"{API_GATEWAY_URL}/internal/notify/push",
+                    headers={"x-internal-secret": INTERNAL_API_SECRET},
+                    json={
+                        "user_id": uid,
+                        "title": f"💸 {payer_name} split the bill",
+                        "body": (f"You owe ${amount:.2f} for {event_name}"
+                                 if amount else f"You have a share in {event_name}"),
+                        "link_type": "event",
+                        "link_id": event_id,
+                    },
+                )
+            except Exception as e:
+                logger.warning(f"Failed to send bill split notification to user {uid}: {e}")
 
 
 async def send_all_emails(
@@ -354,8 +435,8 @@ async def create_split(
     subtotal = round(sum(it.price for it in req.items), 2)
     total_amount = round(subtotal + req.tax_amount + req.tip_amount, 2)
 
-    # 7. Insert into DB
-    split_row = create_bill_split(
+    # 7. Insert into DB atomically (single transaction — no orphaned rows on failure)
+    split_row, item_rows, share_rows = create_bill_split_full(
         event_id=req.event_id,
         paid_by_user_id=payer_id,
         subtotal=subtotal,
@@ -363,17 +444,8 @@ async def create_split(
         tip_amount=req.tip_amount,
         total_amount=total_amount,
         payment_note=req.payment_note,
-    )
-    split_id = split_row["id"]
-
-    item_rows = create_bill_items_bulk(
-        split_id,
-        [{"name": it.name, "price": it.price, "assigned_to": it.assigned_to} for it in req.items],
-    )
-
-    share_rows = create_bill_shares_bulk(
-        split_id,
-        [
+        items=[{"name": it.name, "price": it.price, "assigned_to": it.assigned_to} for it in req.items],
+        shares=[
             {
                 "user_id": cs["user_id"],
                 "items_subtotal": cs["items_subtotal"],
@@ -386,6 +458,7 @@ async def create_split(
             for cs in computed
         ],
     )
+    split_id = split_row["id"]
 
     # 8. Fetch user profiles concurrently
     profile_tasks = [_fetch_user_profile(uid) for uid in valid_attending_ids]
@@ -445,6 +518,19 @@ async def create_split(
             items_by_user=items_by_user,
         )
     )
+
+    # 9b. In-app + push notifications for all participants (skip payer — they know)
+    participant_ids = [uid for uid in valid_attending_ids if uid != payer_id]
+    if participant_ids:
+        share_by_user = {s["user_id"]: float(s["total_owed"]) for s in share_rows}
+        asyncio.create_task(_send_bill_split_notifications(
+            participant_ids=participant_ids,
+            payer_id=payer_id,
+            payer_name=payer_name,
+            event_id=req.event_id,
+            event_name=event_name,
+            share_by_user=share_by_user,
+        ))
 
     # 10. Update status to 'sent'
     update_split_status(split_id, "sent")
@@ -556,11 +642,39 @@ async def mark_user_share_paid(
     # Return updated share
     updated = get_share_by_split_user(split_id, user_id)
     profile = await _fetch_user_profile(user_id)
+    member_name = profile.get("full_name") or f"User {user_id}"
+
+    # Notify payer that payment was received (in-app only via /internal/notify/push)
+    try:
+        event_id = split.get("event_id", 0)
+        event_title = f"Event {event_id}"
+        try:
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                r = await client.get(f"{EVENTS_SERVICE_URL}/events/{event_id}",
+                                     params={"user_id": split["paid_by_user_id"]})
+                if r.status_code == 200:
+                    event_title = r.json().get("title") or event_title
+        except Exception:
+            pass
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.post(
+                f"{API_GATEWAY_URL}/internal/notify/push",
+                headers={"x-internal-secret": INTERNAL_API_SECRET},
+                json={
+                    "user_id": split["paid_by_user_id"],
+                    "title": f"✅ {member_name} paid up!",
+                    "body": f"${float(share['total_owed']):.2f} for {event_title} received",
+                    "link_type": "event",
+                    "link_id": event_id,
+                },
+            )
+    except Exception as e:
+        logger.warning(f"Failed to send payment-received notification for share {share['id']}: {e}")
 
     paid_at_str = str(updated["paid_at"]) if updated.get("paid_at") else None
     return BillShareResponse(
         user_id=updated["user_id"],
-        full_name=profile.get("full_name") or f"User {user_id}",
+        full_name=member_name,
         avatar_url=profile.get("avatar_url"),
         items_subtotal=float(updated["items_subtotal"]),
         tax_share=float(updated["tax_share"]),

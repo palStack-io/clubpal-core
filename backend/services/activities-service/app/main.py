@@ -1,6 +1,7 @@
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Header, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List, Optional
+import os
 
 from app.models import (
     ActivityCreate, ActivityUpdate, ActivityResponse, CategoryResponse
@@ -11,16 +12,25 @@ from app.database import (
     increment_usage_count, get_all_categories, get_popular_activities
 )
 
+INTERNAL_API_SECRET = os.getenv("INTERNAL_API_SECRET", "")
+
 app = FastAPI(title="ClubPal Activities Service", version="1.0.0")
 
 # CORS
+_ALLOWED_ORIGINS = [o.strip() for o in os.getenv("ALLOWED_ORIGINS", "*").split(",")]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+def _require_internal(x_internal_secret: Optional[str] = Header(None)):
+    """Dependency: allow only calls carrying the internal service secret."""
+    if not INTERNAL_API_SECRET or x_internal_secret != INTERNAL_API_SECRET:
+        raise HTTPException(status_code=403, detail="Internal access only")
 
 
 @app.on_event("startup")
@@ -40,7 +50,7 @@ async def health_check():
 # ===== Activity Endpoints =====
 
 @app.post("/activities", response_model=ActivityResponse, status_code=201)
-async def create_activity_endpoint(activity_data: ActivityCreate):
+async def create_activity_endpoint(activity_data: ActivityCreate, _: None = Depends(_require_internal)):
     """Create a new activity."""
     try:
         activity_id = create_activity(
@@ -97,7 +107,7 @@ async def get_activity_endpoint(activity_id: int):
 
 
 @app.patch("/activities/{activity_id}", response_model=ActivityResponse)
-async def update_activity_endpoint(activity_id: int, activity_data: ActivityUpdate):
+async def update_activity_endpoint(activity_id: int, activity_data: ActivityUpdate, _: None = Depends(_require_internal)):
     """Update activity details."""
     # Check if activity exists
     if not get_activity(activity_id):
@@ -121,7 +131,7 @@ async def update_activity_endpoint(activity_id: int, activity_data: ActivityUpda
 
 
 @app.delete("/activities/{activity_id}", status_code=204)
-async def delete_activity_endpoint(activity_id: int):
+async def delete_activity_endpoint(activity_id: int, _: None = Depends(_require_internal)):
     """Delete an activity."""
     success = delete_activity(activity_id)
 
@@ -130,7 +140,7 @@ async def delete_activity_endpoint(activity_id: int):
 
 
 @app.post("/activities/{activity_id}/increment-usage", status_code=200)
-async def increment_usage_endpoint(activity_id: int):
+async def increment_usage_endpoint(activity_id: int, _: None = Depends(_require_internal)):
     """Increment usage count for an activity (called by events service)."""
     if not get_activity(activity_id):
         raise HTTPException(status_code=404, detail="Activity not found")

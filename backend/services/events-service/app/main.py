@@ -1,7 +1,10 @@
 from fastapi import FastAPI, HTTPException, Header, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.encoders import ENCODERS_BY_TYPE
 from pydantic import BaseModel
 from typing import List, Optional
+from datetime import datetime
+ENCODERS_BY_TYPE[datetime] = lambda dt: dt.strftime('%Y-%m-%dT%H:%M:%SZ') if dt else None
 import uuid
 import httpx
 import logging
@@ -112,7 +115,7 @@ def _next_occurrence(rule: str, day_of_week: Optional[int], from_date: date) -> 
 async def _notify_group_members(group_id: int, event_id: int, event_title: str,
                                  event_date: str, event_type: str = 'event',
                                  deadline: str = None, creator_id: int = None,
-                                 has_rsvp: bool = True):
+                                 has_rsvp: bool = True, hours_until: int = None):
     """Hit the internal gateway notify endpoint for all group members."""
     try:
         payload = {
@@ -127,6 +130,8 @@ async def _notify_group_members(group_id: int, event_id: int, event_title: str,
             payload["deadline"] = deadline
         if creator_id:
             payload["creator_id"] = creator_id
+        if hours_until is not None:
+            payload["hours_until"] = hours_until
         async with httpx.AsyncClient(timeout=10) as client:
             await client.post(
                 f"{GATEWAY_URL}/internal/notify/event",
@@ -229,6 +234,75 @@ async def send_rsvp_deadline_final_counts():
             logger.error(f"Failed to send deadline final count for event {event['id']}: {e}")
 
 
+async def send_event_reminders():
+    """Hourly job: send 24h and 1h pre-event push + email reminders to all group members."""
+    conn = get_db()
+    cursor = conn.cursor()
+
+    # 24-hour window: events starting between 23h and 25h from now
+    cursor.execute("""
+        SELECT * FROM events
+        WHERE status = 'scheduled'
+          AND scheduled_date IS NOT NULL
+          AND scheduled_date BETWEEN NOW() + INTERVAL '23 hours' AND NOW() + INTERVAL '25 hours'
+          AND (reminder_24h_sent IS NULL OR reminder_24h_sent = FALSE)
+    """)
+    events_24h = [dict(r) for r in cursor.fetchall()]
+
+    # 1-hour window: events starting between 45 min and 75 min from now
+    cursor.execute("""
+        SELECT * FROM events
+        WHERE status = 'scheduled'
+          AND scheduled_date IS NOT NULL
+          AND scheduled_date BETWEEN NOW() + INTERVAL '45 minutes' AND NOW() + INTERVAL '75 minutes'
+          AND (reminder_1h_sent IS NULL OR reminder_1h_sent = FALSE)
+    """)
+    events_1h = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    for event in events_24h:
+        try:
+            sched = event.get('scheduled_date')
+            event_date_str = sched.strftime('%A, %b %-d at %-I:%M %p') if sched else ''
+            await _notify_group_members(
+                group_id=event['group_id'],
+                event_id=event['id'],
+                event_title=event['title'],
+                event_date=event_date_str,
+                event_type='reminder',
+                hours_until=24,
+            )
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE events SET reminder_24h_sent = TRUE WHERE id = %s", (event['id'],))
+            conn.commit()
+            conn.close()
+            logger.info(f"Sent 24h reminder for event {event['id']}")
+        except Exception as e:
+            logger.error(f"Failed to send 24h reminder for event {event['id']}: {e}")
+
+    for event in events_1h:
+        try:
+            sched = event.get('scheduled_date')
+            event_date_str = sched.strftime('%A, %b %-d at %-I:%M %p') if sched else ''
+            await _notify_group_members(
+                group_id=event['group_id'],
+                event_id=event['id'],
+                event_title=event['title'],
+                event_date=event_date_str,
+                event_type='reminder',
+                hours_until=1,
+            )
+            conn = get_db()
+            cursor = conn.cursor()
+            cursor.execute("UPDATE events SET reminder_1h_sent = TRUE WHERE id = %s", (event['id'],))
+            conn.commit()
+            conn.close()
+            logger.info(f"Sent 1h reminder for event {event['id']}")
+        except Exception as e:
+            logger.error(f"Failed to send 1h reminder for event {event['id']}: {e}")
+
+
 async def auto_complete_past_events():
     """Hourly job: mark scheduled events as completed 10 hours after their start time."""
     logger.info("Running auto-complete past events job")
@@ -246,6 +320,65 @@ async def auto_complete_past_events():
     conn.close()
     if count:
         logger.info(f"Auto-completed {count} past events")
+
+
+async def send_rating_prompts():
+    """Hourly job: 3h after auto-complete, prompt 'going' attendees who haven't rated."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM events
+        WHERE status = 'completed'
+          AND ratings_enabled = TRUE
+          AND (rating_prompt_sent IS NULL OR rating_prompt_sent = FALSE)
+          AND updated_at BETWEEN NOW() - INTERVAL '3.5 hours' AND NOW() - INTERVAL '2.5 hours'
+    """)
+    events = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    for event in events:
+        try:
+            attendees = get_attendees(event["id"])
+            going_ids = [a["user_id"] for a in attendees if a["status"] == "going"]
+            if not going_ids:
+                continue
+
+            # Check who hasn't rated yet via ratings service
+            rated_ids = set()
+            try:
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    r = await client.get(f"{RATINGS_SERVICE_URL}/events/{event['id']}/ratings")
+                    if r.status_code == 200:
+                        rated_ids = {rating["user_id"] for rating in r.json()}
+            except Exception:
+                pass
+
+            unrated_ids = [uid for uid in going_ids if uid not in rated_ids]
+            if unrated_ids:
+                sched = event.get("scheduled_date")
+                event_date_str = sched.strftime("%A, %b %-d at %-I:%M %p") if sched else ""
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    await client.post(
+                        f"{GATEWAY_URL}/internal/notify/event",
+                        json={
+                            "user_ids": unrated_ids,
+                            "event_id": event["id"],
+                            "event_title": event["title"],
+                            "event_date": event_date_str,
+                            "group_id": event["group_id"],
+                            "type": "rating_prompt",
+                        },
+                    )
+
+            # Mark as sent regardless to avoid re-processing
+            conn2 = get_db()
+            cur2 = conn2.cursor()
+            cur2.execute("UPDATE events SET rating_prompt_sent = TRUE WHERE id = %s", (event["id"],))
+            conn2.commit()
+            conn2.close()
+            logger.info(f"Sent rating prompts for event {event['id']}")
+        except Exception as e:
+            logger.error(f"Failed to send rating prompts for event {event['id']}: {e}")
 
 
 async def spawn_recurring_instances():
@@ -313,6 +446,12 @@ async def startup():
     # Schedule hourly final headcount notifications after RSVP deadline
     scheduler.add_job(send_rsvp_deadline_final_counts, 'cron', minute=5,
                       id='rsvp_deadline_final_counts', replace_existing=True)
+    # Schedule hourly 24h and 1h pre-event reminders
+    scheduler.add_job(send_event_reminders, 'cron', minute=30,
+                      id='event_reminders', replace_existing=True)
+    # Schedule hourly post-event rating prompts (3h after completion)
+    scheduler.add_job(send_rating_prompts, 'cron', minute=45,
+                      id='rating_prompts', replace_existing=True)
     scheduler.start()
     print("Events service started")
 
@@ -382,6 +521,7 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(
         max_attendees=event_data.max_attendees,
         cover_url=None,
         bill_split_enabled=event_data.bill_split_enabled,
+        ratings_enabled=event_data.ratings_enabled,
     )
 
     # Mirror cover into MinIO under the real event path
@@ -557,6 +697,10 @@ async def update_event_endpoint(event_id: int, event_data: EventUpdate, user_id:
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
+    # Capture fields before update to detect silent edits
+    old_scheduled_date = event.get("scheduled_date")
+    old_location = event.get("location") or ""
+
     # Update event
     success = update_event(
         event_id,
@@ -569,15 +713,46 @@ async def update_event_endpoint(event_id: int, event_data: EventUpdate, user_id:
         updated_by=user_id,
         rsvp_deadline=event_data.rsvp_deadline,
         max_attendees=event_data.max_attendees,
+        cover_url=event_data.cover_url,
         bg_type=event_data.bg_type,
         bg_value=event_data.bg_value,
         bg_scope=event_data.bg_scope,
+        ratings_enabled=event_data.ratings_enabled,
     )
 
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update event")
 
     event = get_event(event_id)
+
+    # Silent edit alert: notify "going" attendees if date or location changed
+    date_changed = (event_data.scheduled_date is not None and
+                    event_data.scheduled_date != old_scheduled_date)
+    location_changed = (event_data.location is not None and
+                        (event_data.location or "") != old_location)
+    if date_changed or location_changed:
+        try:
+            attendees = get_attendees(event_id)
+            notify_ids = [a["user_id"] for a in attendees
+                          if a["status"] == "going" and a["user_id"] != user_id]
+            if notify_ids:
+                sched = event.get("scheduled_date")
+                event_date_str = sched.strftime("%A, %b %-d at %-I:%M %p") if sched else ""
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    await client.post(
+                        f"{GATEWAY_URL}/internal/notify/event",
+                        json={
+                            "user_ids": notify_ids,
+                            "event_id": event_id,
+                            "event_title": event["title"],
+                            "event_date": event_date_str,
+                            "group_id": event["group_id"],
+                            "type": "event_edit",
+                        },
+                    )
+        except Exception as e:
+            logger.warning(f"Failed to send edit alerts for event {event_id}: {e}")
+
     return EventResponse(**event)
 
 
@@ -622,6 +797,29 @@ async def delete_event_endpoint(event_id: int, user_id: int = Depends(get_curren
     # Only creator or host can delete
     if event["created_by"] != user_id and event["host_user_id"] != user_id:
         raise HTTPException(status_code=403, detail="Not authorized to delete this event")
+
+    # Notify going/maybe attendees before deletion
+    try:
+        attendees = get_attendees(event_id)
+        notify_ids = [a["user_id"] for a in attendees
+                      if a["status"] in ("going", "maybe") and a["user_id"] != user_id]
+        if notify_ids:
+            sched = event.get("scheduled_date")
+            event_date_str = sched.strftime("%A, %b %-d at %-I:%M %p") if sched else ""
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                await client.post(
+                    f"{GATEWAY_URL}/internal/notify/event",
+                    json={
+                        "user_ids": notify_ids,
+                        "event_id": event_id,
+                        "event_title": event["title"],
+                        "event_date": event_date_str,
+                        "group_id": event["group_id"],
+                        "type": "event_cancelled",
+                    },
+                )
+    except Exception as e:
+        logger.warning(f"Failed to send cancellation notifications for event {event_id}: {e}")
 
     # Clean up cover image from MinIO
     cover_url = event.get("cover_url")
@@ -699,16 +897,77 @@ async def rsvp_event(event_id: int, rsvp_data: AttendeeRSVP, user_id: int = Depe
         raise HTTPException(status_code=404, detail="Event not found")
 
     # Enforce seat cap when RSVPing as "going"
+    previously_going = False
     if rsvp_data.status == "going" and event.get("max_attendees"):
         existing = get_attendee(event_id, user_id)
-        # Only check capacity if the user isn't already "going"
-        if not existing or existing["status"] != "going":
+        if existing and existing["status"] == "going":
+            previously_going = True
+        elif existing is None or existing["status"] != "going":
             attendees = get_attendees(event_id)
             going_count = sum(1 for a in attendees if a["status"] == "going")
             if going_count >= event["max_attendees"]:
                 raise HTTPException(status_code=409, detail="This event is full")
+    else:
+        existing = get_attendee(event_id, user_id)
+        previously_going = existing and existing["status"] == "going"
 
     attendee = upsert_attendee(event_id, user_id, rsvp_data.status)
+
+    # Post-RSVP notifications (fire-and-forget)
+    if rsvp_data.status == "going" and not previously_going:
+        try:
+            all_attendees = get_attendees(event_id)
+            going_count = sum(1 for a in all_attendees if a["status"] == "going")
+            sched = event.get("scheduled_date")
+            event_date_str = sched.strftime("%A, %b %-d at %-I:%M %p") if sched else ""
+
+            # Get group member count for social nudge threshold
+            group_member_count = 0
+            try:
+                async with httpx.AsyncClient(timeout=3.0) as client:
+                    r = await client.get(f"{GROUPS_SERVICE_URL}/groups/{event['group_id']}/members")
+                    if r.status_code == 200:
+                        group_member_count = len(r.json())
+            except Exception:
+                pass
+
+            # Social RSVP nudge to other "going" attendees (skip if group > 15)
+            if group_member_count <= 15:
+                other_going_ids = [a["user_id"] for a in all_attendees
+                                   if a["status"] == "going" and a["user_id"] != user_id]
+                if other_going_ids:
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        await client.post(
+                            f"{GATEWAY_URL}/internal/notify/event",
+                            json={
+                                "user_ids": other_going_ids,
+                                "event_id": event_id,
+                                "event_title": event["title"],
+                                "event_date": event_date_str,
+                                "group_id": event["group_id"],
+                                "creator_id": user_id,
+                                "type": "social_rsvp",
+                            },
+                        )
+
+            # Event-full notification to host when max_attendees just reached
+            if event.get("max_attendees") and going_count >= event["max_attendees"]:
+                host_id = event.get("host_user_id") or event.get("created_by")
+                if host_id and host_id != user_id:
+                    async with httpx.AsyncClient(timeout=10.0) as client:
+                        await client.post(
+                            f"{GATEWAY_URL}/internal/notify/push",
+                            json={
+                                "user_id": host_id,
+                                "title": f"🎉 {event['title']} is full!",
+                                "body": f"All {event['max_attendees']} spots are taken",
+                                "link_type": "event",
+                                "link_id": event_id,
+                            },
+                        )
+        except Exception as e:
+            logger.warning(f"Failed to send post-RSVP notifications for event {event_id}: {e}")
+
     return AttendeeResponse(**attendee)
 
 

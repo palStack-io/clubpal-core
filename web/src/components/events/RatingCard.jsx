@@ -2,12 +2,17 @@ import Card from '../ui/Card'
 import Avatar from '../ui/Avatar'
 import Button from '../ui/Button'
 
+function toUTC(str) {
+  if (!str) return str
+  return /Z$|[+-]\d{2}:?\d{2}$/.test(str) ? str : `${str}Z`
+}
+
 function StarRow({ avg }) {
   const filled = Math.round(Number(avg))
   return (
     <span style={{ color: 'var(--rose)', fontSize: '13px', letterSpacing: '-1px' }}>
-      {'★'.repeat(Math.min(10, filled))}
-      {'☆'.repeat(Math.max(0, 10 - filled))}
+      {'★'.repeat(Math.min(5, filled))}
+      {'☆'.repeat(Math.max(0, 5 - filled))}
     </span>
   )
 }
@@ -104,7 +109,7 @@ function ReviewItem({ rating }) {
           {reviewerName}
         </span>
         <span style={{ fontSize: '11px', fontWeight: 700, color: '#f59e0b' }}>
-          ⭐ {score}/10
+          ⭐ {score}/5
         </span>
       </div>
 
@@ -154,14 +159,14 @@ export default function RatingCard({
   eventId,
   onAddRating,
 }) {
-  const isPast = scheduledDate && new Date(scheduledDate) < new Date()
+  const isPast = scheduledDate && new Date(toUTC(scheduledDate)) < new Date()
   const isCompleted = eventStatus === 'completed' || (eventStatus !== 'cancelled' && isPast)
   const myRating = ratings.find(
     (r) => String(r.rater_user_id || r.reviewer_id || r.rater_id || r.user_id) === String(currentUserId)
   )
 
   const sorted = [...ratings].sort(
-    (a, b) => new Date(b.created_at) - new Date(a.created_at)
+    (a, b) => new Date(toUTC(b.created_at)) - new Date(toUTC(a.created_at))
   )
 
   const avg =
@@ -171,7 +176,7 @@ export default function RatingCard({
         ).toFixed(1)
       : null
 
-  const dist = [10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map((score) => ({
+  const dist = [5, 4, 3, 2, 1].map((score) => ({
     label: score,
     count: ratings.filter((r) => Math.round(r.score || r.rating || 0) === score).length,
   }))
@@ -253,7 +258,7 @@ export default function RatingCard({
                     marginTop: '2px',
                   }}
                 >
-                  /10
+                  /5
                 </div>
                 <div style={{ marginTop: '4px' }}>
                   <StarRow avg={avg} />

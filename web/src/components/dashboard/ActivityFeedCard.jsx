@@ -1,9 +1,14 @@
 import Card from '../ui/Card'
 import Avatar from '../ui/Avatar'
 
+function toUTC(str) {
+  if (!str) return str
+  return /Z$|[+-]\d{2}:?\d{2}$/.test(str) ? str : `${str}Z`
+}
+
 function timeAgo(dt) {
   try {
-    const diff = Date.now() - new Date(dt).getTime()
+    const diff = Date.now() - new Date(toUTC(dt)).getTime()
     const mins = Math.floor(diff / 60_000)
     if (mins < 1) return 'just now'
     if (mins < 60) return `${mins}m`

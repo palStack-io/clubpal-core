@@ -4,20 +4,13 @@ import Button from '../ui/Button'
 import { useAuth } from '../../contexts/AuthContext'
 import { groupsApi } from '../../api/groups'
 
-const ACTIVITY_TYPES = [
-  { value: 'dining', emoji: '🍽️', label: 'Dining' },
-  { value: 'movies', emoji: '🎬', label: 'Movies' },
-  { value: 'books', emoji: '📚', label: 'Books' },
-  { value: 'hiking', emoji: '🥾', label: 'Hiking' },
-  { value: 'gaming', emoji: '🎮', label: 'Gaming' },
-  { value: 'arts', emoji: '🎨', label: 'Arts' },
-]
-
 const DEADLINE_PRESETS = [
   { label: '24h', hours: 24 },
   { label: '48h', hours: 48 },
   { label: '72h', hours: 72 },
 ]
+
+const OPTION_EMOJIS = ['⭐','🍽️','🎬','📚','🥾','🎮','🎨','🎯','🏆','🎉','🌟','🔥','❤️','🍕','🍣','🎪','🎭','🎵','🏖️','🗻']
 
 const inputStyle = {
   background: 'var(--s2)',
@@ -47,6 +40,11 @@ const sectionStyle = {
   marginBottom: '10px',
 }
 
+let _optId = 0
+function makeOption(label = '', emoji = '⭐') {
+  return { id: `opt_${++_optId}`, label, emoji }
+}
+
 /**
  * CreatePollModal
  *
@@ -54,17 +52,20 @@ const sectionStyle = {
  *   isOpen         bool
  *   onClose        fn
  *   groupId        number | null   — pre-selected group (skips selector)
- *   activityName   string | null   — pre-fill from discover
+ *   activityName   string | null   — pre-fill from discover (becomes first option)
  *   activityType   string | null   — pre-fill from discover
  *   onCreated      fn(poll)        — called after successful creation
  */
-export default function CreatePollModal({ isOpen, onClose, groupId: preGroupId, activityName: preActivityName, activityType: preActivityType, onCreated }) {
+export default function CreatePollModal({ isOpen, onClose, groupId: preGroupId, activityName: preActivityName, onCreated }) {
   const { user } = useAuth()
 
   const [groups, setGroups] = useState([])
   const [groupId, setGroupId] = useState(preGroupId ? String(preGroupId) : '')
-  const [activityName, setActivityName] = useState(preActivityName || '')
-  const [activityType, setActivityType] = useState(preActivityType || '')
+  const [options, setOptions] = useState(() => [
+    makeOption(preActivityName || '', '⭐'),
+    makeOption('', '⭐'),
+  ])
+  const [emojiPickerFor, setEmojiPickerFor] = useState(null) // option id
   const [note, setNote] = useState('')
   const [deadlinePreset, setDeadlinePreset] = useState(24)
   const [customDeadline, setCustomDeadline] = useState('')
@@ -80,12 +81,26 @@ export default function CreatePollModal({ isOpen, onClose, groupId: preGroupId, 
         .catch(() => {})
     }
     // Re-sync pre-fills when modal re-opens
-    setActivityName(preActivityName || '')
-    setActivityType(preActivityType || '')
+    setOptions([makeOption(preActivityName || '', '⭐'), makeOption('', '⭐')])
     setGroupId(preGroupId ? String(preGroupId) : '')
     setNote('')
     setError('')
+    setEmojiPickerFor(null)
   }, [isOpen])
+
+  const updateOption = (id, field, value) =>
+    setOptions(prev => prev.map(o => o.id === id ? { ...o, [field]: value } : o))
+
+  const addOption = () => {
+    if (options.length >= 8) return
+    setOptions(prev => [...prev, makeOption('', '⭐')])
+  }
+
+  const removeOption = (id) => {
+    if (options.length <= 2) return
+    setOptions(prev => prev.filter(o => o.id !== id))
+    if (emojiPickerFor === id) setEmojiPickerFor(null)
+  }
 
   const computeDeadline = () => {
     if (useCustom && customDeadline) return new Date(customDeadline).toISOString()
@@ -96,20 +111,26 @@ export default function CreatePollModal({ isOpen, onClose, groupId: preGroupId, 
 
   const handleSubmit = async () => {
     if (!groupId) { setError('Please select a group.'); return }
-    if (!activityName.trim()) { setError('Activity name is required.'); return }
+    const filled = options.filter(o => o.label.trim())
+    if (filled.length < 2) { setError('Add at least 2 options.'); return }
     setError('')
     setLoading(true)
     try {
       const poll = await groupsApi.createPoll(parseInt(groupId), user.id, {
-        activity_name: activityName.trim(),
-        activity_type: activityType || null,
+        activity_name: filled[0].label.trim(),
         note: note.trim() || null,
         deadline: computeDeadline(),
+        custom_options: filled.map(o => ({ label: o.label.trim(), emoji: o.emoji })),
       })
       onCreated?.(poll)
       onClose()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to create poll.')
+      const detail = err?.response?.data?.detail
+      setError(
+        typeof detail === 'string' ? detail
+        : Array.isArray(detail) ? detail.map(d => d?.msg ?? String(d)).join(', ')
+        : 'Failed to create poll.'
+      )
     } finally {
       setLoading(false)
     }
@@ -119,43 +140,6 @@ export default function CreatePollModal({ isOpen, onClose, groupId: preGroupId, 
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Poll Your Club" size="md">
-      {/* Activity name */}
-      <div style={sectionStyle}>
-        <label style={labelStyle}>What are you considering? *</label>
-        <input
-          type="text"
-          value={activityName}
-          onChange={e => setActivityName(e.target.value)}
-          placeholder="e.g. Nobu Downtown, Dune 3, Zion Half Marathon…"
-          style={inputStyle}
-          maxLength={200}
-        />
-      </div>
-
-      {/* Activity type pills */}
-      <div style={sectionStyle}>
-        <label style={labelStyle}>Type (optional)</label>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-          {ACTIVITY_TYPES.map(t => (
-            <button
-              key={t.value}
-              onClick={() => setActivityType(activityType === t.value ? '' : t.value)}
-              style={{
-                padding: '5px 12px',
-                borderRadius: '99px',
-                border: `1px solid ${activityType === t.value ? 'var(--rose-border)' : 'var(--glass)'}`,
-                background: activityType === t.value ? 'var(--rose-glow)' : 'var(--s2)',
-                color: activityType === t.value ? 'var(--rose-soft)' : 'var(--t2)',
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer',
-              }}
-            >
-              {t.emoji} {t.label}
-            </button>
-          ))}
-        </div>
-      </div>
 
       {/* Group selector (only when not pre-selected) */}
       {!preGroupId && (
@@ -174,18 +158,118 @@ export default function CreatePollModal({ isOpen, onClose, groupId: preGroupId, 
         </div>
       )}
 
-      {/* Note */}
+      {/* Note / question */}
       <div style={sectionStyle}>
-        <label style={labelStyle}>Your note (optional)</label>
+        <label style={labelStyle}>Your question or note (optional)</label>
         <textarea
           value={note}
           onChange={e => setNote(e.target.value)}
-          placeholder="Why you're considering this, any context…"
+          placeholder="What are you trying to decide? Any context for the group…"
           rows={2}
           style={{ ...inputStyle, resize: 'none', minHeight: '60px' }}
           maxLength={500}
         />
       </div>
+
+      {/* Poll options */}
+      <div style={sectionStyle}>
+        <label style={{ ...labelStyle, marginBottom: '10px' }}>
+          Options * <span style={{ fontWeight: 400, color: 'var(--t4)' }}>(min 2, max 8)</span>
+        </label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          {options.map((opt, idx) => (
+            <div key={opt.id}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {/* Emoji picker button */}
+                <button
+                  type="button"
+                  onClick={() => setEmojiPickerFor(emojiPickerFor === opt.id ? null : opt.id)}
+                  title="Pick emoji"
+                  style={{
+                    width: '38px', height: '38px', flexShrink: 0,
+                    borderRadius: '10px', border: '1px solid var(--glass)',
+                    background: emojiPickerFor === opt.id ? 'var(--rose-glow)' : 'var(--s2)',
+                    fontSize: '20px', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'background 0.15s',
+                  }}
+                >
+                  {opt.emoji}
+                </button>
+
+                {/* Label input */}
+                <input
+                  type="text"
+                  value={opt.label}
+                  onChange={e => updateOption(opt.id, 'label', e.target.value)}
+                  placeholder={`Option ${idx + 1}…`}
+                  maxLength={120}
+                  style={{ ...inputStyle, flex: 1 }}
+                />
+
+                {/* Remove button */}
+                {options.length > 2 && (
+                  <button
+                    type="button"
+                    onClick={() => removeOption(opt.id)}
+                    style={{
+                      width: '28px', height: '28px', flexShrink: 0,
+                      borderRadius: '50%', border: 'none',
+                      background: 'none', color: 'var(--t4)',
+                      fontSize: '18px', cursor: 'pointer', lineHeight: 1,
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+
+              {/* Inline emoji grid */}
+              {emojiPickerFor === opt.id && (
+                <div style={{
+                  display: 'flex', flexWrap: 'wrap', gap: '5px',
+                  marginTop: '8px', padding: '10px',
+                  background: 'var(--s2)', borderRadius: '10px',
+                  border: '1px solid var(--glass)',
+                }}>
+                  {OPTION_EMOJIS.map(em => (
+                    <button
+                      key={em}
+                      type="button"
+                      onClick={() => { updateOption(opt.id, 'emoji', em); setEmojiPickerFor(null) }}
+                      style={{
+                        width: '34px', height: '34px', borderRadius: '8px',
+                        border: opt.emoji === em ? '1px solid var(--rose-border)' : '1px solid var(--glass)',
+                        background: opt.emoji === em ? 'var(--rose-glow)' : 'var(--s3)',
+                        fontSize: '18px', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        transition: 'all 0.1s',
+                      }}
+                    >
+                      {em}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {options.length < 8 && (
+          <button
+            type="button"
+            onClick={addOption}
+            style={{
+              marginTop: '10px', display: 'flex', alignItems: 'center', gap: '5px',
+              background: 'none', border: 'none', color: 'var(--rose-soft)',
+              fontSize: '13px', fontWeight: 700, cursor: 'pointer', padding: '2px 0',
+            }}
+          >
+            + Add option
+          </button>
+        )}
+      </div>
+
 
       {/* Deadline */}
       <div style={sectionStyle}>

@@ -90,6 +90,24 @@ def init_db():
         except Exception:
             pass
 
+    # join_behavior on groups
+    try:
+        cursor.execute("ALTER TABLE groups ADD COLUMN IF NOT EXISTS join_behavior TEXT DEFAULT 'instant'")
+    except Exception:
+        pass
+
+    # custom_options on polls
+    try:
+        cursor.execute("ALTER TABLE group_polls ADD COLUMN IF NOT EXISTS custom_options JSONB")
+    except Exception:
+        pass
+
+    # creator_username on polls
+    try:
+        cursor.execute("ALTER TABLE group_polls ADD COLUMN IF NOT EXISTS creator_username TEXT")
+    except Exception:
+        pass
+
     # Polls tables
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS group_polls (
@@ -103,6 +121,7 @@ def init_db():
             deadline TIMESTAMP NOT NULL,
             status TEXT DEFAULT 'open',
             converted_event_id INTEGER,
+            custom_options JSONB,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
@@ -261,7 +280,7 @@ def get_groups_by_user(user_id: int) -> List[dict]:
 def update_group(group_id: int, name: str = None, description: str = None,
                 rotation_type: str = None, banner_url: str = None,
                 bg_type: str = None, bg_value: str = None, bg_scope: str = None,
-                activity_type: str = None) -> bool:
+                activity_type: str = None, join_behavior: str = None) -> bool:
     """Update group details."""
     conn = get_db()
     cursor = conn.cursor()
@@ -293,6 +312,9 @@ def update_group(group_id: int, name: str = None, description: str = None,
     if activity_type is not None:
         updates.append("activity_type = %s")
         params.append(activity_type)
+    if join_behavior is not None:
+        updates.append("join_behavior = %s")
+        params.append(join_behavior)
 
     if not updates:
         conn.close()
@@ -792,16 +814,19 @@ def delete_group_comment(comment_id: int, deleted_by: int = None) -> bool:
 
 def create_poll(group_id: int, created_by: int, activity_name: str,
                 activity_type: str = None, activity_id: int = None,
-                note: str = None, deadline: datetime = None) -> int:
+                note: str = None, deadline: datetime = None,
+                custom_options: list = None, creator_username: str = None) -> int:
     """Create a new group poll."""
+    import json
     conn = get_db()
     cursor = conn.cursor()
 
     cursor.execute(
         """INSERT INTO group_polls (group_id, created_by, activity_name, activity_type,
-           activity_id, note, deadline)
-           VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-        (group_id, created_by, activity_name, activity_type, activity_id, note, deadline)
+           activity_id, note, deadline, custom_options, creator_username)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+        (group_id, created_by, activity_name, activity_type, activity_id, note, deadline,
+         json.dumps(custom_options) if custom_options else None, creator_username)
     )
     poll_id = cursor.fetchone()['id']
     conn.commit()

@@ -8,8 +8,16 @@ const INTEGRATION_LABELS = {
   tmdb_api_key: 'TMDB API Key (Movies/Shows)',
   igdb_client_id: 'IGDB Client ID (Games)',
   igdb_client_secret: 'IGDB Client Secret (Games)',
+  radarr_url: 'Radarr URL',
+  radarr_api_key: 'Radarr API Key',
+  sonarr_url: 'Sonarr URL',
+  sonarr_api_key: 'Sonarr API Key',
   google_cloud_vision_api_key: 'Google Cloud Vision API Key (Receipt OCR)',
+  giphy_api_key: 'GIPHY API Key (GIF Search)',
 }
+
+// URL fields use text input; all others use password
+const TEXT_KEYS = new Set(['radarr_url', 'sonarr_url'])
 
 function StatusBadge({ status }) {
   const styles = {
@@ -54,11 +62,11 @@ export default function AdminIntegrationsCard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // Vision key edit state
-  const [visionKey, setVisionKey] = useState('')
-  const [showVisionKey, setShowVisionKey] = useState(false)
-  const [savingVision, setSavingVision] = useState(false)
-  const [saveResult, setSaveResult] = useState(null) // 'success' | 'error'
+  // Editable key state — keyed by integration key name
+  const [editValues, setEditValues] = useState({})
+  const [showValues, setShowValues] = useState({})
+  const [savingKey, setSavingKey] = useState(null)
+  const [saveResults, setSaveResults] = useState({})
 
   useEffect(() => {
     billSplitApi.getIntegrations()
@@ -72,22 +80,22 @@ export default function AdminIntegrationsCard() {
       })
   }, [])
 
-  const handleSaveVisionKey = async () => {
-    if (!visionKey.trim()) return
-    setSavingVision(true)
-    setSaveResult(null)
+  const handleSaveKey = async (key) => {
+    const value = editValues[key] || ''
+    if (!value.trim()) return
+    setSavingKey(key)
+    setSaveResults(prev => ({ ...prev, [key]: null }))
     try {
-      await billSplitApi.updateIntegrations({ google_cloud_vision_api_key: visionKey.trim() })
-      setSaveResult('success')
-      setVisionKey('')
-      // Refresh
+      await billSplitApi.updateIntegrations({ [key]: value.trim() })
+      setSaveResults(prev => ({ ...prev, [key]: 'success' }))
+      setEditValues(prev => ({ ...prev, [key]: '' }))
       const data = await billSplitApi.getIntegrations()
       setIntegrations(data)
     } catch {
-      setSaveResult('error')
+      setSaveResults(prev => ({ ...prev, [key]: 'error' }))
     } finally {
-      setSavingVision(false)
-      setTimeout(() => setSaveResult(null), 3000)
+      setSavingKey(null)
+      setTimeout(() => setSaveResults(prev => ({ ...prev, [key]: null })), 3000)
     }
   }
 
@@ -126,7 +134,11 @@ export default function AdminIntegrationsCard() {
           <div>
             {Object.entries(integrations).map(([key, value]) => {
               const label = INTEGRATION_LABELS[key] || key
-              const isVisionKey = key === 'google_cloud_vision_api_key'
+              const isText = TEXT_KEYS.has(key)
+              const editVal = editValues[key] || ''
+              const showVal = showValues[key] || false
+              const isSaving = savingKey === key
+              const keyResult = saveResults[key] || null
 
               // Determine status
               let status = 'none'
@@ -136,26 +148,26 @@ export default function AdminIntegrationsCard() {
               else if (value?.configured) status = value.source === 'env' ? 'env' : 'db'
 
               return (
-                <div key={key} style={isVisionKey ? { ...rowStyle, flexDirection: 'column', alignItems: 'stretch' } : rowStyle}>
+                <div key={key} style={{ ...rowStyle, flexDirection: 'column', alignItems: 'stretch' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
                     <span style={{ fontSize: '13px', color: 'var(--t2)', fontWeight: 500 }}>{label}</span>
                     <StatusBadge status={status} />
                   </div>
 
-                  {isVisionKey && (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <input
-                          type={showVisionKey ? 'text' : 'password'}
-                          placeholder="Enter new API key"
-                          value={visionKey}
-                          style={inputStyle}
-                          onChange={e => setVisionKey(e.target.value)}
-                          onFocus={e => e.target.style.borderColor = 'var(--rose-border)'}
-                          onBlur={e => e.target.style.borderColor = 'var(--glass)'}
-                        />
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '8px' }}>
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <input
+                        type={isText || showVal ? 'text' : 'password'}
+                        placeholder={status !== 'none' ? '••••••••••••••••' : `Enter ${label.toLowerCase()}…`}
+                        value={editVal}
+                        style={inputStyle}
+                        onChange={e => setEditValues(prev => ({ ...prev, [key]: e.target.value }))}
+                        onFocus={e => e.target.style.borderColor = 'var(--rose-border)'}
+                        onBlur={e => e.target.style.borderColor = 'var(--glass)'}
+                      />
+                      {!isText && (
                         <button
-                          onClick={() => setShowVisionKey(v => !v)}
+                          onClick={() => setShowValues(prev => ({ ...prev, [key]: !prev[key] }))}
                           style={{
                             background: 'var(--s3)',
                             border: '1px solid var(--glass)',
@@ -167,26 +179,26 @@ export default function AdminIntegrationsCard() {
                             flexShrink: 0,
                           }}
                         >
-                          {showVisionKey ? 'Hide' : 'Show'}
+                          {showVal ? 'Hide' : 'Show'}
                         </button>
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          loading={savingVision}
-                          disabled={!visionKey.trim()}
-                          onClick={handleSaveVisionKey}
-                        >
-                          Save
-                        </Button>
-                      </div>
-                      {saveResult === 'success' && (
-                        <span style={{ fontSize: '12px', color: '#22d3a0' }}>Key saved successfully.</span>
                       )}
-                      {saveResult === 'error' && (
-                        <span style={{ fontSize: '12px', color: '#f87171' }}>Failed to save. Please try again.</span>
-                      )}
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        loading={isSaving}
+                        disabled={!editVal.trim()}
+                        onClick={() => handleSaveKey(key)}
+                      >
+                        Save
+                      </Button>
                     </div>
-                  )}
+                    {keyResult === 'success' && (
+                      <span style={{ fontSize: '12px', color: '#22d3a0' }}>Saved successfully.</span>
+                    )}
+                    {keyResult === 'error' && (
+                      <span style={{ fontSize: '12px', color: '#f87171' }}>Failed to save. Please try again.</span>
+                    )}
+                  </div>
                 </div>
               )
             })}

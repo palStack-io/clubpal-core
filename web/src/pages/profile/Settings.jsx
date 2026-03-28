@@ -617,17 +617,25 @@ function IntegrationsSection({ user }) {
   const [savingLimits, setSavingLimits] = useState(false)
   const [approvingBlock, setApprovingBlock] = useState(null)
 
-  // Giphy key is stored client-side in localStorage (used by GifPicker)
+  // Giphy key — saved to localStorage for web GifPicker AND persisted to backend for mobile
   const [giphyKey, setGiphyKey] = useState(() => localStorage.getItem('giphy_api_key') || '')
   const [giphySaved, setGiphySaved] = useState(false)
 
-  const handleSaveGiphy = () => {
+  const handleSaveGiphy = async () => {
     const trimmed = giphyKey.trim()
     if (trimmed) {
       localStorage.setItem('giphy_api_key', trimmed)
     } else {
       localStorage.removeItem('giphy_api_key')
     }
+    // Also persist to backend so mobile clients can use the same key
+    try {
+      if (trimmed) {
+        await gatewayClient.put('/admin/integrations', { giphy_api_key: trimmed })
+      } else {
+        await gatewayClient.delete('/admin/integrations/giphy_api_key')
+      }
+    } catch {}
     setGiphySaved(true)
     setTimeout(() => setGiphySaved(false), 2500)
   }

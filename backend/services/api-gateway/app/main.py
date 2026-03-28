@@ -160,7 +160,7 @@ async def _fetch_userinfo(access_token: str, discovery_url: str) -> dict:
 INTEGRATION_KEYS = [
     "google_api_key", "tmdb_api_key", "igdb_client_id", "igdb_client_secret",
     "radarr_url", "radarr_api_key", "sonarr_url", "sonarr_api_key",
-    "google_cloud_vision_api_key",
+    "google_cloud_vision_api_key", "giphy_api_key",
 ]
 
 
@@ -994,6 +994,7 @@ class IntegrationsUpdate(BaseModel):
     sonarr_url: Optional[str] = None
     sonarr_api_key: Optional[str] = None
     google_cloud_vision_api_key: Optional[str] = None
+    giphy_api_key: Optional[str] = None
 
 
 def _integration_status(key: str, stored: dict) -> dict:
@@ -1037,6 +1038,14 @@ async def update_integrations(data: IntegrationsUpdate, admin: dict = Depends(ge
         pass
     stored = get_all_integrations()
     return {k: _integration_status(k, stored) for k in INTEGRATION_KEYS}
+
+
+@app.get("/integrations/giphy-key")
+async def get_giphy_key_for_client(current_user: dict = Depends(get_current_user)):
+    """Return the GIPHY API key value for authenticated users (used by mobile GIF picker)."""
+    stored = get_all_integrations()
+    key = stored.get("giphy_api_key", "") or os.getenv("GIPHY_API_KEY", "")
+    return {"key": key or ""}
 
 
 @app.delete("/admin/integrations/{key}")

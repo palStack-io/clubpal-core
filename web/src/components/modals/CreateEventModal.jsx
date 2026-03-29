@@ -123,8 +123,8 @@ export default function CreateEventModal({
     if (!value.trim()) { setLocationSuggestions([]); return }
     locationDebounceRef.current = setTimeout(async () => {
       try {
-        const res = await enrichClient.get('/places/autocomplete', { params: { query: value } })
-        setLocationSuggestions(res.data?.predictions || res.data?.results || [])
+        const res = await enrichClient.get('/places/autocomplete', { params: { input: value } })
+        setLocationSuggestions(Array.isArray(res.data) ? res.data : [])
       } catch {
         setLocationSuggestions([])
       }

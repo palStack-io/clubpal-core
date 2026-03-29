@@ -43,8 +43,8 @@ export default function InviteMemberModal({
     debounceRef.current = setTimeout(async () => {
       setSearching(true)
       try {
-        const data = await gatewayClient.get('/users/search', { params: { username: query.trim() } })
-        const list = Array.isArray(data) ? data : data?.results || []
+        const resp = await gatewayClient.get('/users/search', { params: { username: query.trim() } })
+        const list = Array.isArray(resp.data) ? resp.data : resp.data?.results || []
         setResults(list.filter(u => !currentMemberIds.includes(u.id)))
       } catch { setResults([]) }
       finally { setSearching(false) }

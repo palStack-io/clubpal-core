@@ -1292,7 +1292,7 @@ class EventNotifyRequest(BaseModel):
     creator_name: Optional[str] = None
     creator_id: Optional[int] = None   # used to look up name + exclude from poll notifs
     event_id: int = 0
-    type: str = "created"      # "created" | "recurring" | "reminder" | "rsvp_reminder" | "rsvp_deadline_final" | "poll" | "invite" | "event_cancelled" | "event_edit" | "social_rsvp" | "rating_prompt" | "bill_split_assigned"
+    type: str = "created"      # "created" | "recurring" | "reminder" | "rsvp_reminder" | "rsvp_deadline_final" | "poll" | "invite" | "event_cancelled" | "event_edit" | "social_rsvp" | "rating_prompt" | "bill_split_assigned" | "bill_split_claiming"
     hours_until: Optional[int] = None
     deadline: Optional[str] = None
     going_count: Optional[int] = None
@@ -1551,7 +1551,7 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
             )
 
         elif req.type == "bill_split_assigned":
-            # Bill split share assigned — push + in-app
+            # Bill split share assigned — in-app + email (if notify_events on) + push
             payer = req.payer_name or "Someone"
             body = (f"You owe ${req.amount:.2f} for {req.event_title}"
                     if req.amount else f"You have a share in {req.event_title}")
@@ -1559,6 +1559,21 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                 uid, "event",
                 f"💸 {payer} split the bill",
                 body,
+                link_type="event", link_id=req.event_id,
+            )
+            if prefs["notify_events"] and user.get("email"):
+                email_service.send_bill_split_assigned(
+                    user["email"], name, req.event_title,
+                    req.event_id, payer, req.amount,
+                )
+
+        elif req.type == "bill_split_claiming":
+            # Collaborative claiming — notify members to pick their items
+            payer = req.payer_name or "Someone"
+            create_notification(
+                uid, "event",
+                f"💸 Pick your items for {req.event_title}",
+                f"{payer} is splitting the bill — tap to claim your items",
                 link_type="event", link_id=req.event_id,
             )
 
@@ -1632,6 +1647,11 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
             body = (f"You owe ${req.amount:.2f}" if req.amount else "Check your share")
             await _send_push(push_tokens, f"💸 {payer} split the bill",
                              body,
+                             {"link_type": "event", "link_id": req.event_id})
+        elif req.type == "bill_split_claiming":
+            payer = req.payer_name or "Someone"
+            await _send_push(push_tokens, f"💸 Pick your items for {req.event_title}",
+                             f"{payer} is splitting the bill — tap to claim",
                              {"link_type": "event", "link_id": req.event_id})
 
     return {"notified": results}

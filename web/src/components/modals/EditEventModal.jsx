@@ -154,9 +154,8 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
       })
       onSaved && onSaved()
     } catch (err) {
-      setError(
-        err?.response?.data?.detail || 'Failed to save changes. Please try again.'
-      )
+      const detail = err?.response?.data?.detail
+      setError(typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map(d => d.msg || String(d)).join('; ') : 'Failed to save changes. Please try again.')
     } finally {
       setLoading(false)
     }

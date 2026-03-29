@@ -3,13 +3,16 @@ import Modal from '../ui/Modal'
 import Button from '../ui/Button'
 import Avatar from '../ui/Avatar'
 import { gatewayClient, groupsClient } from '../../api/client'
+import { useAuth } from '../../contexts/AuthContext'
 
 const isEmailLike = (v) => v.includes('@') && !v.startsWith('@')
 const isValidEmail = (v) => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v.trim())
 
 export default function InviteMemberModal({
   isOpen, onClose, groupId, groupName, onAdded, currentMemberIds = [],
+  pendingInvites = [], onResend,
 }) {
+  const { user } = useAuth()
   const [query, setQuery]           = useState('')
   const [results, setResults]       = useState([])
   const [selected, setSelected]     = useState(null)
@@ -86,8 +89,17 @@ export default function InviteMemberModal({
       setSuccessInfo({ type: 'user', data: selected })
       onAdded?.()
     } catch (e) {
-      setError(e?.response?.data?.detail || 'Could not add member.')
+      const detail = e?.response?.data?.detail
+      setError(typeof detail === 'string' ? detail : 'Could not add member.')
     } finally { setLoading(false) }
+  }
+
+  const extractErrorMsg = (e) => {
+    const detail = e?.response?.data?.detail
+    if (!detail) return 'Some invites could not be sent.'
+    if (typeof detail === 'string') return detail
+    if (Array.isArray(detail)) return detail.map(d => d.msg || String(d)).join('; ')
+    return 'Some invites could not be sent.'
   }
 
   // Send all email invites
@@ -100,6 +112,7 @@ export default function InviteMemberModal({
           gatewayClient.post('/invites/send', {
             email,
             group_id: groupId,
+            invited_by: user?.id,
             group_name: groupName || 'the club',
           })
         )
@@ -107,8 +120,16 @@ export default function InviteMemberModal({
       setSuccessInfo({ type: 'emails', data: emailList })
       onAdded?.()
     } catch (e) {
-      setError(e?.response?.data?.detail || 'Some invites could not be sent.')
+      setError(extractErrorMsg(e))
     } finally { setLoading(false) }
+  }
+
+  const [resendingId, setResendingId] = useState(null)
+  const handleResend = async (inv) => {
+    if (!onResend) return
+    setResendingId(inv.id ?? inv.email)
+    try { await onResend(inv) } catch {}
+    finally { setResendingId(null) }
   }
 
   const handleAddAnother = () => {
@@ -361,6 +382,37 @@ export default function InviteMemberModal({
           </div>
           <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--t4)' }}>
             They'll receive an email with a link to join the club.
+          </div>
+        </div>
+      )}
+
+      {/* Pending invites (resend) */}
+      {pendingInvites.length > 0 && onResend && (
+        <div style={{ marginTop: '16px' }}>
+          <div style={{ fontSize: '11px', color: 'var(--t3)', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Pending Invites ({pendingInvites.length})
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+            {pendingInvites.map(inv => (
+              <div key={inv.id ?? inv.email} style={{
+                display: 'flex', alignItems: 'center', gap: '8px',
+                padding: '7px 10px', background: 'var(--s3)',
+                border: '1px solid var(--glass)', borderRadius: '8px',
+              }}>
+                <span style={{ fontSize: '13px', flex: 1, color: 'var(--t2)' }}>✉ {inv.email}</span>
+                <button
+                  onClick={() => handleResend(inv)}
+                  disabled={resendingId === (inv.id ?? inv.email)}
+                  style={{
+                    background: 'none', border: '1px solid var(--glass)', cursor: 'pointer',
+                    color: 'var(--t2)', fontSize: '11px', fontWeight: 600,
+                    borderRadius: '6px', padding: '3px 8px', opacity: resendingId === (inv.id ?? inv.email) ? 0.5 : 1,
+                  }}
+                >
+                  {resendingId === (inv.id ?? inv.email) ? 'Sending…' : 'Resend'}
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}

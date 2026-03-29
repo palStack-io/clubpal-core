@@ -47,6 +47,7 @@ class BillSplitResponse(BaseModel):
     total_amount: float
     payment_note: Optional[str]
     status: str
+    claim_token: Optional[str] = None
     items: list[BillItemResponse]
     shares: list[BillShareResponse]
     created_at: str

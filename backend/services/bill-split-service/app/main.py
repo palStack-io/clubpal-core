@@ -255,6 +255,7 @@ def _build_split_response(split: dict, items: list, shares: list, profiles: dict
         total_amount=float(split["total_amount"]),
         payment_note=split.get("payment_note"),
         status=split["status"],
+        claim_token=split.get("claim_token"),
         items=item_responses,
         shares=share_responses,
         created_at=str(split["created_at"]),
@@ -269,21 +270,21 @@ async def _send_bill_split_notifications(
     event_name: str,
     share_by_user: dict,
 ):
-    """Fire per-user in-app + push notifications for each participant in a new bill split."""
+    """Fire per-user in-app + push + email notifications for each participant in a new bill split."""
     async with httpx.AsyncClient(timeout=10.0) as client:
         for uid in participant_ids:
             amount = share_by_user.get(uid)
             try:
                 await client.post(
-                    f"{API_GATEWAY_URL}/internal/notify/push",
+                    f"{API_GATEWAY_URL}/internal/notify/event",
                     headers={"x-internal-secret": INTERNAL_API_SECRET},
                     json={
-                        "user_id": uid,
-                        "title": f"💸 {payer_name} split the bill",
-                        "body": (f"You owe ${amount:.2f} for {event_name}"
-                                 if amount else f"You have a share in {event_name}"),
-                        "link_type": "event",
-                        "link_id": event_id,
+                        "user_ids": [uid],
+                        "event_id": event_id,
+                        "event_title": event_name,
+                        "type": "bill_split_assigned",
+                        "payer_name": payer_name,
+                        "amount": float(amount) if amount else None,
                     },
                 )
             except Exception as e:
@@ -778,6 +779,37 @@ async def start_claiming(
         update_split_status(split_id, "claiming")
 
     claim_url = f"{FRONTEND_URL}/claim/{token}"
+
+    # Notify all attendees (excluding payer) to claim their items
+    event_id = split["event_id"]
+    payer_id = split["paid_by_user_id"]
+    try:
+        attendees = await _fetch_attendees(event_id, payer_id)
+        attendee_ids = [
+            int(a.get("user_id") or a.get("id"))
+            for a in attendees
+            if (a.get("user_id") or a.get("id")) and int(a.get("user_id") or a.get("id")) != payer_id
+        ]
+        event = await _fetch_event(event_id, payer_id)
+        event_name = (event.get("title") or event.get("name") or f"Event {event_id}") if event else f"Event {event_id}"
+        payer_profile = await _fetch_user_profile(payer_id)
+        payer_name = payer_profile.get("full_name") or f"User {payer_id}"
+        if attendee_ids:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                await client.post(
+                    f"{API_GATEWAY_URL}/internal/notify/event",
+                    headers={"x-internal-secret": INTERNAL_API_SECRET},
+                    json={
+                        "user_ids": attendee_ids,
+                        "event_id": event_id,
+                        "event_title": event_name,
+                        "type": "bill_split_claiming",
+                        "payer_name": payer_name,
+                    },
+                )
+    except Exception as e:
+        logger.warning(f"Failed to send claiming notifications for split {split_id}: {e}")
+
     return StartClaimingResponse(claim_token=token, claim_url=claim_url)
 
 

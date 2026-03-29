@@ -20,6 +20,7 @@ export default function BillSplitSection({ event, attendees, currentUser }) {
   const [paymentNote, setPaymentNote] = useState('')
   const [claimUrl, setClaimUrl] = useState('')
   const [claimMode, setClaimMode] = useState(false)
+  const [guests, setGuests] = useState([])
 
   useEffect(() => {
     billSplitApi.getByEvent(event.id)
@@ -145,6 +146,8 @@ export default function BillSplitSection({ event, attendees, currentUser }) {
       attendees={goingAttendees}
       currentUser={currentUser}
       onChange={setItems}
+      guests={guests}
+      onGuestsChange={setGuests}
       onNext={() => setStep('confirm')}
       onBack={() => setStep('choose-flow')}
     />
@@ -157,6 +160,7 @@ export default function BillSplitSection({ event, attendees, currentUser }) {
       tax={tax}
       tip={tip}
       attendees={goingAttendees}
+      guests={guests}
       currentUser={currentUser}
       paymentNote={paymentNote}
       onPaymentNoteChange={setPaymentNote}
@@ -171,14 +175,43 @@ export default function BillSplitSection({ event, attendees, currentUser }) {
     />
   )
 
-  if (step === 'claiming' && split) return (
-    <ClaimingStatus
-      splitId={split.id}
-      claimUrl={claimUrl}
-      currentUser={currentUser}
-      onFinalize={(updatedSplit) => { setSplit(updatedSplit); setStep('settled') }}
-    />
-  )
+  if (step === 'claiming' && split) {
+    const isPayer = split.paid_by_user_id === currentUser?.id
+    if (!isPayer) {
+      const token = split.claim_token
+      return (
+        <Card>
+          <Card.Body>
+            <div style={{ textAlign: 'center', padding: '12px 0' }}>
+              <div style={{ fontSize: 36, marginBottom: 12 }}>💸</div>
+              <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--t1)', marginBottom: 8 }}>
+                Pick your items
+              </h3>
+              <p style={{ fontSize: 14, color: 'var(--t2)', marginBottom: 20 }}>
+                <strong>{split.paid_by_name}</strong> is splitting the bill for this event.
+                Tap the button below to claim what you ordered.
+              </p>
+              {token ? (
+                <Button variant="primary" onClick={() => window.location.href = `/claim/${token}`}>
+                  Claim My Items →
+                </Button>
+              ) : (
+                <p style={{ fontSize: 13, color: 'var(--t3)' }}>Claim link loading…</p>
+              )}
+            </div>
+          </Card.Body>
+        </Card>
+      )
+    }
+    return (
+      <ClaimingStatus
+        splitId={split.id}
+        claimUrl={claimUrl}
+        currentUser={currentUser}
+        onFinalize={(updatedSplit) => { setSplit(updatedSplit); setStep('settled') }}
+      />
+    )
+  }
 
   return null
 }

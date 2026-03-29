@@ -212,7 +212,8 @@ export default function CreateEventModal({
       }
       onCreated && onCreated(event.id)
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to create event. Please try again.')
+      const detail = err?.response?.data?.detail
+      setError(typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map(d => d.msg || String(d)).join('; ') : 'Failed to create event. Please try again.')
     } finally {
       setLoading(false)
     }

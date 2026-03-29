@@ -389,13 +389,15 @@ async def advance_rotation_endpoint(group_id: int, user_id: int = Depends(get_cu
     if not result:
         raise HTTPException(status_code=404, detail="Group not found or has no members")
 
-    # Manual rotation: notify all members to vote on who picks next
-    if result.get("rotation_type") == "none":
-        group = get_group(group_id)
-        group_name = group["name"] if group else f"Group {group_id}"
+    rotation_type = result.get("rotation_type")
+    group = get_group(group_id)
+    group_name = group["name"] if group else f"Group {group_id}"
+    internal_secret = os.getenv("INTERNAL_API_SECRET", "")
+
+    if rotation_type == "none":
+        # Manual rotation: notify all members to vote on who picks next
         members = get_members(group_id)
         member_ids = [m["user_id"] for m in members]
-        internal_secret = os.getenv("INTERNAL_API_SECRET", "")
         async with httpx.AsyncClient() as client:
             try:
                 await client.post(
@@ -406,12 +408,31 @@ async def advance_rotation_endpoint(group_id: int, user_id: int = Depends(get_cu
                         "event_title": f"🗳️ Vote: Who picks next in {group_name}?",
                         "group_name": group_name,
                         "event_date": "",
+                        "type": "poll",
                     },
                     headers={"x-internal-secret": internal_secret},
                     timeout=5.0,
                 )
             except Exception:
                 pass  # non-blocking — rotation still advances
+    else:
+        # Sequential rotation (round_robin / random): notify the new picker
+        new_user_id = result.get("user_id")
+        if new_user_id:
+            async with httpx.AsyncClient() as client:
+                try:
+                    await client.post(
+                        f"{GATEWAY_SERVICE_URL}/internal/notify/rotation",
+                        json={
+                            "user_id": new_user_id,
+                            "group_name": group_name,
+                            "group_id": group_id,
+                        },
+                        headers={"x-internal-secret": internal_secret},
+                        timeout=5.0,
+                    )
+                except Exception:
+                    pass  # non-blocking
 
     return RotationTurnResponse(**result)
 
@@ -428,6 +449,29 @@ async def complete_turn_endpoint(group_id: int, user_id: int = Depends(get_curre
     result = advance_rotation(group_id)
     if not result:
         raise HTTPException(status_code=404, detail="Group not found or has no members")
+
+    # Notify the next picker if this is a sequential rotation
+    if result.get("rotation_type") != "none":
+        new_user_id = result.get("user_id")
+        if new_user_id:
+            group = get_group(group_id)
+            group_name = group["name"] if group else f"Group {group_id}"
+            internal_secret = os.getenv("INTERNAL_API_SECRET", "")
+            async with httpx.AsyncClient() as client:
+                try:
+                    await client.post(
+                        f"{GATEWAY_SERVICE_URL}/internal/notify/rotation",
+                        json={
+                            "user_id": new_user_id,
+                            "group_name": group_name,
+                            "group_id": group_id,
+                        },
+                        headers={"x-internal-secret": internal_secret},
+                        timeout=5.0,
+                    )
+                except Exception:
+                    pass  # non-blocking
+
     return RotationTurnResponse(**result)
 
 

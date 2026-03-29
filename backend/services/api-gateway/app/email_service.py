@@ -427,6 +427,24 @@ class EmailService:
         )
         return self._send(to_email, subject, _base(subject, content, self.frontend_url))
 
+    def send_bill_split_assigned(self, to_email: str, username: str, event_title: str,
+                                  event_id: int, payer_name: str,
+                                  amount: Optional[float] = None) -> bool:
+        """Notify a participant that a bill has been split and they have a share."""
+        url = f"{self.frontend_url}/events/{event_id}"
+        subject = f"{payer_name} split the bill for {event_title}"
+        amount_line = (f"Your share is <strong>${amount:.2f}</strong>."
+                       if amount else "Check the app for your share amount.")
+        content = (
+            _h1("You've got a bill share 💸")
+            + _p(f"Hey <strong>{username}</strong>,")
+            + _p(f"<strong>{payer_name}</strong> split the bill for "
+                 f"<strong>{event_title}</strong>. {amount_line}")
+            + _btn("View Bill Split", url, "#f43f5e")
+            + _note("You'll receive a separate email with your itemized breakdown and payment link.")
+        )
+        return self._send(to_email, subject, _base(subject, content, self.frontend_url))
+
 
 # Singleton
 email_service = EmailService()

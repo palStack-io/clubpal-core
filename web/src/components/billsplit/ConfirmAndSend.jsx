@@ -38,6 +38,7 @@ export default function ConfirmAndSend({
   tax,
   tip,
   attendees,
+  guests = [],
   currentUser,
   paymentNote,
   onPaymentNoteChange,
@@ -51,21 +52,30 @@ export default function ConfirmAndSend({
   const [copied, setCopied] = useState(false)
 
   const payerId = currentUser?.id
-  const shares = computeShares(items, parseFloat(tax || 0), parseFloat(tip || 0), attendees, payerId)
-  const grandTotal = shares.reduce((s, sh) => s + sh.total_owed, 0)
-  const nonPayers = shares.filter(s => !s.is_payer)
+  const guestIds = new Set((guests || []).map(g => g.user_id))
+
+  // Compute shares for all participants (attendees + guests)
+  const allParticipants = [...attendees, ...(guests || [])]
+  const allShares = computeShares(items, parseFloat(tax || 0), parseFloat(tip || 0), allParticipants, payerId)
+  const regularShares = allShares.filter(s => s.user_id >= 0)
+  const guestShares = allShares.filter(s => s.user_id < 0)
+  const grandTotal = allShares.reduce((s, sh) => s + sh.total_owed, 0)
+  const nonPayers = regularShares.filter(s => !s.is_payer)
 
   const handleSend = async () => {
     setLoading(true)
     setError(null)
     try {
+      // Remap guest IDs → payer so backend treats guest items as payer-fronted
+      const remappedItems = items.map(i => ({
+        name: i.name,
+        price: parseFloat(i.price || 0),
+        assigned_to: (i.assigned_to || []).map(uid => guestIds.has(uid) ? payerId : uid),
+      }))
+
       const result = await billSplitApi.create({
         event_id: event.id,
-        items: items.map(i => ({
-          name: i.name,
-          price: parseFloat(i.price || 0),
-          assigned_to: i.assigned_to || [],
-        })),
+        items: remappedItems,
         tax_amount: parseFloat(tax || 0),
         tip_amount: parseFloat(tip || 0),
         payment_note: paymentNote,
@@ -88,9 +98,11 @@ export default function ConfirmAndSend({
       `Bill Split — ${event.title || 'Event'}`,
       `Total: $${grandTotal.toFixed(2)}`,
       '',
-      ...shares.map(s =>
+      ...regularShares.map(s =>
         `${s.full_name}${s.is_payer ? ' (paid)' : ''}: $${s.total_owed.toFixed(2)}`
       ),
+      ...(guestShares.length ? ['', 'Guests (cash):',
+        ...guestShares.map(s => `  ${s.full_name}: $${s.total_owed.toFixed(2)}`)] : []),
     ]
     if (paymentNote) {
       lines.push('', `Payment note: ${paymentNote}`)
@@ -123,13 +135,11 @@ export default function ConfirmAndSend({
             <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '4px' }}>
               Breakdown
             </div>
-            {shares.map(share => (
+            {regularShares.map(share => (
               <div
                 key={share.user_id}
                 style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                   padding: '10px 14px',
                   background: share.is_payer ? 'rgba(34,211,160,0.06)' : 'var(--s2)',
                   border: share.is_payer ? '1px solid rgba(34,211,160,0.15)' : '1px solid var(--glass)',
@@ -140,23 +150,41 @@ export default function ConfirmAndSend({
                   <span style={{ fontSize: '13px', color: 'var(--t1)', fontWeight: share.is_payer ? 600 : 400 }}>
                     {share.full_name}
                   </span>
-                  {share.is_payer && (
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: '#22d3a0' }}>
-                      you · paid
-                    </span>
-                  )}
+                  {share.is_payer && <span style={{ fontSize: '11px', fontWeight: 700, color: '#22d3a0' }}>you · paid</span>}
                 </div>
-                <span
-                  style={{
-                    fontSize: '14px',
-                    fontWeight: 700,
-                    color: share.is_payer ? '#22d3a0' : 'var(--t1)',
-                  }}
-                >
+                <span style={{ fontSize: '14px', fontWeight: 700, color: share.is_payer ? '#22d3a0' : 'var(--t1)' }}>
                   ${share.total_owed.toFixed(2)}
                 </span>
               </div>
             ))}
+
+            {/* Guest shares */}
+            {guestShares.length > 0 && (
+              <>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginTop: '4px' }}>
+                  Guests (collect cash)
+                </div>
+                {guestShares.map(share => (
+                  <div
+                    key={share.user_id}
+                    style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      padding: '10px 14px',
+                      background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)',
+                      borderRadius: '10px',
+                    }}
+                  >
+                    <div>
+                      <span style={{ fontSize: '13px', color: 'var(--t1)' }}>👤 {share.full_name}</span>
+                      <span style={{ fontSize: '11px', color: 'var(--t3)', marginLeft: '6px' }}>you front this</span>
+                    </div>
+                    <span style={{ fontSize: '14px', fontWeight: 700, color: '#f59e0b' }}>
+                      ${share.total_owed.toFixed(2)}
+                    </span>
+                  </div>
+                ))}
+              </>
+            )}
 
             {/* Grand total row */}
             <div

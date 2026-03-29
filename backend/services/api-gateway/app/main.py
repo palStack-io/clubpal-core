@@ -1414,188 +1414,192 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
     push_tokens_all = get_push_tokens_for_users(user_ids) if user_ids else []
 
     for uid in user_ids:
-        user = get_user_by_id(uid)
-        if not user:
-            continue
-        prefs = get_notification_prefs(uid)
-        push_prefs[uid] = prefs.get("push_enabled", True)
-        name = user.get("full_name") or user["username"]
+        try:
+            user = get_user_by_id(uid)
+            if not user:
+                continue
+            prefs = get_notification_prefs(uid)
+            push_prefs[uid] = prefs.get("push_enabled", True)
+            name = user.get("full_name") or user["username"]
 
-        if req.type == "poll":
-            # In-app notification (always)
-            create_notification(
-                uid, "poll",
-                f"🗳️ Vote: {req.event_title}",
-                f"{creator_name} wants your opinion in {group_name}",
-                link_type="group", link_id=req.group_id,
-            )
-            # Email (if opted in)
-            if prefs["notify_events"] and user.get("email"):
-                email_service.send_poll_created(
-                    user["email"], name, req.event_title,
-                    group_name, creator_name, req.group_id or 0,
+            if req.type == "poll":
+                # In-app notification (always)
+                create_notification(
+                    uid, "poll",
+                    f"🗳️ Vote: {req.event_title}",
+                    f"{creator_name} wants your opinion in {group_name}",
+                    link_type="group", link_id=req.group_id,
+                )
+                # Email (if opted in)
+                if prefs["notify_events"] and user.get("email"):
+                    email_service.send_poll_created(
+                        user["email"], name, req.event_title,
+                        group_name, creator_name, req.group_id or 0,
+                    )
+
+            elif req.type == "rsvp_deadline_final":
+                create_notification(uid, "event", f"📊 Final RSVP: {req.event_title}",
+                                    f"{req.going_count or 0} going · {req.maybe_count or 0} maybe",
+                                    link_type="event", link_id=req.event_id)
+                if prefs["notify_events"] and user.get("email"):
+                    email_service.send_rsvp_deadline_final_count(
+                        user["email"], name, req.event_title, req.event_date, group_name,
+                        req.going_count or 0, req.maybe_count or 0, req.not_going_count or 0,
+                        req.event_id,
+                    )
+
+            elif req.type == "rsvp_nudge":
+                # Manual nudge from event creator — always in-app + push, no email
+                create_notification(uid, "reminder", f"📅 RSVP needed: {req.event_title}",
+                                    f"{creator_name} is asking — are you in?",
+                                    link_type="event", link_id=req.event_id)
+
+            elif req.type == "rsvp_reminder":
+                create_notification(uid, "reminder", f"⏰ RSVP closes soon: {req.event_title}",
+                                    f"Deadline: {req.deadline or 'soon'}",
+                                    link_type="event", link_id=req.event_id)
+                if prefs["notify_reminders"] and user.get("email"):
+                    email_service.send_rsvp_deadline_reminder(
+                        user["email"], name, req.event_title, req.event_date, group_name,
+                        req.deadline or "", req.event_id,
+                    )
+
+            elif req.type == "reminder":
+                if not prefs["notify_reminders"] or not user.get("email"):
+                    continue
+                create_notification(uid, "reminder", f"⏰ Coming up: {req.event_title}",
+                                    f"Starting in {req.hours_until or 24} hours",
+                                    link_type="event", link_id=req.event_id)
+                email_service.send_event_reminder(
+                    user["email"], name, req.event_title, req.event_date, group_name,
+                    req.hours_until or 24, req.event_id,
                 )
 
-        elif req.type == "rsvp_deadline_final":
-            create_notification(uid, "event", f"📊 Final RSVP: {req.event_title}",
-                                f"{req.going_count or 0} going · {req.maybe_count or 0} maybe",
-                                link_type="event", link_id=req.event_id)
-            if prefs["notify_events"] and user.get("email"):
-                email_service.send_rsvp_deadline_final_count(
+            elif req.type == "recurring":
+                if not prefs["notify_events"] or not user.get("email"):
+                    continue
+                create_notification(uid, "event", f"🔁 {req.event_title}",
+                                    f"Recurring event scheduled in {group_name}",
+                                    link_type="event", link_id=req.event_id)
+                email_service.send_recurring_event_created(
                     user["email"], name, req.event_title, req.event_date, group_name,
-                    req.going_count or 0, req.maybe_count or 0, req.not_going_count or 0,
                     req.event_id,
                 )
 
-        elif req.type == "rsvp_nudge":
-            # Manual nudge from event creator — always in-app + push, no email
-            create_notification(uid, "reminder", f"📅 RSVP needed: {req.event_title}",
-                                f"{creator_name} is asking — are you in?",
-                                link_type="event", link_id=req.event_id)
-
-        elif req.type == "rsvp_reminder":
-            create_notification(uid, "reminder", f"⏰ RSVP closes soon: {req.event_title}",
-                                f"Deadline: {req.deadline or 'soon'}",
-                                link_type="event", link_id=req.event_id)
-            if prefs["notify_reminders"] and user.get("email"):
-                email_service.send_rsvp_deadline_reminder(
-                    user["email"], name, req.event_title, req.event_date, group_name,
-                    req.deadline or "", req.event_id,
+            elif req.type == "invite":
+                # Membership notifications (new member, join request, approval) — always in-app + push
+                create_notification(
+                    uid, "invite",
+                    req.event_title,
+                    req.group_name or "your group",
+                    link_type="group", link_id=req.group_id,
                 )
+                # Email for member-facing invite notifications (added, approved, declined)
+                if prefs.get("notify_invites", True) and user.get("email") and req.group_id:
+                    invite_title = req.event_title or ""
+                    # Only send email for notifications directed at the member (not admin alerts)
+                    is_member_facing = any(kw in invite_title for kw in ("added", "in!", "Welcome", "declined", "Your request"))
+                    if is_member_facing:
+                        email_service.send_group_membership(
+                            user["email"], name,
+                            req.group_name or group_name,
+                            req.group_id,
+                            invite_title,
+                        )
 
-        elif req.type == "reminder":
-            if not prefs["notify_reminders"] or not user.get("email"):
-                continue
-            create_notification(uid, "reminder", f"⏰ Coming up: {req.event_title}",
-                                f"Starting in {req.hours_until or 24} hours",
-                                link_type="event", link_id=req.event_id)
-            email_service.send_event_reminder(
-                user["email"], name, req.event_title, req.event_date, group_name,
-                req.hours_until or 24, req.event_id,
-            )
-
-        elif req.type == "recurring":
-            if not prefs["notify_events"] or not user.get("email"):
-                continue
-            create_notification(uid, "event", f"🔁 {req.event_title}",
-                                f"Recurring event scheduled in {group_name}",
-                                link_type="event", link_id=req.event_id)
-            email_service.send_recurring_event_created(
-                user["email"], name, req.event_title, req.event_date, group_name,
-                req.event_id,
-            )
-
-        elif req.type == "invite":
-            # Membership notifications (new member, join request, approval) — always in-app + push
-            create_notification(
-                uid, "invite",
-                req.event_title,
-                req.group_name or "your group",
-                link_type="group", link_id=req.group_id,
-            )
-            # Email for member-facing invite notifications (added, approved, declined)
-            if prefs.get("notify_invites", True) and user.get("email") and req.group_id:
-                invite_title = req.event_title or ""
-                # Only send email for notifications directed at the member (not admin alerts)
-                is_member_facing = any(kw in invite_title for kw in ("added", "in!", "Welcome", "declined", "Your request"))
-                if is_member_facing:
-                    email_service.send_group_membership(
-                        user["email"], name,
-                        req.group_name or group_name,
-                        req.group_id,
-                        invite_title,
+            elif req.type == "event_cancelled":
+                # Event cancellation — always in-app + push; email respects notify_events pref
+                create_notification(
+                    uid, "event",
+                    f"❌ Cancelled: {req.event_title}",
+                    f"This event has been cancelled",
+                    link_type="group", link_id=req.group_id,
+                )
+                if prefs.get("notify_events", True) and user.get("email") and req.group_id:
+                    email_service.send_event_cancelled(
+                        user["email"], name, req.event_title,
+                        req.event_date, group_name, req.group_id,
                     )
 
-        elif req.type == "event_cancelled":
-            # Event cancellation — always in-app + push; email respects notify_events pref
-            create_notification(
-                uid, "event",
-                f"❌ Cancelled: {req.event_title}",
-                f"This event has been cancelled",
-                link_type="group", link_id=req.group_id,
-            )
-            if prefs.get("notify_events", True) and user.get("email") and req.group_id:
-                email_service.send_event_cancelled(
-                    user["email"], name, req.event_title,
-                    req.event_date, group_name, req.group_id,
+            elif req.type == "event_edit":
+                # Date/location change alert — always in-app + push
+                create_notification(
+                    uid, "event",
+                    f"✏️ Updated: {req.event_title}",
+                    f"Date or location has changed — check the details",
+                    link_type="event", link_id=req.event_id,
                 )
 
-        elif req.type == "event_edit":
-            # Date/location change alert — always in-app + push
-            create_notification(
-                uid, "event",
-                f"✏️ Updated: {req.event_title}",
-                f"Date or location has changed — check the details",
-                link_type="event", link_id=req.event_id,
-            )
+            elif req.type == "social_rsvp":
+                # Someone RSVPed going — in-app only, no push
+                create_notification(
+                    uid, "event",
+                    f"👋 {creator_name} is going!",
+                    f"Check who's attending {req.event_title}",
+                    link_type="event", link_id=req.event_id,
+                )
+                # Note: social_rsvp intentionally skips push (high-volume, low-priority)
+                results.append(uid)
+                continue
 
-        elif req.type == "social_rsvp":
-            # Someone RSVPed going — in-app only, no push
-            create_notification(
-                uid, "event",
-                f"👋 {creator_name} is going!",
-                f"Check who's attending {req.event_title}",
-                link_type="event", link_id=req.event_id,
-            )
-            # Note: social_rsvp intentionally skips push (high-volume, low-priority)
+            elif req.type == "rating_prompt":
+                # Post-event rating prompt — push + in-app
+                create_notification(
+                    uid, "event",
+                    f"⭐ How was {req.event_title}?",
+                    "Leave a rating for this event",
+                    link_type="event", link_id=req.event_id,
+                )
+
+            elif req.type == "bill_split_assigned":
+                # Bill split share assigned — in-app + email (if notify_events on) + push
+                payer = req.payer_name or "Someone"
+                body = (f"You owe ${req.amount:.2f} for {req.event_title}"
+                        if req.amount else f"You have a share in {req.event_title}")
+                create_notification(
+                    uid, "event",
+                    f"💸 {payer} split the bill",
+                    body,
+                    link_type="event", link_id=req.event_id,
+                )
+                if prefs["notify_events"] and user.get("email"):
+                    email_service.send_bill_split_assigned(
+                        user["email"], name, req.event_title,
+                        req.event_id, payer, req.amount,
+                    )
+
+            elif req.type == "bill_split_claiming":
+                # Collaborative claiming — notify members to pick their items
+                payer = req.payer_name or "Someone"
+                create_notification(
+                    uid, "event",
+                    f"💸 Pick your items for {req.event_title}",
+                    f"{payer} is splitting the bill — tap to claim your items",
+                    link_type="event", link_id=req.event_id,
+                )
+
+            else:  # "created"
+                # Skip the creator — they made the event, no need to notify themselves
+                if req.creator_id and uid == req.creator_id:
+                    continue
+                if not prefs["notify_events"] or not user.get("email"):
+                    continue
+                if req.has_rsvp:
+                    notif_body = f"{creator_name} scheduled an event in {group_name} — RSVP now"
+                else:
+                    notif_body = f"{creator_name} scheduled an event in {group_name}"
+                create_notification(uid, "event", f"📅 New event: {req.event_title}",
+                                    notif_body,
+                                    link_type="event", link_id=req.event_id)
+                email_service.send_event_created(
+                    user["email"], name, req.event_title, req.event_date, group_name,
+                    creator_name, req.event_id, has_rsvp=req.has_rsvp,
+                )
+
             results.append(uid)
-            continue
 
-        elif req.type == "rating_prompt":
-            # Post-event rating prompt — push + in-app
-            create_notification(
-                uid, "event",
-                f"⭐ How was {req.event_title}?",
-                "Leave a rating for this event",
-                link_type="event", link_id=req.event_id,
-            )
-
-        elif req.type == "bill_split_assigned":
-            # Bill split share assigned — in-app + email (if notify_events on) + push
-            payer = req.payer_name or "Someone"
-            body = (f"You owe ${req.amount:.2f} for {req.event_title}"
-                    if req.amount else f"You have a share in {req.event_title}")
-            create_notification(
-                uid, "event",
-                f"💸 {payer} split the bill",
-                body,
-                link_type="event", link_id=req.event_id,
-            )
-            if prefs["notify_events"] and user.get("email"):
-                email_service.send_bill_split_assigned(
-                    user["email"], name, req.event_title,
-                    req.event_id, payer, req.amount,
-                )
-
-        elif req.type == "bill_split_claiming":
-            # Collaborative claiming — notify members to pick their items
-            payer = req.payer_name or "Someone"
-            create_notification(
-                uid, "event",
-                f"💸 Pick your items for {req.event_title}",
-                f"{payer} is splitting the bill — tap to claim your items",
-                link_type="event", link_id=req.event_id,
-            )
-
-        else:  # "created"
-            # Skip the creator — they made the event, no need to notify themselves
-            if req.creator_id and uid == req.creator_id:
-                continue
-            if not prefs["notify_events"] or not user.get("email"):
-                continue
-            if req.has_rsvp:
-                notif_body = f"{creator_name} scheduled an event in {group_name} — RSVP now"
-            else:
-                notif_body = f"{creator_name} scheduled an event in {group_name}"
-            create_notification(uid, "event", f"📅 New event: {req.event_title}",
-                                notif_body,
-                                link_type="event", link_id=req.event_id)
-            email_service.send_event_created(
-                user["email"], name, req.event_title, req.event_date, group_name,
-                creator_name, req.event_id, has_rsvp=req.has_rsvp,
-            )
-
-        results.append(uid)
+        except Exception as e:
+            print(f"[WARN] notify_event failed for user {uid}: {e}")
 
     # ── Push notifications (batch) ────────────────────────────────────────────
     if results and push_tokens_all:

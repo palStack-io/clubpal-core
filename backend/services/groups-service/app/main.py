@@ -270,7 +270,7 @@ async def add_member_endpoint(group_id: int, member_data: MemberAdd):
     internal_secret = os.getenv("INTERNAL_API_SECRET", "")
     async with httpx.AsyncClient() as client:
         try:
-            await client.post(
+            resp = await client.post(
                 f"{GATEWAY_SERVICE_URL}/internal/notify/event",
                 json={
                     "user_ids": [member_data.user_id],
@@ -282,8 +282,10 @@ async def add_member_endpoint(group_id: int, member_data: MemberAdd):
                 headers={"x-internal-secret": internal_secret},
                 timeout=5.0,
             )
-        except Exception:
-            pass
+            if resp.status_code >= 400:
+                print(f"[WARN] member-add notify failed HTTP {resp.status_code}: {resp.text[:300]}")
+        except Exception as e:
+            print(f"[WARN] member-add notify exception: {e}")
 
     member = get_member(group_id, member_data.user_id)
     return MemberResponse(**member)

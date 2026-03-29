@@ -99,6 +99,10 @@ export const enrichApi = {
   getArts: (placeId) =>
     enrichClient.get(`/arts/${placeId}`).then(r => r.data),
 
+  // ===== Location Autocomplete =====
+  autocomplete: (input) =>
+    enrichClient.get('/places/autocomplete', { params: { input } }).then(r => r.data),
+
   // ===== Geocode =====
   geocode: (address) =>
     enrichClient.get('/geocode', { params: { address } }).then(r => r.data),

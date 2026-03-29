@@ -346,7 +346,7 @@ def search_users_by_username(query: str, limit: int = 10) -> list:
     cursor = conn.cursor()
     cursor.execute(
         """SELECT id, username, full_name, avatar_url FROM users
-           WHERE username ILIKE %s AND is_active = TRUE
+           WHERE username ILIKE %s AND is_active = 1
            ORDER BY username ASC LIMIT %s""",
         (f"%{query.lower()}%", limit)
     )

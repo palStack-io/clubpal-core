@@ -352,6 +352,8 @@ export default function GroupDetail() {
       <InviteMemberModal
         isOpen={showInvite}
         onClose={() => { setShowInvite(false); setInviteSuccess(null) }}
+        groupId={parseInt(id)}
+        groupName={group?.name}
         onInvite={handleInvite}
         onResend={(inv) => gatewayClient.post('/invites/send', {
           email: inv.email,

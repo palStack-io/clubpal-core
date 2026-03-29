@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
 import { authApi } from '../../api/auth'
@@ -98,6 +98,9 @@ export default function OnboardingWizard() {
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
   const geocodeTimeout = useRef(null)
+  const [locationSuggestions, setLocationSuggestions] = useState([])
+  const [showSuggestions, setShowSuggestions] = useState(false)
+  const autocompleteTimeout = useRef(null)
 
   const compressImage = (file) => new Promise((resolve) => {
     const img = new Image()
@@ -176,6 +179,8 @@ export default function OnboardingWizard() {
   const handleGeolocation = () => {
     if (!navigator.geolocation) { setGeoError('Geolocation not supported'); return }
     setGeoError('')
+    setLocationSuggestions([])
+    setShowSuggestions(false)
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         const lat = pos.coords.latitude
@@ -195,56 +200,60 @@ export default function OnboardingWizard() {
 
   const handleAddressChange = (val) => {
     setLocationAddress(val)
-    clearTimeout(geocodeTimeout.current)
-    if (val.length > 3) {
-      geocodeTimeout.current = setTimeout(async () => {
+    setLocationLat(null)
+    setLocationLng(null)
+    clearTimeout(autocompleteTimeout.current)
+    if (val.length >= 2) {
+      autocompleteTimeout.current = setTimeout(async () => {
         try {
-          const result = await enrichApi.geocode(val)
-          if (result?.lat) {
-            setLocationLat(result.lat)
-            setLocationLng(result.lng)
-          }
-        } catch {}
-      }, 600)
+          const suggestions = await enrichApi.autocomplete(val)
+          setLocationSuggestions(suggestions || [])
+          setShowSuggestions((suggestions || []).length > 0)
+        } catch {
+          setLocationSuggestions([])
+        }
+      }, 300)
+    } else {
+      setLocationSuggestions([])
+      setShowSuggestions(false)
     }
   }
 
-  const handleSubmit = async () => {
-    setLoading(true)
-    setLoadError('')
+  const handleSelectSuggestion = async (suggestion) => {
+    setLocationAddress(suggestion.description)
+    setLocationSuggestions([])
+    setShowSuggestions(false)
     try {
-      const prefs = {
-        location_address: locationAddress || null,
-        location_lat: locationLat,
-        location_lng: locationLng,
-        radius_dining: radiusDining,
-        radius_hiking: radiusHiking,
-        radius_arts: radiusArts,
-        activities,
-        book_genres: bookGenres.map(g => g.toLowerCase()),
-        movie_genres: movieGenres.map(g => g.toLowerCase()),
-        show_genres: showGenres.map(g => g.toLowerCase()),
-        game_types: gameTypes,
+      const result = await enrichApi.geocode(suggestion.description)
+      if (result?.lat) {
+        setLocationLat(result.lat)
+        setLocationLng(result.lng)
       }
-      // Save preferences first
-      await authApi.updatePreferences(prefs)
-      // Save avatar if chosen (photo URL already uploaded, just persist; emoji needs saving)
-      const avatarValue = avatarMode === 'photo' ? photoUrl : avatarMode === 'emoji' ? selectedEmoji : null
-      if (avatarValue) {
-        try {
-          const r = await gatewayClient.patch('/users/me', { avatar_url: avatarValue })
-          updateUser({ ...r.data, onboarding_complete: true })
-        } catch {
-          updateUser({ onboarding_complete: true })
-        }
-      } else {
-        updateUser({ onboarding_complete: true })
-      }
-      // Navigate immediately — feed loading happens in the background
-      navigate('/dashboard')
-    } catch (e) {
-      setLoadError(e?.response?.data?.detail || 'Something went wrong. Please try again.')
-      setLoading(false)
+    } catch {}
+  }
+
+  const handleSubmit = () => {
+    // Navigate immediately — save happens in the background
+    updateUser({ onboarding_complete: true })
+    navigate('/dashboard')
+
+    const prefs = {
+      location_address: locationAddress || null,
+      location_lat: locationLat,
+      location_lng: locationLng,
+      radius_dining: radiusDining,
+      radius_hiking: radiusHiking,
+      radius_arts: radiusArts,
+      activities,
+      book_genres: bookGenres.map(g => g.toLowerCase()),
+      movie_genres: movieGenres.map(g => g.toLowerCase()),
+      show_genres: showGenres.map(g => g.toLowerCase()),
+      game_types: gameTypes,
+    }
+    authApi.updatePreferences(prefs).catch(() => {})
+    const avatarValue = avatarMode === 'photo' ? photoUrl : avatarMode === 'emoji' ? selectedEmoji : null
+    if (avatarValue) {
+      gatewayClient.patch('/users/me', { avatar_url: avatarValue }).catch(() => {})
     }
   }
 
@@ -549,37 +558,67 @@ export default function OnboardingWizard() {
             : 'Your location helps us tailor content — optional for movies, books, and games.'}
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-          <input
-            value={locationAddress}
-            onChange={e => handleAddressChange(e.target.value)}
-            placeholder="City, state or ZIP code…"
-            style={{
-              flex: 1,
-              background: 'var(--s2)',
-              border: '1px solid var(--glass)',
-              borderRadius: '10px',
-              padding: '10px 14px',
-              fontSize: '13px',
-              color: 'var(--t1)',
-              outline: 'none',
-            }}
-          />
-          <button
-            type="button"
-            onClick={handleGeolocation}
-            title="Use my current location"
-            style={{
-              background: 'var(--s3)',
-              border: '1px solid var(--glass)',
-              borderRadius: '10px',
-              padding: '10px 14px',
-              cursor: 'pointer',
-              fontSize: '18px',
-            }}
-          >
-            📍
-          </button>
+        <div style={{ position: 'relative', marginBottom: '16px' }}>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <input
+              value={locationAddress}
+              onChange={e => handleAddressChange(e.target.value)}
+              onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+              onFocus={() => locationSuggestions.length > 0 && setShowSuggestions(true)}
+              placeholder="City, state or ZIP code…"
+              style={{
+                flex: 1,
+                background: 'var(--s2)',
+                border: '1px solid var(--glass)',
+                borderRadius: '10px',
+                padding: '10px 14px',
+                fontSize: '13px',
+                color: 'var(--t1)',
+                outline: 'none',
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleGeolocation}
+              title="Use my current location"
+              style={{
+                background: 'var(--s3)',
+                border: '1px solid var(--glass)',
+                borderRadius: '10px',
+                padding: '10px 14px',
+                cursor: 'pointer',
+                fontSize: '18px',
+              }}
+            >
+              📍
+            </button>
+          </div>
+          {showSuggestions && locationSuggestions.length > 0 && (
+            <div style={{
+              position: 'absolute', top: 'calc(100% + 4px)', left: 0, right: '52px', zIndex: 100,
+              background: 'var(--s2)', border: '1px solid var(--glass)',
+              borderRadius: '10px', overflow: 'hidden',
+              boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
+            }}>
+              {locationSuggestions.map((s, i) => (
+                <button
+                  key={s.place_id || i}
+                  type="button"
+                  onMouseDown={() => handleSelectSuggestion(s)}
+                  style={{
+                    width: '100%', textAlign: 'left', background: 'none', border: 'none',
+                    borderBottom: i < locationSuggestions.length - 1 ? '1px solid var(--glass)' : 'none',
+                    padding: '10px 14px', cursor: 'pointer',
+                    fontSize: '13px', color: 'var(--t1)',
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.background = 'var(--s3)'}
+                  onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                >
+                  📍 {s.description}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {geoError && (
@@ -689,15 +728,11 @@ export default function OnboardingWizard() {
   // ── Step 6: Confirm & Finish ──────────────────────────────────────────────
   if (step === 6) {
     return (
-      <div style={overlay} onClick={loading ? undefined : handleSkip}>
+      <div style={overlay} onClick={handleSkip}>
         <div style={card} onClick={stopProp}>
           {progressDots()}
-          <div style={h2}>{loadError ? 'Something went wrong' : 'All set!'}</div>
-          <div style={sub}>
-            {loadError
-              ? 'An error occurred saving your preferences. You can try again or skip for now.'
-              : 'Your preferences are ready to save. Content will load in the background once you hit the dashboard.'}
-          </div>
+          <div style={h2}>All set!</div>
+          <div style={sub}>Your preferences are saved. Content will load in the background once you're on the dashboard.</div>
 
           {/* Per-category summary */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '24px' }}>
@@ -721,45 +756,25 @@ export default function OnboardingWizard() {
             ))}
           </div>
 
-          {!loadError && (
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <button
+              type="button"
+              onClick={() => setStep(needsGenres ? 5 : 4)}
+              style={{ background: 'none', border: 'none', fontSize: '13px', color: 'var(--t3)', cursor: 'pointer' }}
+            >
+              ← Back
+            </button>
+            <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
               <button
                 type="button"
-                onClick={() => setStep(needsGenres ? 5 : 4)}
-                style={{ background: 'none', border: 'none', fontSize: '13px', color: 'var(--t3)', cursor: 'pointer' }}
+                onClick={handleSkip}
+                style={{ background: 'none', border: 'none', fontSize: '13px', color: 'var(--t4)', cursor: 'pointer', textDecoration: 'underline' }}
               >
-                ← Back
+                Skip
               </button>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <button
-                  type="button"
-                  onClick={handleSkip}
-                  style={{ background: 'none', border: 'none', fontSize: '13px', color: 'var(--t4)', cursor: 'pointer', textDecoration: 'underline' }}
-                >
-                  Skip
-                </button>
-                {btnPrimary(handleSubmit, 'Finish & Go →', false, loading)}
-              </div>
+              {btnPrimary(handleSubmit, 'Finish & Go →')}
             </div>
-          )}
-
-          {loadError && (
-            <div>
-              <div style={{ padding: '12px', background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.2)', borderRadius: '10px', fontSize: '12px', color: '#f87171', marginBottom: '16px' }}>
-                {loadError}
-              </div>
-              <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                {btnPrimary(handleSubmit, 'Try Again', false, loading)}
-                <button
-                  type="button"
-                  onClick={handleSkip}
-                  style={{ background: 'none', border: 'none', fontSize: '13px', color: 'var(--t4)', cursor: 'pointer', textDecoration: 'underline' }}
-                >
-                  Skip for now
-                </button>
-              </div>
-            </div>
-          )}
+          </div>
         </div>
       </div>
     )

@@ -41,6 +41,7 @@ from app.database import (
 from app.models import (
     CreateBillSplitRequest,
     BillItemResponse,
+    ClaimItemResponse,
     BillShareResponse,
     BillSplitResponse,
     OCRStatsResponse,
@@ -104,7 +105,7 @@ async def send_unpaid_reminders():
                 pass
 
             payer_profile = await _fetch_user_profile(share["paid_by_user_id"])
-            payer_name = payer_profile.get("full_name") or f"User {share['paid_by_user_id']}"
+            payer_name = _display_name(payer_profile)
 
             async with httpx.AsyncClient(timeout=10.0) as client:
                 await client.post(
@@ -176,7 +177,16 @@ async def _fetch_user_profile(uid: int) -> dict:
                 return r.json()
     except Exception:
         pass
-    return {"id": uid, "full_name": f"User {uid}", "avatar_url": None, "email": ""}
+    return {"id": uid, "full_name": None, "username": None, "avatar_url": None, "email": ""}
+
+
+def _display_name(profile: dict) -> str:
+    """Best display name: full_name → username → 'User {id}'."""
+    return (
+        profile.get("full_name")
+        or profile.get("username")
+        or f"User {profile.get('id', '?')}"
+    )
 
 
 async def _fetch_event(event_id: int, caller_id: int) -> Optional[dict]:
@@ -212,7 +222,7 @@ async def _fetch_attendees(event_id: int, caller_id: int) -> list:
 
 def _build_split_response(split: dict, items: list, shares: list, profiles: dict) -> BillSplitResponse:
     payer_profile = profiles.get(split["paid_by_user_id"], {})
-    paid_by_name = payer_profile.get("full_name") or f"User {split['paid_by_user_id']}"
+    paid_by_name = _display_name(payer_profile)
 
     item_responses = [
         BillItemResponse(
@@ -233,7 +243,7 @@ def _build_split_response(split: dict, items: list, shares: list, profiles: dict
         share_responses.append(
             BillShareResponse(
                 user_id=share["user_id"],
-                full_name=profile.get("full_name") or f"User {share['user_id']}",
+                full_name=_display_name(profile),
                 avatar_url=profile.get("avatar_url"),
                 items_subtotal=float(share["items_subtotal"]),
                 tax_share=float(share["tax_share"]),
@@ -489,7 +499,7 @@ async def create_split(
         shares_for_email.append(
             {
                 **share,
-                "full_name": profile.get("full_name") or f"User {share['user_id']}",
+                "full_name": _display_name(profile),
                 "email": profile.get("email") or "",
                 "total_owed": float(share["total_owed"]),
                 "tax_share": float(share["tax_share"]),
@@ -499,7 +509,7 @@ async def create_split(
         )
 
     payer_profile = profiles.get(payer_id, {})
-    payer_name = payer_profile.get("full_name") or f"User {payer_id}"
+    payer_name = _display_name(payer_profile)
     payer_email = payer_profile.get("email") or ""
 
     event_name = event.get("title") or event.get("name") or f"Event {req.event_id}"
@@ -588,10 +598,11 @@ async def pay_by_token(payment_token: str):
             event = await _fetch_event(split["event_id"], split["paid_by_user_id"])
             if event:
                 event_name = event.get("title") or event.get("name") or event_name
+        already_profile = await _fetch_user_profile(share["user_id"])
         return {
             "success": True,
             "already_paid": True,
-            "member_name": f"User {share['user_id']}",
+            "member_name": _display_name(already_profile),
             "amount": float(share["total_owed"]),
             "event_name": event_name,
         }
@@ -608,7 +619,7 @@ async def pay_by_token(payment_token: str):
 
     # Fetch user profile for display name
     profile = await _fetch_user_profile(share["user_id"])
-    member_name = profile.get("full_name") or f"User {share['user_id']}"
+    member_name = _display_name(profile)
 
     return {
         "success": True,
@@ -643,7 +654,7 @@ async def mark_user_share_paid(
     # Return updated share
     updated = get_share_by_split_user(split_id, user_id)
     profile = await _fetch_user_profile(user_id)
-    member_name = profile.get("full_name") or f"User {user_id}"
+    member_name = _display_name(profile)
 
     # Notify payer that payment was received (in-app only via /internal/notify/push)
     try:
@@ -721,7 +732,7 @@ async def send_reminders(
     profiles = {p["id"]: p for p in profiles_list}
 
     payer_profile = profiles.get(split["paid_by_user_id"], {})
-    payer_name = payer_profile.get("full_name") or f"User {split['paid_by_user_id']}"
+    payer_name = _display_name(payer_profile)
 
     # Build items_by_user
     items_by_user: dict = {}
@@ -743,7 +754,7 @@ async def send_reminders(
         mark_paid_url = f"{FRONTEND_URL}/pay/{share['payment_token']}"
         await send_member_email(
             to_email=to_email,
-            member_name=profile.get("full_name") or f"User {share['user_id']}",
+            member_name=_display_name(profile),
             payer_name=payer_name,
             event_name=event_name,
             event_date=event_date,
@@ -793,7 +804,7 @@ async def start_claiming(
         event = await _fetch_event(event_id, payer_id)
         event_name = (event.get("title") or event.get("name") or f"Event {event_id}") if event else f"Event {event_id}"
         payer_profile = await _fetch_user_profile(payer_id)
-        payer_name = payer_profile.get("full_name") or f"User {payer_id}"
+        payer_name = _display_name(payer_profile)
         if attendee_ids:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 await client.post(
@@ -838,14 +849,38 @@ async def get_claim_view(
     event_name = (event.get("title") or event.get("name") or f"Event {split['event_id']}") if event else f"Event {split['event_id']}"
 
     payer_profile = await _fetch_user_profile(split["paid_by_user_id"])
-    payer_name = payer_profile.get("full_name") or f"User {split['paid_by_user_id']}"
+    payer_name = _display_name(payer_profile)
+
+    # Build per-item claimer names from submitted claims (excluding current user)
+    claimer_uids: set[int] = set()
+    for claim in claims:
+        if claim.get("submitted_at") and claim["user_id"] != current_user["id"]:
+            claimer_uids.add(claim["user_id"])
+
+    if claimer_uids:
+        profile_tasks = [_fetch_user_profile(uid) for uid in claimer_uids]
+        claimer_profiles_list = await asyncio.gather(*profile_tasks)
+        claimer_profile_map = {p["id"]: p for p in claimer_profiles_list}
+    else:
+        claimer_profile_map = {}
+
+    # item_id -> list of other claimers' display names
+    item_claimer_names: dict[int, list[str]] = {}
+    for claim in claims:
+        if claim.get("submitted_at") and claim["user_id"] != current_user["id"]:
+            name = _display_name(claimer_profile_map.get(claim["user_id"], {}))
+            for item_id in claim["claimed_items"]:
+                item_claimer_names.setdefault(item_id, [])
+                if name not in item_claimer_names[item_id]:
+                    item_claimer_names[item_id].append(name)
 
     item_responses = [
-        BillItemResponse(
+        ClaimItemResponse(
             id=item["id"],
             name=item["name"],
             price=float(item["price"]),
             assigned_to=item.get("assigned_to") or [],
+            claimed_by_names=item_claimer_names.get(item["id"], []),
         )
         for item in items
     ]
@@ -855,6 +890,7 @@ async def get_claim_view(
         event_id=split["event_id"],
         event_name=event_name,
         payer_name=payer_name,
+        payment_note=split.get("payment_note"),
         items=item_responses,
         tax_amount=float(split["tax_amount"]),
         tip_amount=float(split["tip_amount"]),
@@ -884,6 +920,28 @@ async def submit_my_claim(
         raise HTTPException(status_code=400, detail=f"Invalid item IDs: {invalid}")
 
     submit_claim(split["id"], current_user["id"], req.claimed_items)
+
+    # Notify payer that this member submitted their claim
+    payer_id = split["paid_by_user_id"]
+    if payer_id != current_user["id"]:
+        try:
+            member_profile = await _fetch_user_profile(current_user["id"])
+            member_name = _display_name(member_profile)
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                await client.post(
+                    f"{API_GATEWAY_URL}/internal/notify/push",
+                    headers={"x-internal-secret": INTERNAL_API_SECRET},
+                    json={
+                        "user_id": payer_id,
+                        "title": "📋 Claim submitted",
+                        "body": f"{member_name} just claimed their items",
+                        "link_type": "bill_split",
+                        "link_id": split["id"],
+                    },
+                )
+        except Exception as e:
+            logger.warning(f"Failed to notify payer of claim submission: {e}")
+
     return {"ok": True, "submitted": True}
 
 
@@ -919,7 +977,7 @@ async def get_claiming_status(
             submitted_count += 1
         members.append(ClaimStatusMember(
             user_id=uid,
-            full_name=profile.get("full_name") or f"User {uid}",
+            full_name=_display_name(profile),
             avatar_url=profile.get("avatar_url"),
             submitted=submitted,
             submitted_at=str(claim["submitted_at"]) if claim and claim.get("submitted_at") else None,
@@ -1044,7 +1102,7 @@ async def finalize_claims(
         profile = profiles.get(share["user_id"], {})
         shares_for_email.append({
             **share,
-            "full_name": profile.get("full_name") or f"User {share['user_id']}",
+            "full_name": _display_name(profile),
             "email": profile.get("email") or "",
             "total_owed": float(share["total_owed"]),
             "tax_share": float(share["tax_share"]),
@@ -1053,7 +1111,7 @@ async def finalize_claims(
         })
 
     payer_profile = profiles.get(split["paid_by_user_id"], {})
-    payer_name = payer_profile.get("full_name") or f"User {split['paid_by_user_id']}"
+    payer_name = _display_name(payer_profile)
     payer_email = payer_profile.get("email") or ""
 
     event = await _fetch_event(split["event_id"], split["paid_by_user_id"])
@@ -1073,6 +1131,18 @@ async def finalize_claims(
             items_by_user=items_by_user,
         )
     )
+
+    # Push + in-app notifications to each member with their final amount
+    share_by_user = {s["user_id"]: float(s["total_owed"]) for s in new_share_rows}
+    member_ids = [uid for uid in attending_ids if uid != split["paid_by_user_id"]]
+    asyncio.create_task(_send_bill_split_notifications(
+        participant_ids=member_ids,
+        payer_id=split["paid_by_user_id"],
+        payer_name=payer_name,
+        event_id=split["event_id"],
+        event_name=event_name,
+        share_by_user=share_by_user,
+    ))
 
     update_split_status(split_id, "sent")
     split_row = get_split_by_id(split_id)

@@ -234,8 +234,9 @@ export default function EventDetail() {
   else if (event.status === 'cancelled')   statusLabel = 'Cancelled'
   else if (event.status === 'in_progress') statusLabel = 'In Progress'
 
-  const avgRating = ratings.length > 0
-    ? (ratings.reduce((s, r) => s + (r.score || 0), 0) / ratings.length).toFixed(1)
+  const scoredRatings = ratings.filter(r => (r.score || 0) > 0)
+  const avgRating = scoredRatings.length > 0
+    ? (scoredRatings.reduce((s, r) => s + r.score, 0) / scoredRatings.length).toFixed(1)
     : '—'
 
   const stats = [
@@ -348,7 +349,7 @@ export default function EventDetail() {
         isOpen={showEditEvent}
         onClose={() => setShowEditEvent(false)}
         event={event}
-        onSaved={() => { setShowEditEvent(false); fetchAll() }}
+        onSaved={(updatedFields) => { setShowEditEvent(false); if (updatedFields) setEvent(prev => ({ ...prev, ...updatedFields })); fetchAll() }}
         onCancel={handleCancelEvent}
       />
       <RateEventModal

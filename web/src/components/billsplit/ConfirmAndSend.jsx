@@ -14,9 +14,10 @@ function computeShares(items, tax, tip, attendees, payerId) {
   const unassignedPer = Math.round((unassignedTotal / count) * 100) / 100
   return attendees.map((a, idx) => {
     const isLast = idx === count - 1
+    // When an item is shared by N people, each pays price / N
     const assigned = items
       .filter(i => i.assigned_to?.includes(a.user_id))
-      .reduce((s, i) => s + parseFloat(i.price || 0), 0)
+      .reduce((s, i) => s + parseFloat(i.price || 0) / (i.assigned_to.length || 1), 0)
     const itemsSub = assigned + (isLast ? unassignedTotal - unassignedPer * (count - 1) : unassignedPer)
     const tShare = isLast ? tax - taxPer * (count - 1) : taxPer
     const tpShare = isLast ? tip - tipPer * (count - 1) : tipPer
@@ -130,78 +131,87 @@ export default function ConfirmAndSend({
       <Card.Header title="Confirm & Send" />
       <Card.Body>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {/* Shares preview */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '4px' }}>
-              Breakdown
-            </div>
-            {regularShares.map(share => (
-              <div
-                key={share.user_id}
-                style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  padding: '10px 14px',
-                  background: share.is_payer ? 'rgba(34,211,160,0.06)' : 'var(--s2)',
-                  border: share.is_payer ? '1px solid rgba(34,211,160,0.15)' : '1px solid var(--glass)',
-                  borderRadius: '10px',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <span style={{ fontSize: '13px', color: 'var(--t1)', fontWeight: share.is_payer ? 600 : 400 }}>
-                    {share.full_name}
-                  </span>
-                  {share.is_payer && <span style={{ fontSize: '11px', fontWeight: 700, color: '#22d3a0' }}>you · paid</span>}
+          {claimMode ? (
+            /* Claim mode: show items list + total — no per-person breakdown yet */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '4px' }}>
+                Items on the bill
+              </div>
+              {items.map((item, i) => (
+                <div key={item.id || i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', background: 'var(--s2)', border: '1px solid var(--glass)', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '13px', color: 'var(--t1)' }}>{item.name || 'Item'}</span>
+                  <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--t2)' }}>${parseFloat(item.price || 0).toFixed(2)}</span>
                 </div>
-                <span style={{ fontSize: '14px', fontWeight: 700, color: share.is_payer ? '#22d3a0' : 'var(--t1)' }}>
-                  ${share.total_owed.toFixed(2)}
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderTop: '1px solid var(--glass)', marginTop: '4px' }}>
+                <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--t1)' }}>Grand Total</span>
+                <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--rose-soft)', letterSpacing: '-0.5px' }}>${grandTotal.toFixed(2)}</span>
+              </div>
+            </div>
+          ) : (
+            /* Assign mode: show full per-person breakdown */
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginBottom: '4px' }}>
+                Breakdown
+              </div>
+              {regularShares.map(share => (
+                <div
+                  key={share.user_id}
+                  style={{
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    padding: '10px 14px',
+                    background: share.is_payer ? 'rgba(34,211,160,0.06)' : 'var(--s2)',
+                    border: share.is_payer ? '1px solid rgba(34,211,160,0.15)' : '1px solid var(--glass)',
+                    borderRadius: '10px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '13px', color: 'var(--t1)', fontWeight: share.is_payer ? 600 : 400 }}>
+                      {share.full_name}
+                    </span>
+                    {share.is_payer && <span style={{ fontSize: '11px', fontWeight: 700, color: '#22d3a0' }}>you · paid</span>}
+                  </div>
+                  <span style={{ fontSize: '14px', fontWeight: 700, color: share.is_payer ? '#22d3a0' : 'var(--t1)' }}>
+                    ${share.total_owed.toFixed(2)}
+                  </span>
+                </div>
+              ))}
+
+              {guestShares.length > 0 && (
+                <>
+                  <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginTop: '4px' }}>
+                    Guests (collect cash)
+                  </div>
+                  {guestShares.map(share => (
+                    <div
+                      key={share.user_id}
+                      style={{
+                        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                        padding: '10px 14px',
+                        background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)',
+                        borderRadius: '10px',
+                      }}
+                    >
+                      <div>
+                        <span style={{ fontSize: '13px', color: 'var(--t1)' }}>👤 {share.full_name}</span>
+                        <span style={{ fontSize: '11px', color: 'var(--t3)', marginLeft: '6px' }}>you front this</span>
+                      </div>
+                      <span style={{ fontSize: '14px', fontWeight: 700, color: '#f59e0b' }}>
+                        ${share.total_owed.toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                </>
+              )}
+
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderTop: '1px solid var(--glass)' }}>
+                <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--t1)' }}>Grand Total</span>
+                <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--rose-soft)', letterSpacing: '-0.5px' }}>
+                  ${grandTotal.toFixed(2)}
                 </span>
               </div>
-            ))}
-
-            {/* Guest shares */}
-            {guestShares.length > 0 && (
-              <>
-                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t3)', textTransform: 'uppercase', letterSpacing: '0.6px', marginTop: '4px' }}>
-                  Guests (collect cash)
-                </div>
-                {guestShares.map(share => (
-                  <div
-                    key={share.user_id}
-                    style={{
-                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                      padding: '10px 14px',
-                      background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.15)',
-                      borderRadius: '10px',
-                    }}
-                  >
-                    <div>
-                      <span style={{ fontSize: '13px', color: 'var(--t1)' }}>👤 {share.full_name}</span>
-                      <span style={{ fontSize: '11px', color: 'var(--t3)', marginLeft: '6px' }}>you front this</span>
-                    </div>
-                    <span style={{ fontSize: '14px', fontWeight: 700, color: '#f59e0b' }}>
-                      ${share.total_owed.toFixed(2)}
-                    </span>
-                  </div>
-                ))}
-              </>
-            )}
-
-            {/* Grand total row */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '10px 14px',
-                borderTop: '1px solid var(--glass)',
-              }}
-            >
-              <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--t1)' }}>Grand Total</span>
-              <span style={{ fontSize: '18px', fontWeight: 900, color: 'var(--rose-soft)', letterSpacing: '-0.5px' }}>
-                ${grandTotal.toFixed(2)}
-              </span>
             </div>
-          </div>
+          )}
 
           {/* Payment note */}
           <div>
@@ -231,9 +241,9 @@ export default function ConfirmAndSend({
             }}
           >
             {claimMode
-            ? `A claim link will be generated — share it with ${nonPayers.length} member${nonPayers.length !== 1 ? 's' : ''} to let them tap what they ordered.`
-            : `${nonPayers.length} email${nonPayers.length !== 1 ? 's' : ''} will be sent with itemized breakdowns and one-tap Mark as Paid links.`
-          }
+              ? `Each member will get a push notification + email with a personal link to tap the items they ate. Shares are calculated only after everyone claims (or you finalize).`
+              : `${nonPayers.length} email${nonPayers.length !== 1 ? 's' : ''} will be sent with itemized breakdowns and one-tap Mark as Paid links.`
+            }
           </div>
 
           {/* Error */}

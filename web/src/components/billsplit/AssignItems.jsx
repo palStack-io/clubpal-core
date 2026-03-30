@@ -17,9 +17,10 @@ function computeRunningTotal(userId, items, tax, tip, allParticipants) {
     .filter(i => !i.assigned_to?.length)
     .reduce((s, i) => s + parseFloat(i.price || 0), 0)
   const unassignedPer = unassignedTotal / count
+  // When an item is shared by N people, each pays price / N
   const assigned = items
     .filter(i => i.assigned_to?.includes(userId))
-    .reduce((s, i) => s + parseFloat(i.price || 0), 0)
+    .reduce((s, i) => s + parseFloat(i.price || 0) / (i.assigned_to.length || 1), 0)
   return assigned + unassignedPer + taxPer + tipPer
 }
 

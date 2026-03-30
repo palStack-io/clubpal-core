@@ -16,7 +16,7 @@ const ROTATION_MODE_MAP = { round_robin: 'sequential', random: 'random', none: '
 export default function EditGroup() {
   const { id } = useParams()
   const navigate = useNavigate()
-  const [form, setForm] = useState({ name: '', description: '', rotation_mode: 'sequential', activity_type: 'dining' })
+  const [form, setForm] = useState({ name: '', description: '', rotation_mode: 'sequential', activity_type: 'dining', email_reminders_enabled: false })
   const [members, setMembers] = useState([])
   const [memberOrder, setMemberOrder] = useState([])
   const [reorderSaving, setReorderSaving] = useState(false)
@@ -50,6 +50,7 @@ export default function EditGroup() {
           description: g.description || '',
           rotation_mode: ROTATION_MODE_MAP[g.rotation_type] || 'sequential',
           activity_type: g.activity_type?.toLowerCase() || 'dining',
+          email_reminders_enabled: g.email_reminders_enabled ?? false,
         })
         const sorted = (m || []).sort((a, b) => (a.rotation_order ?? 999) - (b.rotation_order ?? 999))
         setMembers(sorted)
@@ -96,8 +97,9 @@ export default function EditGroup() {
         description: form.description,
         rotation_type: ROTATION_TYPE_MAP[form.rotation_mode] || 'round_robin',
         activity_type: form.activity_type,
+        email_reminders_enabled: form.rotation_mode === 'manual' ? form.email_reminders_enabled : false,
       })
-      navigate(`/groups/${id}`)
+      window.location.href = `/groups/${id}`
     } catch (e) {
       setError(e.response?.data?.detail || 'Failed to save changes.')
     } finally {
@@ -257,8 +259,17 @@ export default function EditGroup() {
 
             {form.rotation_mode === 'manual' && (
               <FormSection title="Manual Rotation">
-                <div style={{ fontSize: '13px', color: 'var(--t2)', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '10px', padding: '12px 14px' }}>
-                  ✉️ When rotation advances, all club members will be emailed to vote on who picks next.
+                <div
+                  style={{ display: 'flex', alignItems: 'flex-start', gap: '12px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.18)', borderRadius: '10px', padding: '14px', cursor: 'pointer' }}
+                  onClick={() => set('email_reminders_enabled', !form.email_reminders_enabled)}
+                >
+                  <div style={{ width: '40px', height: '22px', borderRadius: '11px', background: form.email_reminders_enabled ? 'var(--amber)' : 'var(--glass)', position: 'relative', transition: 'background 0.2s', flexShrink: 0, marginTop: '1px' }}>
+                    <div style={{ position: 'absolute', top: '2px', left: form.email_reminders_enabled ? '20px' : '2px', width: '18px', height: '18px', borderRadius: '9px', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: form.email_reminders_enabled ? 'var(--amber)' : 'var(--t2)' }}>✉️ Enable monthly email reminder for the next pick</div>
+                    <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '3px', lineHeight: 1.4 }}>When enabled, all club members will be emailed to vote on who picks next when rotation advances</div>
+                  </div>
                 </div>
               </FormSection>
             )}

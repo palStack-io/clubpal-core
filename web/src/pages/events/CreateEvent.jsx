@@ -152,7 +152,7 @@ export default function CreateEvent() {
         await uploadCover(event.id, coverFile).catch(console.error)
       }
 
-      navigate(`/events/${event.id}`)
+      window.location.href = `/events/${event.id}`
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to create event.')
     } finally {

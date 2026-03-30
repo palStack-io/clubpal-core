@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { BookmarkIcon } from '@heroicons/react/24/outline'
 import { BookmarkIcon as BookmarkSolid } from '@heroicons/react/24/solid'
 import AppShell from '../shell/AppShell'
@@ -363,7 +362,6 @@ export default function DetailPage({ type, itemId, data: rawData, extra = {}, lo
   const cfg = TYPE_CONFIG[type] || TYPE_CONFIG.dining
   const data = rawData ? cfg.normalize(rawData, extra) : null
   const { user } = useAuth()
-  const navigate = useNavigate()
 
   const [photoIdx, setPhotoIdx] = useState(0)
   const [saved, setSaved]       = useState(false)
@@ -857,9 +855,10 @@ export default function DetailPage({ type, itemId, data: rawData, extra = {}, lo
             initialTitle={data.title}
             initialLocation={data.address || null}
             initialImageUrl={data.photos?.[0] || null}
+            initialDescription={data.description || null}
             activityType={cfg.activityType}
             onClose={() => setShowPick(false)}
-            onCreated={(id) => { setShowPick(false); navigate(`/events/${id}`) }}
+            onCreated={(id) => { setShowPick(false); window.location.href = `/events/${id}` }}
             onPollGroup={() => { setShowPick(false); setShowPoll(true) }}
           />
         )}
@@ -933,9 +932,10 @@ export default function DetailPage({ type, itemId, data: rawData, extra = {}, lo
           initialTitle={data.title}
           initialLocation={data.address || null}
           initialImageUrl={data.photos?.[0] || null}
+          initialDescription={data.description || null}
           activityType={cfg.activityType}
           onClose={() => setShowPick(false)}
-          onCreated={(id) => { setShowPick(false); navigate(`/events/${id}`) }}
+          onCreated={(id) => { setShowPick(false); window.location.href = `/events/${id}` }}
           onPollGroup={() => { setShowPick(false); setShowPoll(true) }}
         />
       )}

@@ -24,6 +24,14 @@ class BillItemResponse(BaseModel):
     assigned_to: list[int]
 
 
+class ClaimItemResponse(BaseModel):
+    id: int
+    name: str
+    price: float
+    assigned_to: list[int]
+    claimed_by_names: list[str]  # other users who have already submitted a claim for this item
+
+
 class BillShareResponse(BaseModel):
     user_id: int
     full_name: str
@@ -97,7 +105,8 @@ class ClaimViewResponse(BaseModel):
     event_id: int
     event_name: str
     payer_name: str
-    items: list[BillItemResponse]
+    payment_note: Optional[str]
+    items: list[ClaimItemResponse]
     tax_amount: float
     tip_amount: float
     total_amount: float

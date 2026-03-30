@@ -32,6 +32,7 @@ export default function CreateGroup() {
     rotation_mode: 'sequential',
     activity_type: 'dining',
     join_behavior: null, // must be selected before submit
+    email_reminders_enabled: false,
   })
   const [bannerFile, setBannerFile] = useState(null)
   const [bannerPreview, setBannerPreview] = useState(null)
@@ -84,6 +85,7 @@ export default function CreateGroup() {
         rotation_type: ROTATION_TYPE_MAP[form.rotation_mode] || 'round_robin',
         activity_type: form.activity_type,
         join_behavior: form.join_behavior,
+        email_reminders_enabled: form.rotation_mode === 'manual' ? form.email_reminders_enabled : false,
       })
 
       // Upload banner if provided
@@ -98,7 +100,7 @@ export default function CreateGroup() {
         )
       )
 
-      navigate(`/groups/${group.id}`)
+      window.location.href = `/groups/${group.id}`
     } catch (e) {
       setError(e.response?.data?.detail || 'Failed to create club.')
     } finally {
@@ -209,8 +211,17 @@ export default function CreateGroup() {
             </div>
           )}
           {form.rotation_mode === 'manual' && (
-            <div style={{ fontSize: '11px', color: 'var(--amber)', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.2)', borderRadius: '8px', padding: '8px 10px', marginBottom: '10px' }}>
-              ✉️ Manual mode — all members will be emailed to vote for the next picker when rotation advances
+            <div
+              style={{ display: 'flex', alignItems: 'flex-start', gap: '10px', background: 'rgba(245,158,11,0.06)', border: '1px solid rgba(245,158,11,0.18)', borderRadius: '10px', padding: '10px 12px', marginBottom: '10px', cursor: 'pointer' }}
+              onClick={() => set('email_reminders_enabled', !form.email_reminders_enabled)}
+            >
+              <div style={{ width: '36px', height: '20px', borderRadius: '10px', background: form.email_reminders_enabled ? 'var(--amber)' : 'var(--glass)', position: 'relative', transition: 'background 0.2s', flexShrink: 0, marginTop: '1px' }}>
+                <div style={{ position: 'absolute', top: '2px', left: form.email_reminders_enabled ? '18px' : '2px', width: '16px', height: '16px', borderRadius: '8px', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
+              </div>
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: form.email_reminders_enabled ? 'var(--amber)' : 'var(--t2)' }}>✉️ Enable monthly email reminder for the next pick</div>
+                <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px', lineHeight: 1.4 }}>When enabled, all club members will be emailed to vote on who picks next when rotation advances</div>
+              </div>
             </div>
           )}
           {invites.map((inv, index) => (

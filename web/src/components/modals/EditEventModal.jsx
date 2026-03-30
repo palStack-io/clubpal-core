@@ -152,7 +152,18 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
         ratings_enabled: ratingsEnabled,
         bill_split_enabled: billSplitEnabled,
       })
-      onSaved && onSaved()
+      onSaved && onSaved({
+        scheduled_date: scheduledDateTime,
+        description: notes.trim() || null,
+        rsvp_deadline: rsvpDeadlineISO,
+        max_attendees: maxAttendees ? parseInt(maxAttendees, 10) : null,
+        bg_type: bgType,
+        bg_value: bgValue,
+        bg_scope: bgScope,
+        cover_url: bgType === 'image' && bgValue ? bgValue : (coverPreview || null),
+        ratings_enabled: ratingsEnabled,
+        bill_split_enabled: billSplitEnabled,
+      })
     } catch (err) {
       const detail = err?.response?.data?.detail
       setError(typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map(d => d.msg || String(d)).join('; ') : 'Failed to save changes. Please try again.')

@@ -169,10 +169,11 @@ export default function RatingCard({
     (a, b) => new Date(toUTC(b.created_at)) - new Date(toUTC(a.created_at))
   )
 
+  const scoredRatings = ratings.filter(r => (r.score || r.rating || 0) > 0)
   const avg =
-    ratings.length > 0
+    scoredRatings.length > 0
       ? (
-          ratings.reduce((s, r) => s + (r.score || r.rating || 0), 0) / ratings.length
+          scoredRatings.reduce((s, r) => s + (r.score || r.rating || 0), 0) / scoredRatings.length
         ).toFixed(1)
       : null
 

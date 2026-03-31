@@ -21,6 +21,8 @@ from app.database import (
     create_bill_share,
     create_bill_shares_bulk,
     get_split_by_event,
+    get_splits_by_event,
+    get_next_round_number,
     get_split_by_id,
     get_items_by_split,
     get_shares_by_split,
@@ -257,6 +259,8 @@ def _build_split_response(split: dict, items: list, shares: list, profiles: dict
     return BillSplitResponse(
         id=split["id"],
         event_id=split["event_id"],
+        round_number=split.get("round_number", 1),
+        label=split.get("label"),
         paid_by_user_id=split["paid_by_user_id"],
         paid_by_name=paid_by_name,
         subtotal=float(split["subtotal"]),
@@ -420,12 +424,8 @@ async def create_split(
     if caller_id not in valid_attending_ids:
         valid_attending_ids.insert(0, caller_id)
 
-    # 4. Check for existing split
-    existing = get_split_by_event(req.event_id)
-    if existing:
-        raise HTTPException(
-            status_code=409, detail="A bill split already exists for this event"
-        )
+    # 4. Compute round number (1 for first split, N+1 for subsequent)
+    round_number = get_next_round_number(req.event_id)
 
     # 5. Payer is current user
     payer_id = caller_id
@@ -455,6 +455,8 @@ async def create_split(
         tip_amount=req.tip_amount,
         total_amount=total_amount,
         payment_note=req.payment_note,
+        round_number=round_number,
+        label=req.label,
         items=[{"name": it.name, "price": it.price, "assigned_to": it.assigned_to} for it in req.items],
         shares=[
             {
@@ -550,18 +552,18 @@ async def create_split(
     return _build_split_response(split_row, item_rows, share_rows, profiles)
 
 
-@app.get("/event/{event_id}", response_model=BillSplitResponse)
+@app.get("/event/{event_id}", response_model=list[BillSplitResponse])
 async def get_split_for_event(
     event_id: int,
     current_user: dict = Depends(verify_session),
 ):
     caller_id = current_user["id"]
 
-    split = get_split_by_event(event_id)
-    if not split:
-        raise HTTPException(status_code=404, detail="No bill split found for this event")
+    splits = get_splits_by_event(event_id)
+    if not splits:
+        return []
 
-    # Validate caller is an attendee
+    # Validate caller is an attendee (check against any split's payer or event attendees)
     attendees = await _fetch_attendees(event_id, caller_id)
     attendee_ids = set()
     for a in attendees:
@@ -569,18 +571,25 @@ async def get_split_for_event(
         if uid:
             attendee_ids.add(int(uid))
 
-    if caller_id not in attendee_ids and caller_id != split["paid_by_user_id"]:
+    all_payer_ids = {s["paid_by_user_id"] for s in splits}
+    if caller_id not in attendee_ids and caller_id not in all_payer_ids:
         raise HTTPException(status_code=403, detail="You are not an attendee of this event")
 
-    items = get_items_by_split(split["id"])
-    shares = get_shares_by_split(split["id"])
+    # Collect all unique user IDs across all splits for a single profile fetch round
+    all_user_ids: set = set()
+    splits_data = []
+    for split in splits:
+        items = get_items_by_split(split["id"])
+        shares = get_shares_by_split(split["id"])
+        all_user_ids.update(s["user_id"] for s in shares)
+        all_user_ids.add(split["paid_by_user_id"])
+        splits_data.append((split, items, shares))
 
-    user_ids = list({s["user_id"] for s in shares} | {split["paid_by_user_id"]})
-    profile_tasks = [_fetch_user_profile(uid) for uid in user_ids]
+    profile_tasks = [_fetch_user_profile(uid) for uid in all_user_ids]
     profiles_list = await asyncio.gather(*profile_tasks)
     profiles = {p["id"]: p for p in profiles_list}
 
-    return _build_split_response(split, items, shares, profiles)
+    return [_build_split_response(split, items, shares, profiles) for split, items, shares in splits_data]
 
 
 @app.post("/pay/{payment_token}")

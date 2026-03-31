@@ -3,7 +3,7 @@ import { billSplitApi } from '../../api/billSplit'
 import Card from '../ui/Card'
 import Button from '../ui/Button'
 
-export default function SettlementTracker({ split, currentUser, onRefresh }) {
+export default function SettlementTracker({ split, currentUser, onRefresh, onAddAnother }) {
   const [remindSent, setRemindSent] = useState(false)
   const [remindLoading, setRemindLoading] = useState(false)
   const [markingPaid, setMarkingPaid] = useState(null) // userId being marked
@@ -56,12 +56,31 @@ export default function SettlementTracker({ split, currentUser, onRefresh }) {
               All settled!
             </h3>
             <p style={{ fontSize: '13px', color: 'var(--t2)', margin: 0 }}>
-              Everyone has paid their share. Nice!
+              Everyone has paid their share.
+              {split.label ? ` (${split.label})` : split.round_number > 1 ? ` Round ${split.round_number}` : ' Nice!'}
             </p>
             {split.payment_note && (
               <p style={{ fontSize: '12px', color: 'var(--t3)', marginTop: '8px' }}>
                 {split.payment_note}
               </p>
+            )}
+            {isPayer && onAddAnother && (
+              <button
+                onClick={onAddAnother}
+                style={{
+                  marginTop: 16,
+                  padding: '8px 20px',
+                  borderRadius: 10,
+                  border: '1px solid var(--glass)',
+                  background: 'var(--s3)',
+                  color: 'var(--t2)',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                + Add Another Split
+              </button>
             )}
           </div>
         </Card.Body>
@@ -72,7 +91,13 @@ export default function SettlementTracker({ split, currentUser, onRefresh }) {
   return (
     <Card>
       <Card.Header
-        title="Bill Split"
+        title={
+          split.label
+            ? `Bill Split — ${split.label}`
+            : split.round_number > 1
+            ? `Bill Split — Round ${split.round_number}`
+            : 'Bill Split'
+        }
         action={
           isPayer && nonPayerShares.length > 0 ? (
             <Button

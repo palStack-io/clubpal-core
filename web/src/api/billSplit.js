@@ -9,9 +9,10 @@ export const billSplitApi = {
     }).then(r => r.data)
   },
   create: (payload) => billSplitClient.post('/', payload).then(r => r.data),
+  // Returns array of splits ordered by round_number ASC (empty array = no splits)
   getByEvent: (eventId) =>
     billSplitClient.get(`/event/${eventId}`).then(r => r.data).catch(e => {
-      if (e.response?.status === 404) return null
+      if (e.response?.status === 404) return []
       throw e
     }),
   markPaidManual: (splitId, userId) =>

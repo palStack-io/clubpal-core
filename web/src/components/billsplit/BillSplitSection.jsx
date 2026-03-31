@@ -6,13 +6,14 @@ import AssignItems from './AssignItems'
 import ConfirmAndSend from './ConfirmAndSend'
 import SettlementTracker from './SettlementTracker'
 import ClaimingStatus from './ClaimingStatus'
+import PastBillsAccordion from './PastBillsAccordion'
 import Card from '../ui/Card'
 import Button from '../ui/Button'
 
 export default function BillSplitSection({ event, attendees, currentUser }) {
   // step: 'loading' | 'cta' | 'upload' | 'review' | 'choose-flow' | 'assign' | 'confirm' | 'claiming' | 'settled'
   const [step, setStep] = useState('loading')
-  const [split, setSplit] = useState(null)
+  const [splits, setSplits] = useState([])   // all rounds for this event
   const [ocrResult, setOcrResult] = useState(null)
   const [items, setItems] = useState([])
   const [tax, setTax] = useState(0)
@@ -22,22 +23,34 @@ export default function BillSplitSection({ event, attendees, currentUser }) {
   const [claimMode, setClaimMode] = useState(false)
   const [guests, setGuests] = useState([])
 
+  // Derived — latest round is last in ASC-ordered array
+  const activeSplit = splits.length > 0 ? splits[splits.length - 1] : null
+  const pastSplits = splits.length > 1 ? splits.slice(0, -1) : []
+
+  const loadSplits = async () => {
+    try {
+      const data = await billSplitApi.getByEvent(event.id)
+      const arr = Array.isArray(data) ? data : (data ? [data] : [])
+      setSplits(arr)
+      return arr
+    } catch {
+      setSplits([])
+      return []
+    }
+  }
+
   useEffect(() => {
-    billSplitApi.getByEvent(event.id)
-      .then(data => {
-        if (data) {
-          setSplit(data)
-          if (data.status === 'claiming') {
-            setClaimUrl(`${window.location.origin}/claim/${data.claim_token || ''}`)
-            setStep('claiming')
-          } else {
-            setStep('settled')
-          }
-        } else {
-          setStep('cta')
-        }
-      })
-      .catch(() => setStep('cta'))
+    loadSplits().then(arr => {
+      const latest = arr.length > 0 ? arr[arr.length - 1] : null
+      if (!latest) {
+        setStep('cta')
+      } else if (latest.status === 'claiming') {
+        setClaimUrl(`${window.location.origin}/claim/${latest.claim_token || ''}`)
+        setStep('claiming')
+      } else {
+        setStep('settled')
+      }
+    })
   }, [event.id])
 
   const goingAttendees = attendees.filter(a => a.rsvp_status === 'going' || a.status === 'going')
@@ -59,18 +72,46 @@ export default function BillSplitSection({ event, attendees, currentUser }) {
     setStep('review')
   }
 
+  const handleAddAnother = () => {
+    setItems([])
+    setTax(0)
+    setTip(0)
+    setOcrResult(null)
+    setPaymentNote('')
+    setClaimMode(false)
+    setGuests([])
+    setStep('upload')
+  }
+
+  const handleSplitComplete = async (createdSplit) => {
+    const arr = await loadSplits()
+    const latest = arr[arr.length - 1]
+    if (latest?.status === 'claiming') {
+      setClaimUrl(`${window.location.origin}/claim/${latest.claim_token || ''}`)
+      setStep('claiming')
+    } else {
+      setStep('settled')
+    }
+  }
+
   if (step === 'loading') return (
     <div className="flex justify-center py-8">
       <div className="animate-spin h-6 w-6 border-2 border-rose-400 border-t-transparent rounded-full" />
     </div>
   )
 
-  if (step === 'settled' && split) return (
-    <SettlementTracker
-      split={split}
-      currentUser={currentUser}
-      onRefresh={() => billSplitApi.getByEvent(event.id).then(setSplit)}
-    />
+  if (step === 'settled' && activeSplit) return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <SettlementTracker
+        split={activeSplit}
+        currentUser={currentUser}
+        onRefresh={loadSplits}
+        onAddAnother={handleAddAnother}
+      />
+      {pastSplits.length > 0 && (
+        <PastBillsAccordion splits={pastSplits} currentUser={currentUser} />
+      )}
+    </div>
   )
 
   if (step === 'cta') return (
@@ -94,7 +135,7 @@ export default function BillSplitSection({ event, attendees, currentUser }) {
       eventId={event.id}
       onOCRComplete={handleOCRComplete}
       onManualEntry={handleManualEntry}
-      onBack={() => setStep('cta')}
+      onBack={() => setStep(activeSplit ? 'settled' : 'cta')}
     />
   )
 
@@ -166,50 +207,63 @@ export default function BillSplitSection({ event, attendees, currentUser }) {
       onPaymentNoteChange={setPaymentNote}
       claimMode={claimMode}
       onBack={() => claimMode ? setStep('choose-flow') : setStep('assign')}
-      onClaimStarted={(createdSplit, url) => {
-        setSplit(createdSplit)
+      onClaimStarted={async (createdSplit, url) => {
+        await loadSplits()
         setClaimUrl(url)
         setStep('claiming')
       }}
-      onComplete={(createdSplit) => { setSplit(createdSplit); setStep('settled') }}
+      onComplete={handleSplitComplete}
     />
   )
 
-  if (step === 'claiming' && split) {
-    const isPayer = split.paid_by_user_id === currentUser?.id
+  if (step === 'claiming' && activeSplit) {
+    const isPayer = activeSplit.paid_by_user_id === currentUser?.id
     if (!isPayer) {
-      const token = split.claim_token
+      const token = activeSplit.claim_token
       return (
-        <Card>
-          <Card.Body>
-            <div style={{ textAlign: 'center', padding: '12px 0' }}>
-              <div style={{ fontSize: 36, marginBottom: 12 }}>💸</div>
-              <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--t1)', marginBottom: 8 }}>
-                Pick your items
-              </h3>
-              <p style={{ fontSize: 14, color: 'var(--t2)', marginBottom: 20 }}>
-                <strong>{split.paid_by_name}</strong> is splitting the bill for this event.
-                Tap the button below to claim what you ordered.
-              </p>
-              {token ? (
-                <Button variant="primary" onClick={() => window.location.href = `/claim/${token}`}>
-                  Claim My Items →
-                </Button>
-              ) : (
-                <p style={{ fontSize: 13, color: 'var(--t3)' }}>Claim link loading…</p>
-              )}
-            </div>
-          </Card.Body>
-        </Card>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <Card>
+            <Card.Body>
+              <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                <div style={{ fontSize: 36, marginBottom: 12 }}>💸</div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--t1)', marginBottom: 8 }}>
+                  Pick your items
+                </h3>
+                <p style={{ fontSize: 14, color: 'var(--t2)', marginBottom: 20 }}>
+                  <strong>{activeSplit.paid_by_name}</strong> is splitting the bill for this event.
+                  Tap the button below to claim what you ordered.
+                </p>
+                {token ? (
+                  <Button variant="primary" onClick={() => window.location.href = `/claim/${token}`}>
+                    Claim My Items →
+                  </Button>
+                ) : (
+                  <p style={{ fontSize: 13, color: 'var(--t3)' }}>Claim link loading…</p>
+                )}
+              </div>
+            </Card.Body>
+          </Card>
+          {pastSplits.length > 0 && (
+            <PastBillsAccordion splits={pastSplits} currentUser={currentUser} />
+          )}
+        </div>
       )
     }
     return (
-      <ClaimingStatus
-        splitId={split.id}
-        claimUrl={claimUrl}
-        currentUser={currentUser}
-        onFinalize={(updatedSplit) => { setSplit(updatedSplit); setStep('settled') }}
-      />
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <ClaimingStatus
+          splitId={activeSplit.id}
+          claimUrl={claimUrl}
+          currentUser={currentUser}
+          onFinalize={async (updatedSplit) => {
+            await loadSplits()
+            setStep('settled')
+          }}
+        />
+        {pastSplits.length > 0 && (
+          <PastBillsAccordion splits={pastSplits} currentUser={currentUser} />
+        )}
+      </div>
     )
   }
 

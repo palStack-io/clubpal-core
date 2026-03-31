@@ -15,6 +15,7 @@ class CreateBillSplitRequest(BaseModel):
     tip_amount: float = 0.0
     payment_note: Optional[str] = None
     attending_user_ids: list[int]  # validated against events-service
+    label: Optional[str] = None  # e.g. "Dinner", "Bar tab"
 
 
 class BillItemResponse(BaseModel):
@@ -47,6 +48,8 @@ class BillShareResponse(BaseModel):
 class BillSplitResponse(BaseModel):
     id: int
     event_id: int
+    round_number: int = 1
+    label: Optional[str] = None
     paid_by_user_id: int
     paid_by_name: str
     subtotal: float

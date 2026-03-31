@@ -99,9 +99,47 @@ def init_db():
     cur.execute("CREATE INDEX IF NOT EXISTS idx_bill_splits_claim_token ON bill_splits(claim_token)")
     cur.execute("ALTER TABLE bill_shares ADD COLUMN IF NOT EXISTS unpaid_reminder_sent BOOLEAN DEFAULT FALSE")
 
+    # ── Multi-round support migration ─────────────────────────────────────────
+    # Drop old single-split-per-event constraint, replace with per-round unique
+    cur.execute("ALTER TABLE bill_splits DROP CONSTRAINT IF EXISTS bill_splits_event_id_key")
+    cur.execute("ALTER TABLE bill_splits ADD COLUMN IF NOT EXISTS round_number INTEGER NOT NULL DEFAULT 1")
+    cur.execute("ALTER TABLE bill_splits ADD COLUMN IF NOT EXISTS label TEXT")
+    cur.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_bill_splits_event_round "
+        "ON bill_splits(event_id, round_number)"
+    )
+
     conn.commit()
     cur.close()
     conn.close()
+
+
+def get_next_round_number(event_id: int) -> int:
+    """Return the next available round_number for an event (MAX existing + 1)."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT COALESCE(MAX(round_number), 0) + 1 AS next_round FROM bill_splits WHERE event_id = %s",
+        (event_id,),
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return row["next_round"]
+
+
+def get_splits_by_event(event_id: int) -> list:
+    """Return all bill splits for an event ordered by round_number ascending."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT * FROM bill_splits WHERE event_id = %s ORDER BY round_number ASC",
+        (event_id,),
+    )
+    rows = cur.fetchall()
+    cur.close()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 def create_bill_split(
@@ -147,6 +185,8 @@ def create_bill_split_full(
     payment_note: Optional[str],
     items: list,
     shares: list,
+    round_number: int = 1,
+    label: Optional[str] = None,
 ) -> tuple:
     """Create split, items, and shares atomically in a single transaction.
 
@@ -160,10 +200,10 @@ def create_bill_split_full(
         cur.execute(
             """INSERT INTO bill_splits
                    (event_id, paid_by_user_id, subtotal, tax_amount, tip_amount,
-                    total_amount, payment_note)
-               VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING *""",
+                    total_amount, payment_note, round_number, label)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING *""",
             (event_id, paid_by_user_id, subtotal, tax_amount, tip_amount,
-             total_amount, payment_note),
+             total_amount, payment_note, round_number, label),
         )
         split_row = dict(cur.fetchone())
         split_id = split_row["id"]
@@ -310,9 +350,13 @@ def create_bill_share(
 
 
 def get_split_by_event(event_id: int) -> Optional[dict]:
+    """Return the latest (highest round_number) split for an event, or None."""
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM bill_splits WHERE event_id = %s", (event_id,))
+    cur.execute(
+        "SELECT * FROM bill_splits WHERE event_id = %s ORDER BY round_number DESC LIMIT 1",
+        (event_id,),
+    )
     row = cur.fetchone()
     cur.close()
     conn.close()

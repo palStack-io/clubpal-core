@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.palstack.clubpal",
+      "sha256_cert_fingerprints": ["79:A5:0E:3F:09:ED:E1:DC:5B:B9:97:A4:F0:36:FC:4B:46:62:AF:B5:65:53:9A:71:53:9D:0F:37:8A:22:B8:CD"]
+    }
+  }
+]

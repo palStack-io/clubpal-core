@@ -96,6 +96,7 @@ def init_db():
     cur.execute("ALTER TABLE ocr_log ADD COLUMN IF NOT EXISTS confidence TEXT")
     cur.execute("ALTER TABLE ocr_log ADD COLUMN IF NOT EXISTS duration_ms INTEGER")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_bill_claims_split ON bill_claims(split_id)")
+    cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_bill_claims_split_user ON bill_claims(split_id, user_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_bill_splits_claim_token ON bill_splits(claim_token)")
     cur.execute("ALTER TABLE bill_shares ADD COLUMN IF NOT EXISTS unpaid_reminder_sent BOOLEAN DEFAULT FALSE")
 

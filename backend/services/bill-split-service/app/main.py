@@ -168,11 +168,11 @@ async def verify_session(authorization: Optional[str] = Header(None)) -> dict:
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 async def _fetch_user_profile(uid: int) -> dict:
-    """Fetch a single user profile from the gateway. Returns minimal fallback on failure."""
+    """Fetch a single user profile from the gateway internal endpoint. Returns minimal fallback on failure."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             r = await client.get(
-                f"{API_GATEWAY_URL}/users/{uid}/profile",
+                f"{API_GATEWAY_URL}/internal/users/{uid}/profile",
                 headers={"x-internal-secret": INTERNAL_API_SECRET},
             )
             if r.status_code == 200:
@@ -825,6 +825,7 @@ async def start_claiming(
                         "event_title": event_name,
                         "type": "bill_split_claiming",
                         "payer_name": payer_name,
+                        "claim_token": token,
                     },
                 )
     except Exception as e:

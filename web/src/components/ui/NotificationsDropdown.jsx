@@ -87,7 +87,9 @@ export default function NotificationsDropdown() {
       } catch {}
     }
     // Navigate
-    if (notif.link_type === 'group' && notif.link_id) {
+    if (notif.link_type === 'bill_split_claim' && notif.link_id) {
+      navigate(`/claim/${notif.link_id}`)
+    } else if (notif.link_type === 'group' && notif.link_id) {
       navigate(`/groups/${notif.link_id}`)
     } else if (notif.link_type === 'event' && notif.link_id) {
       navigate(`/events/${notif.link_id}`)

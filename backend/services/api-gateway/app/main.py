@@ -1301,6 +1301,7 @@ class EventNotifyRequest(BaseModel):
     not_going_count: Optional[int] = None
     amount: Optional[float] = None      # for bill_split_assigned
     payer_name: Optional[str] = None    # for bill_split_assigned
+    claim_token: Optional[str] = None   # for bill_split_claiming
 
 
 @app.post("/internal/notify/rotation", status_code=202)
@@ -1575,7 +1576,7 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                     uid, "event",
                     f"💸 Pick your items for {req.event_title}",
                     f"{payer} is splitting the bill — tap to claim your items",
-                    link_type="event", link_id=req.event_id,
+                    link_type="bill_split_claim", link_id=req.claim_token or "",
                 )
 
             else:  # "created"
@@ -1656,7 +1657,7 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
             payer = req.payer_name or "Someone"
             await _send_push(push_tokens, f"💸 Pick your items for {req.event_title}",
                              f"{payer} is splitting the bill — tap to claim",
-                             {"link_type": "event", "link_id": req.event_id})
+                             {"link_type": "bill_split_claim", "link_id": req.claim_token or ""})
 
     return {"notified": results}
 
@@ -1680,6 +1681,27 @@ async def internal_admin_email(x_internal_secret: Optional[str] = Header(None)):
         return {"emails": [ADMIN_EMAIL]}
     emails = get_admin_emails()
     return {"emails": emails}
+
+
+@app.get("/internal/users/{user_id}/profile")
+async def internal_get_user_profile(
+    user_id: int,
+    x_internal_secret: Optional[str] = Header(None),
+):
+    """Internal-only: fetch a user's profile for service-to-service calls (no user auth required)."""
+    if INTERNAL_API_SECRET and x_internal_secret != INTERNAL_API_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    user = get_user_by_id(user_id)
+    if not user:
+        # Return a graceful fallback so callers don't have to handle 404
+        return {"id": user_id, "username": None, "full_name": None, "avatar_url": None, "email": ""}
+    return {
+        "id": user["id"],
+        "username": user.get("username"),
+        "full_name": user.get("full_name"),
+        "avatar_url": user.get("avatar_url"),
+        "email": user.get("email", ""),
+    }
 
 
 # ===== Saved Items (Wishlist) =====

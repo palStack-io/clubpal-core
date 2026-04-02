@@ -21,7 +21,7 @@ from app.models import (
 )
 from app.database import (
     init_db, create_group, get_group, get_groups_by_user, update_group, delete_group,
-    add_member, get_member, get_members, update_member_role, remove_member,
+    add_member, get_member, get_members, update_member_role, remove_member, remove_user_from_all_groups,
     is_member, is_admin_or_owner, get_rotation_state, advance_rotation,
     reset_rotation, set_rotation_turn, skip_rotation, reorder_rotation,
     add_group_comment, get_group_comments, get_group_comment, delete_group_comment,
@@ -352,6 +352,18 @@ async def remove_member_endpoint(group_id: int, user_id: int, requester_id: int 
 
     if not success:
         raise HTTPException(status_code=404, detail="Member not found")
+
+
+# ===== Internal / Admin Endpoints =====
+
+@app.delete("/users/{user_id}/memberships", status_code=200)
+async def remove_user_from_all_groups_endpoint(user_id: int, x_internal_secret: str = Header(None)):
+    """Internal: remove a deleted user from all groups (called by gateway on account deletion)."""
+    internal_secret = os.getenv("INTERNAL_API_SECRET", "")
+    if not internal_secret or x_internal_secret != internal_secret:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    count = remove_user_from_all_groups(user_id)
+    return {"removed_from_groups": count}
 
 
 # ===== Rotation Endpoints =====

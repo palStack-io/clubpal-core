@@ -484,6 +484,20 @@ def remove_member(group_id: int, user_id: int) -> bool:
     return success
 
 
+def remove_user_from_all_groups(user_id: int) -> int:
+    """Remove a user from every group they belong to, adjusting rotation state for each."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT group_id FROM group_members WHERE user_id = %s", (user_id,))
+    group_ids = [row['group_id'] for row in cursor.fetchall()]
+    conn.close()
+
+    for gid in group_ids:
+        remove_member(gid, user_id)
+
+    return len(group_ids)
+
+
 def is_member(group_id: int, user_id: int) -> bool:
     """Check if user is a member of group."""
     conn = get_db()

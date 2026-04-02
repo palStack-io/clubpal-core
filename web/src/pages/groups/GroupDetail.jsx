@@ -82,8 +82,18 @@ export default function GroupDetail() {
       ])
       setGroup(g)
       setUpcoming(u || [])
-      setRotation(r ? { ...r, current_user_id: r.user_id } : null)
-      setMembers(await enrichWithProfiles(m || [], 'user_id'))
+      const enrichedMembers = await enrichWithProfiles(m || [], 'user_id')
+      // Filter out ghost records left by deleted users (no name or username after enrichment)
+      const liveMembers = enrichedMembers.filter(mb => mb.full_name || mb.username || mb.avatar_url)
+      setMembers(liveMembers)
+      if (r) {
+        const rotationMembers = liveMembers
+          .filter(mb => mb.rotation_order != null)
+          .sort((a, b) => (a.rotation_order ?? 999) - (b.rotation_order ?? 999))
+        setRotation({ ...r, current_user_id: r.user_id, members: rotationMembers })
+      } else {
+        setRotation(null)
+      }
     } catch {}
     finally { setLoading(false) }
 
@@ -165,7 +175,11 @@ export default function GroupDetail() {
   const handleRotationChange = async () => {
     try {
       const r = await groupsApi.getRotation(id)
-      setRotation(r ? { ...r, current_user_id: r.user_id } : null)
+      if (r) {
+        setRotation(prev => ({ ...r, current_user_id: r.user_id, members: prev?.members || [] }))
+      } else {
+        setRotation(null)
+      }
     } catch {}
   }
 

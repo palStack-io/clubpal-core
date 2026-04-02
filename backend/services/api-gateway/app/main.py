@@ -278,7 +278,23 @@ async def login(credentials: UserLogin):
     # Get user
     user = get_user_by_username(credentials.username)
 
-    if not user or not verify_password(credentials.password, user["password_hash"]):
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    # OIDC-only accounts have no password — direct them to the right sign-in method
+    if not user.get("password_hash"):
+        provider = user.get("oidc_sub", "").split(":")[0] if user.get("oidc_sub") else "social"
+        raise HTTPException(
+            status_code=401,
+            detail=f"This account was created with {provider.capitalize()} sign-in. Please use that option to log in."
+        )
+
+    try:
+        password_ok = verify_password(credentials.password, user["password_hash"])
+    except Exception:
+        password_ok = False
+
+    if not password_ok:
         raise HTTPException(status_code=401, detail="Invalid username or password")
 
     # Create session
@@ -944,6 +960,17 @@ async def admin_deactivate_user(user_id: int, admin: dict = Depends(get_admin_us
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     deactivate_user(user_id)
+    # Remove from all groups (best-effort — don't fail the deletion if this errors)
+    internal_secret = os.getenv("INTERNAL_API_SECRET", "")
+    async with httpx.AsyncClient() as client:
+        try:
+            await client.delete(
+                f"{GROUPS_SERVICE_URL}/users/{user_id}/memberships",
+                headers={"x-internal-secret": internal_secret},
+                timeout=5.0,
+            )
+        except Exception:
+            pass
 
 
 @app.post("/admin/users", response_model=UserResponse, status_code=201)

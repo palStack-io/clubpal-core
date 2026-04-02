@@ -263,8 +263,10 @@ export default function OnboardingWizard() {
   const overlay = {
     position: 'fixed', inset: 0, zIndex: 1000,
     background: 'rgba(0,0,0,0.6)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center',
+    display: 'flex', flexDirection: 'column', alignItems: 'center',
     backdropFilter: 'blur(4px)',
+    overflowY: 'auto',
+    padding: '16px',
     cursor: 'pointer',
   }
 
@@ -274,12 +276,12 @@ export default function OnboardingWizard() {
     background: 'var(--s1)',
     border: '1px solid var(--glass)',
     borderRadius: '20px',
-    padding: '32px',
+    padding: '28px 24px',
     width: '100%',
     maxWidth: '520px',
-    maxHeight: '90vh',
-    overflowY: 'auto',
     boxShadow: '0 24px 80px rgba(0,0,0,0.6)',
+    flexShrink: 0,
+    margin: 'auto',
   }
 
   const h2 = { fontSize: '22px', fontWeight: 800, color: 'var(--t1)', marginBottom: '6px' }
@@ -455,7 +457,7 @@ export default function OnboardingWizard() {
           {/* Emoji grid — shown when emoji mode is active */}
           {avatarMode === 'emoji' && (
             <div style={{
-              display: 'grid', gridTemplateColumns: 'repeat(9, 1fr)', gap: '6px',
+              display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(36px, 1fr))', gap: '6px',
               marginBottom: '16px', padding: '12px',
               background: 'var(--s2)', border: '1px solid var(--glass)', borderRadius: '12px',
             }}>

@@ -100,7 +100,13 @@ export default function CreateEventModal({
   const [ratingsEnabled, setRatingsEnabled] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [showBillHint, setShowBillHint] = useState(() => !localStorage.getItem('clubpal_billsplit_hint_seen'))
   const coverRef = useRef()
+
+  const dismissBillHint = () => {
+    localStorage.setItem('clubpal_billsplit_hint_seen', 'true')
+    setShowBillHint(false)
+  }
   // RSVP deadline
   const [rsvpDeadlineDate, setRsvpDeadlineDate] = useState('')
   const [rsvpDeadlineTime, setRsvpDeadlineTime] = useState('')
@@ -560,6 +566,32 @@ export default function CreateEventModal({
           <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>Ask the group how they feel about this pick after creating the event</div>
         </div>
       </div>
+
+      {/* Bill Split hint — shown first time only */}
+      {showBillHint && (
+        <div style={{
+          background: 'rgba(34,211,160,0.07)',
+          border: '1px solid rgba(34,211,160,0.22)',
+          borderRadius: '14px',
+          padding: '14px 16px',
+          marginBottom: '12px',
+          display: 'flex', alignItems: 'flex-start', gap: '12px',
+        }}>
+          <span style={{ fontSize: '22px', flexShrink: 0 }}>💸</span>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--green)', marginBottom: '3px' }}>
+              Bill Split — track &amp; divide costs
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--t3)', lineHeight: 1.5 }}>
+              Enable it below to let the host log and split expenses with attendees after the event ends.
+            </div>
+          </div>
+          <button onClick={dismissBillHint} style={{
+            background: 'none', border: 'none', color: 'var(--t4)',
+            fontSize: '18px', lineHeight: 1, cursor: 'pointer', flexShrink: 0, padding: '0 2px',
+          }}>×</button>
+        </div>
+      )}
 
       {/* Bill Split toggle */}
       <div style={{ ...sectionStyle, display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }} onClick={() => setBillSplitEnabled(v => !v)}>

@@ -58,6 +58,24 @@ const sectionTitleStyle = {
   marginBottom: '14px',
 }
 
+const GROUP_ONBOARD_STEPS = [
+  {
+    icon: '🎉',
+    title: 'Your club is ready!',
+    body: 'Share your club with friends — they can join via invite link or email invitation.',
+  },
+  {
+    icon: '🔄',
+    title: 'Turn-based picks',
+    body: "Members take turns choosing the activity. The current picker shows up on everyone's dashboard.",
+  },
+  {
+    icon: '💸',
+    title: 'Split costs effortlessly',
+    body: 'When creating an event, enable Bill Split to track expenses and divide them fairly between attendees.',
+  },
+]
+
 export default function CreateGroupModal({ isOpen, onClose, onCreated }) {
   const [form, setForm] = useState({
     name: '',
@@ -72,6 +90,8 @@ export default function CreateGroupModal({ isOpen, onClose, onCreated }) {
   const [bannerPreview, setBannerPreview] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [createdGroupId, setCreatedGroupId] = useState(null)
+  const [onboardStep, setOnboardStep] = useState(0)
   const bannerRef = useRef()
 
   const setField = (key, val) => setForm((f) => ({ ...f, [key]: val }))
@@ -130,12 +150,75 @@ export default function CreateGroupModal({ isOpen, onClose, onCreated }) {
           .catch(() => {})
       }
       onCreated && onCreated(group.id)
-      onClose && onClose()
+      if (!localStorage.getItem('clubpal_group_onboarded')) {
+        setCreatedGroupId(group.id)
+      } else {
+        onClose && onClose()
+      }
     } catch (err) {
       setError(err?.response?.data?.detail || 'Failed to create club. Please try again.')
     } finally {
       setLoading(false)
     }
+  }
+
+  const handleOnboardDone = () => {
+    localStorage.setItem('clubpal_group_onboarded', 'true')
+    onClose?.()
+  }
+
+  if (createdGroupId) {
+    const step = GROUP_ONBOARD_STEPS[onboardStep]
+    const isLast = onboardStep === GROUP_ONBOARD_STEPS.length - 1
+    return (
+      <Modal isOpen={isOpen} onClose={handleOnboardDone} title="Quick Tips">
+        <div style={{ textAlign: 'center', padding: '12px 8px 4px' }}>
+          <div style={{ fontSize: '52px', marginBottom: '16px' }}>{step.icon}</div>
+          <div style={{ fontSize: '20px', fontWeight: 800, color: 'var(--t1)', marginBottom: '10px' }}>
+            {step.title}
+          </div>
+          <div style={{ fontSize: '14px', color: 'var(--t2)', lineHeight: 1.6, marginBottom: '32px' }}>
+            {step.body}
+          </div>
+
+          {/* Step dots */}
+          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center', marginBottom: '24px' }}>
+            {GROUP_ONBOARD_STEPS.map((_, i) => (
+              <div key={i} style={{
+                width: i === onboardStep ? '20px' : '6px',
+                height: '6px',
+                borderRadius: '100px',
+                background: i <= onboardStep ? 'var(--rose)' : 'var(--glass)',
+                transition: 'all 0.2s',
+              }} />
+            ))}
+          </div>
+
+          <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+            <button onClick={handleOnboardDone} style={{
+              background: 'none',
+              border: '1px solid var(--glass)',
+              borderRadius: '8px',
+              padding: '8px 18px',
+              fontSize: '13px', fontWeight: 600,
+              color: 'var(--t3)', cursor: 'pointer',
+            }}>
+              Skip
+            </button>
+            <button
+              onClick={isLast ? handleOnboardDone : () => setOnboardStep(s => s + 1)}
+              style={{
+                background: 'var(--rose)', border: 'none', borderRadius: '8px',
+                padding: '8px 22px', fontSize: '13px', fontWeight: 700,
+                color: '#fff', cursor: 'pointer',
+              }}
+            >
+              {isLast ? "Let's go!" : 'Next →'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    )
   }
 
   const selectedAct = ACTIVITY_OPTIONS.find((a) => a.key === form.activity_type)

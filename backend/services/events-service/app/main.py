@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from typing import List, Optional
 from datetime import datetime
 ENCODERS_BY_TYPE[datetime] = lambda dt: dt.strftime('%Y-%m-%dT%H:%M:%SZ') if dt else None
+import os
 import uuid
 import httpx
 import logging
@@ -22,6 +23,7 @@ from app.database import (
     init_db, get_db, create_event, get_event, get_events_by_group, get_events_by_user,
     get_events_by_host, update_event, delete_event,
     add_attendee, upsert_attendee, get_attendee, get_attendees, update_attendee_status, remove_attendee,
+    remove_user_from_all_events,
     add_comment, get_comment, get_comments, delete_comment, get_event_history,
     add_photo, get_photo, get_photos, delete_photo,
     create_recurring_schedule, get_due_recurring_schedules,
@@ -1255,6 +1257,18 @@ async def get_event_history_endpoint(event_id: int):
 
     history = get_event_history(event_id)
     return [EventHistoryResponse(**entry) for entry in history]
+
+
+# ===== Internal Endpoints =====
+
+@app.delete("/users/{user_id}/attendances", status_code=200)
+async def remove_user_attendances_endpoint(user_id: int, x_internal_secret: str = Header(None)):
+    """Internal: remove a deleted user from all event attendee records (called by gateway on account deletion)."""
+    internal_secret = os.getenv("INTERNAL_API_SECRET", "")
+    if not internal_secret or x_internal_secret != internal_secret:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    count = remove_user_from_all_events(user_id)
+    return {"removed_from_events": count}
 
 
 if __name__ == "__main__":

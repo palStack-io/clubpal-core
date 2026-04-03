@@ -59,6 +59,7 @@ app.add_middleware(
 
 # Service URLs
 GROUPS_SERVICE_URL = "http://groups-service:8002"
+EVENTS_SERVICE_URL = "http://events-service:8003"
 ENRICHMENT_SERVICE_URL = "http://enrichment-service:8006"
 BILL_SPLIT_SERVICE_URL = "http://bill-split-service:8007"
 
@@ -960,12 +961,20 @@ async def admin_deactivate_user(user_id: int, admin: dict = Depends(get_admin_us
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     deactivate_user(user_id)
-    # Remove from all groups (best-effort — don't fail the deletion if this errors)
+    # Remove from all groups and events (best-effort — don't fail the deletion if these error)
     internal_secret = os.getenv("INTERNAL_API_SECRET", "")
     async with httpx.AsyncClient() as client:
         try:
             await client.delete(
                 f"{GROUPS_SERVICE_URL}/users/{user_id}/memberships",
+                headers={"x-internal-secret": internal_secret},
+                timeout=5.0,
+            )
+        except Exception:
+            pass
+        try:
+            await client.delete(
+                f"{EVENTS_SERVICE_URL}/users/{user_id}/attendances",
                 headers={"x-internal-secret": internal_secret},
                 timeout=5.0,
             )

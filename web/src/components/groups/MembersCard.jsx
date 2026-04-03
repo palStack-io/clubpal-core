@@ -2,6 +2,7 @@ import { useState } from 'react'
 import Card from '../ui/Card'
 import Avatar from '../ui/Avatar'
 import UserStatsModal from '../ui/UserStatsModal'
+import { groupsApi } from '../../api/groups'
 
 // kept for dead-code removal — replaced by UserStatsModal
 function MemberStatsPopup({ member, canManage, onRoleChange, onRemove, onClose }) {
@@ -315,9 +316,10 @@ function PendingInviteBubble({ email }) {
   )
 }
 
-export default function MembersCard({ members = [], pendingInvites = [], canManage, currentUserId, onRoleChange, onRemove, onInvite, rotation, rotationType }) {
+export default function MembersCard({ members = [], pendingInvites = [], canManage, currentUserId, onRoleChange, onRemove, onInvite, rotation, rotationType, isAdmin, groupId, onRotationChange }) {
   const totalCount = members.length + pendingInvites.length
   const [selectedMember, setSelectedMember] = useState(null)
+  const [rotationActionLoading, setRotationActionLoading] = useState(false)
   const isManual = rotationType === 'none'
   const hasRotation = !isManual && !!(rotation?.current_user_id)
 
@@ -335,6 +337,26 @@ export default function MembersCard({ members = [], pendingInvites = [], canMana
         rotationPositions[m.user_id] = pos++
       }
     })
+  }
+
+  const handleSkipTurn = async () => {
+    setRotationActionLoading(true)
+    try {
+      await groupsApi.skipRotation(groupId)
+      onRotationChange?.()
+      setSelectedMember(null)
+    } catch {}
+    finally { setRotationActionLoading(false) }
+  }
+
+  const handleSetTurn = async (userId) => {
+    setRotationActionLoading(true)
+    try {
+      await groupsApi.setRotation(groupId, userId)
+      onRotationChange?.()
+      setSelectedMember(null)
+    } catch {}
+    finally { setRotationActionLoading(false) }
   }
 
   const headerAction = (
@@ -408,6 +430,12 @@ export default function MembersCard({ members = [], pendingInvites = [], canMana
         onRoleChange={onRoleChange}
         onRemove={onRemove}
         onClose={() => setSelectedMember(null)}
+        isAdmin={isAdmin && selectedMember.user_id !== currentUserId}
+        isCurrent={hasRotation && selectedMember.user_id === rotation?.current_user_id}
+        rotationEnabled={hasRotation}
+        onSkipTurn={handleSkipTurn}
+        onSetTurn={() => handleSetTurn(selectedMember.user_id)}
+        rotationActionLoading={rotationActionLoading}
       />
     )}
   </>

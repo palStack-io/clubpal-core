@@ -15,7 +15,6 @@ import EditGroupModal from '../../components/modals/EditGroupModal'
 import CreateEventModal from '../../components/modals/CreateEventModal'
 import CreatePollModal from '../../components/modals/CreatePollModal'
 import PollCard from '../../components/groups/PollCard'
-import RotationQueueCard from '../../components/groups/RotationQueueCard'
 import { groupsApi } from '../../api/groups'
 import { eventsApi } from '../../api/events'
 import { ratingsApi } from '../../api/ratings'
@@ -319,16 +318,10 @@ export default function GroupDetail() {
               onInvite={() => setShowInvite(true)}
               rotation={rotation}
               rotationType={group?.rotation_type}
+              isAdmin={isAdmin}
+              groupId={id}
+              onRotationChange={handleRotationChange}
             />
-            {rotation && group?.rotation_type !== 'none' && rotation.members?.length > 0 && (
-              <RotationQueueCard
-                rotation={rotation}
-                currentUserId={user?.id}
-                isAdmin={isAdmin}
-                groupId={id}
-                onRotationChange={handleRotationChange}
-              />
-            )}
             {isAdmin && pendingRequests.length > 0 && (
               <div style={{ background: 'var(--s3)', border: '1px solid var(--rose-border)', borderRadius: '16px', padding: '18px' }}>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--t1)', marginBottom: '14px' }}>

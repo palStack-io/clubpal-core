@@ -62,7 +62,8 @@ export default function EventDetail() {
       setPhotos(Array.isArray(ph) ? ph : ph?.photos || [])
 
       const rawAttendees = Array.isArray(att) ? att : att?.attendees || []
-      setAttendees(await enrichWithProfiles(rawAttendees, 'user_id'))
+      const enrichedAttendees = await enrichWithProfiles(rawAttendees, 'user_id')
+      setAttendees(enrichedAttendees.filter(a => a.full_name || a.username || a.avatar_url))
 
       const rawComments = Array.isArray(cmt) ? cmt : cmt?.comments || []
       setComments(await enrichWithProfiles(rawComments, 'user_id'))

@@ -666,6 +666,17 @@ def remove_attendee(event_id: int, user_id: int) -> bool:
     return success
 
 
+def remove_user_from_all_events(user_id: int) -> int:
+    """Remove a deleted user from all event_attendees records."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM event_attendees WHERE user_id = %s", (user_id,))
+    count = cursor.rowcount
+    conn.commit()
+    conn.close()
+    return count
+
+
 # ===== Comment Management =====
 
 def add_comment(event_id: int, user_id: int, content: str) -> int:

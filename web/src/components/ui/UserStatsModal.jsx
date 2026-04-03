@@ -10,7 +10,7 @@ function vibeLabel(avg) {
   return { label: '😌 Easy going', color: 'var(--amber)' }
 }
 
-export default function UserStatsModal({ member, canManage, onRoleChange, onRemove, onClose }) {
+export default function UserStatsModal({ member, canManage, onRoleChange, onRemove, onClose, isAdmin, isCurrent, rotationEnabled, onSkipTurn, onSetTurn, rotationActionLoading }) {
   const [stats, setStats] = useState(null)
   const ref = useRef(null)
 
@@ -72,6 +72,11 @@ export default function UserStatsModal({ member, canManage, onRoleChange, onRemo
                   {roleBadge.text}
                 </span>
               )}
+              {rotationEnabled && isCurrent && (
+                <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--rose-soft)', background: 'rgba(244,63,94,0.12)', border: '1px solid rgba(244,63,94,0.25)', borderRadius: '99px', padding: '2px 8px' }}>
+                  Their turn
+                </span>
+              )}
             </div>
           </div>
           <button
@@ -110,20 +115,44 @@ export default function UserStatsModal({ member, canManage, onRoleChange, onRemo
         )}
 
         {/* Admin actions */}
-        {canManage && (
+        {(canManage || (isAdmin && rotationEnabled)) && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <button
-              onClick={() => { onRoleChange(member.user_id, member.role === 'admin' ? 'member' : 'admin'); onClose() }}
-              style={{ width: '100%', padding: '11px', borderRadius: '12px', background: 'var(--s3)', border: '1px solid var(--glass)', color: 'var(--t2)', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
-            >
-              {member.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
-            </button>
-            <button
-              onClick={() => { onRemove(member.user_id); onClose() }}
-              style={{ width: '100%', padding: '11px', borderRadius: '12px', background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
-            >
-              Remove from Club
-            </button>
+            {/* Rotation controls — shown to admins when rotation is active */}
+            {isAdmin && rotationEnabled && (
+              isCurrent ? (
+                <button
+                  onClick={onSkipTurn}
+                  disabled={rotationActionLoading}
+                  style={{ width: '100%', padding: '11px', borderRadius: '12px', background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', color: 'var(--amber)', fontWeight: 700, fontSize: '13px', cursor: rotationActionLoading ? 'not-allowed' : 'pointer', opacity: rotationActionLoading ? 0.6 : 1 }}
+                >
+                  {rotationActionLoading ? '…' : 'Skip Turn →'}
+                </button>
+              ) : (
+                <button
+                  onClick={onSetTurn}
+                  disabled={rotationActionLoading}
+                  style={{ width: '100%', padding: '11px', borderRadius: '12px', background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.25)', color: '#6366f1', fontWeight: 700, fontSize: '13px', cursor: rotationActionLoading ? 'not-allowed' : 'pointer', opacity: rotationActionLoading ? 0.6 : 1 }}
+                >
+                  {rotationActionLoading ? '…' : 'Set as Current Turn'}
+                </button>
+              )
+            )}
+            {canManage && (
+              <>
+                <button
+                  onClick={() => { onRoleChange(member.user_id, member.role === 'admin' ? 'member' : 'admin'); onClose() }}
+                  style={{ width: '100%', padding: '11px', borderRadius: '12px', background: 'var(--s3)', border: '1px solid var(--glass)', color: 'var(--t2)', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
+                >
+                  {member.role === 'admin' ? 'Remove Admin' : 'Make Admin'}
+                </button>
+                <button
+                  onClick={() => { onRemove(member.user_id); onClose() }}
+                  style={{ width: '100%', padding: '11px', borderRadius: '12px', background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
+                >
+                  Remove from Club
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

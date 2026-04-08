@@ -113,7 +113,7 @@ export default function GroupHeroCard({ group, members = [], rotation, currentUs
                       display: 'block', width: '100%', textAlign: 'left',
                       padding: '9px 12px', borderRadius: '8px',
                       background: 'transparent', border: 'none',
-                      fontSize: '13px', fontWeight: 600, color: 'var(--t1)',
+                      fontSize: '13px', fontWeight: 600, color: a.danger ? 'var(--rose-soft)' : 'var(--t1)',
                       cursor: 'pointer', transition: 'background 0.12s',
                     }}
                     onMouseEnter={e => { e.currentTarget.style.background = 'var(--s3)' }}

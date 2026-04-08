@@ -19,7 +19,7 @@ from app.database import (
     init_db, create_rating, get_rating, get_rating_by_event_and_rater,
     get_ratings_for_event, get_ratings_by_rater, get_ratings_for_user,
     update_rating, delete_rating, get_user_stats, get_event_stats,
-    get_group_leaderboard, increment_hosted_events
+    get_group_leaderboard, increment_hosted_events, get_group_event_avg_rating
 )
 
 app = FastAPI(title="ClubPal Ratings Service", version="1.0.0")
@@ -251,25 +251,34 @@ async def get_event_stats_endpoint(event_id: int):
 @app.get("/groups/{group_id}/leaderboard", response_model=GroupLeaderboardResponse)
 async def get_group_leaderboard_endpoint(group_id: int):
     """Get leaderboard for a group."""
-    # Get group members from groups service
     async with httpx.AsyncClient() as client:
+        # Get group members
         try:
             response = await client.get(f"{GROUPS_SERVICE_URL}/groups/{group_id}/members")
             if response.status_code != 200:
                 raise HTTPException(status_code=404, detail="Group not found")
-
             members = response.json()
             member_ids = [member["user_id"] for member in members]
         except httpx.RequestError:
             raise HTTPException(status_code=503, detail="Groups service unavailable")
 
-    # Get leaderboard
+        # Get group event IDs for event-based avg rating
+        event_ids: List[int] = []
+        try:
+            ev_resp = await client.get(f"{EVENTS_SERVICE_URL}/groups/{group_id}/events")
+            if ev_resp.status_code == 200:
+                event_ids = [e["id"] for e in ev_resp.json() if e.get("id")]
+        except httpx.RequestError:
+            pass  # non-fatal — avg rating falls back to None
+
     leaderboard_data = get_group_leaderboard(group_id, member_ids)
     leaderboard = [LeaderboardEntry(**entry) for entry in leaderboard_data]
+    group_avg_rating = get_group_event_avg_rating(event_ids) if event_ids else None
 
     return GroupLeaderboardResponse(
         group_id=group_id,
-        leaderboard=leaderboard
+        leaderboard=leaderboard,
+        group_avg_rating=group_avg_rating,
     )
 
 

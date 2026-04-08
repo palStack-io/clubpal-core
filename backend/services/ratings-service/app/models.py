@@ -63,3 +63,4 @@ class LeaderboardEntry(BaseModel):
 class GroupLeaderboardResponse(BaseModel):
     group_id: int
     leaderboard: list[LeaderboardEntry]
+    group_avg_rating: Optional[float] = None

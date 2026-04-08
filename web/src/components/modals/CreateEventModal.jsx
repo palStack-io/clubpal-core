@@ -615,9 +615,9 @@ export default function CreateEventModal({
         </div>
       </div>
 
-      {/* Section 4: Notes */}
+      {/* Section 4: Description */}
       <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>Notes (optional)</div>
+        <div style={sectionTitleStyle}>Description / About (optional)</div>
         <textarea
           value={notes}
           onChange={(e) => setNotes(e.target.value)}

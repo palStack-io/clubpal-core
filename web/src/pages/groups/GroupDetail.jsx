@@ -66,6 +66,7 @@ export default function GroupDetail() {
   const [showPastPolls, setShowPastPolls] = useState(false)
   const [comments, setComments] = useState([])
   const [leaderboard, setLeaderboard] = useState([])
+  const [groupAvgRatingFromEvents, setGroupAvgRatingFromEvents] = useState(null)
   const [pendingInvites, setPendingInvites] = useState([])
   const [pendingRequests, setPendingRequests] = useState([])
   const [inviteSuccess, setInviteSuccess] = useState(null)
@@ -104,7 +105,10 @@ export default function GroupDetail() {
       setComments(await enrichWithProfiles(arr, 'user_id'))
     }).catch(() => {})
     groupsApi.getGroupPolls(id, user?.id).then(p => setPolls(Array.isArray(p) ? p : [])).catch(() => {})
-    ratingsApi.getLeaderboard(id).then(d => setLeaderboard(d?.leaderboard || [])).catch(() => {})
+    ratingsApi.getLeaderboard(id).then(d => {
+      setLeaderboard(d?.leaderboard || [])
+      setGroupAvgRatingFromEvents(d?.group_avg_rating ?? null)
+    }).catch(() => {})
     gatewayClient.get(`/groups/${id}/pending-invites`).then(r => setPendingInvites(Array.isArray(r.data) ? r.data : [])).catch(() => {})
     groupsApi.getJoinRequests(id).then(async rows => {
       const enriched = await enrichWithProfiles(Array.isArray(rows) ? rows : [], 'user_id')
@@ -194,9 +198,9 @@ export default function GroupDetail() {
     </AppShell>
   )
 
-  const totalRatings = leaderboard.reduce((s, e) => s + (e.total_ratings || 0), 0)
-  const weightedScore = leaderboard.reduce((s, e) => s + ((e.average_score || 0) * (e.total_ratings || 0)), 0)
-  const groupAvgRating = totalRatings > 0 ? (weightedScore / totalRatings).toFixed(1) : null
+  const groupAvgRating = groupAvgRatingFromEvents != null
+    ? Number(groupAvgRatingFromEvents).toFixed(1)
+    : null
 
   const stats = [
     { label: 'Total Events', value: upcoming.length + past.length },
@@ -204,9 +208,20 @@ export default function GroupDetail() {
     { label: 'Active Since', value: activeSinceLabel(group.created_at) },
   ]
 
+  const handleLeaveGroup = async () => {
+    if (!window.confirm(`Leave ${group?.name || 'this club'}? You will lose access.`)) return
+    try {
+      await groupsApi.removeMember(id, user?.id)
+      navigate('/groups')
+    } catch (e) {
+      alert(e?.response?.data?.detail || 'Could not leave club.')
+    }
+  }
+
   const heroActions = [
     { label: '🔗 Invite Link', onClick: () => setShowInviteLink(true) },
     ...(isAdmin ? [{ label: '⚙️ Edit', onClick: () => setShowEdit(true) }] : []),
+    ...(myRole !== 'owner' ? [{ label: '🚪 Leave Club', onClick: handleLeaveGroup, danger: true }] : []),
   ]
 
   return (

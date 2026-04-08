@@ -218,6 +218,22 @@ export default function EventHero({ event, onRsvp, onEdit, currentUserId }) {
           </span>
         </div>
 
+        {/* Description / About */}
+        {(event.description || event.notes) && (
+          <div
+            style={{
+              marginTop: '12px',
+              marginBottom: '4px',
+              fontSize: '13px',
+              color: hasCustomBg ? 'rgba(255,255,255,0.72)' : 'var(--t2)',
+              lineHeight: '1.6',
+              maxWidth: '640px',
+            }}
+          >
+            {(event.description || event.notes || '').replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'").trim()}
+          </div>
+        )}
+
         {/* Status + action row */}
         <div
           style={{

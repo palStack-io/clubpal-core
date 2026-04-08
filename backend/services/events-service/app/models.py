@@ -17,7 +17,7 @@ class EventCreate(BaseModel):
     activity_id: Optional[int] = None
     activity_type: Optional[str] = None
     title: str = Field(..., min_length=1, max_length=200)
-    description: Optional[str] = Field(None, max_length=1000)
+    description: Optional[str] = Field(None, max_length=5000)
     scheduled_date: Optional[datetime] = None
     location: Optional[str] = Field(None, max_length=200)
     host_user_id: Optional[int] = None  # If None, use rotation
@@ -42,7 +42,7 @@ class RecurringScheduleCreate(BaseModel):
     group_id: int
     activity_id: Optional[int] = None
     title: str = Field(..., min_length=1, max_length=200)
-    description: Optional[str] = Field(None, max_length=1000)
+    description: Optional[str] = Field(None, max_length=5000)
     location: Optional[str] = Field(None, max_length=200)
     host_user_id: Optional[int] = None
     recurrence_rule: str                  # weekly | biweekly | monthly
@@ -71,7 +71,7 @@ class RecurringScheduleResponse(BaseModel):
 
 class EventUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=200)
-    description: Optional[str] = Field(None, max_length=1000)
+    description: Optional[str] = Field(None, max_length=5000)
     scheduled_date: Optional[datetime] = None
     location: Optional[str] = Field(None, max_length=200)
     host_user_id: Optional[int] = None

@@ -434,3 +434,22 @@ def get_group_leaderboard(group_id: int, member_ids: List[int]) -> List[dict]:
         }
         for rank, row in enumerate(rows, start=1)
     ]
+
+
+def get_group_event_avg_rating(event_ids: List[int]) -> Optional[float]:
+    """Return the average rating score across all ratings for the given event IDs."""
+    if not event_ids:
+        return None
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        placeholders = ','.join(['%s'] * len(event_ids))
+        cursor.execute(
+            f"SELECT AVG(score) FROM ratings WHERE event_id IN ({placeholders})",
+            event_ids
+        )
+        row = cursor.fetchone()
+        avg = row[0] if row else None
+        return round(float(avg), 2) if avg is not None else None
+    finally:
+        conn.close()

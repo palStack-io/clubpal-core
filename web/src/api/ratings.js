@@ -28,6 +28,6 @@ export const ratingsApi = {
   getEventStats: (eventId) =>
     ratingsClient.get(`/events/${eventId}/stats`).then(r => r.data),
 
-  getLeaderboard: (groupId) =>
-    ratingsClient.get(`/groups/${groupId}/leaderboard`).then(r => r.data),
+  getLeaderboard: (groupId, queryParams = '') =>
+    ratingsClient.get(`/groups/${groupId}/leaderboard${queryParams}`).then(r => r.data),
 }

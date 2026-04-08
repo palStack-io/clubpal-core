@@ -212,9 +212,9 @@ export default function CreateEventModal({
           note: notes.trim() || null,
         }).catch(() => {})
       }
-      // Advance rotation if it was the user's turn — silently ignore errors
+      // Link event to rotation turn — turn won't advance until the event ends
       if (resolvedGroupId) {
-        groupsApi.completeTurn(resolvedGroupId).catch(() => {})
+        groupsApi.completeTurn(resolvedGroupId, event.id).catch(() => {})
       }
       onCreated && onCreated(event.id)
     } catch (err) {

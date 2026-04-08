@@ -83,10 +83,15 @@ class RotationTurnResponse(BaseModel):
     user_id: int
     turn_index: int
     rotation_type: RotationType
+    picked_event_id: Optional[int] = None
 
 
 class RotationAdvanceRequest(BaseModel):
     pass  # No body needed, just POST to advance
+
+
+class CompleteTurnRequest(BaseModel):
+    event_id: Optional[int] = None  # If set, hold the turn until this event ends
 
 
 class RotationResetRequest(BaseModel):

@@ -99,13 +99,23 @@ export default function GroupDetail() {
 
     groupsApi.getActiveInviteCode(id).then(ic => setInviteCode(ic?.code || null)).catch(() => {})
 
-    eventsApi.getGroupEvents(id, 'completed').then(setPast).catch(() => {})
     groupsApi.getComments(id).then(async c => {
       const arr = Array.isArray(c) ? c : []
       setComments(await enrichWithProfiles(arr, 'user_id'))
     }).catch(() => {})
     groupsApi.getGroupPolls(id, user?.id).then(p => setPolls(Array.isArray(p) ? p : [])).catch(() => {})
-    ratingsApi.getLeaderboard(id).then(d => {
+
+    // Load past events + leaderboard together so we can pass all event IDs for the avg rating
+    Promise.all([
+      eventsApi.getGroupEvents(id, 'completed').catch(() => []),
+      eventsApi.getGroupEvents(id, 'scheduled').catch(() => []),
+    ]).then(([pastEvs, upcomingEvs]) => {
+      setPast(pastEvs || [])
+      const allIds = [...(pastEvs || []), ...(upcomingEvs || [])]
+        .map(e => e.id).filter(Boolean).join(',')
+      const params = allIds ? `?event_ids=${allIds}` : ''
+      return ratingsApi.getLeaderboard(id, params)
+    }).then(d => {
       setLeaderboard(d?.leaderboard || [])
       setGroupAvgRatingFromEvents(d?.group_avg_rating ?? null)
     }).catch(() => {})

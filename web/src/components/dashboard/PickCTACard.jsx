@@ -98,52 +98,63 @@ export default function PickCTACard({ turn, groupId, onSkip, onAlreadyPicked }) 
       </div>
 
       {/* Actions */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0, position: 'relative' }}>
-        <button
-          onClick={() => navigate(info.route)}
-          style={{
-            padding: '8px 16px', borderRadius: '10px', fontSize: '12px', fontWeight: 700,
-            background: 'var(--rose)', color: '#fff', border: 'none', cursor: 'pointer',
-            boxShadow: '0 2px 12px rgba(244,63,94,0.35)', whiteSpace: 'nowrap',
-          }}
-        >
-          Browse {info.emoji}
-        </button>
-        <button
-          onClick={() => navigate(`/groups/${groupId}`)}
-          style={{
-            padding: '6px 16px', borderRadius: '10px', fontSize: '11px', fontWeight: 700,
-            background: 'var(--rose-glow)', color: 'var(--rose-soft)',
-            border: '1px solid var(--rose-border)', cursor: 'pointer', whiteSpace: 'nowrap',
-          }}
-        >
-          💬 Poll group
-        </button>
-        {onSkip && (
+      {turn.pickedEventId ? (
+        /* Event already picked — waiting for it to end */
+        <div style={{
+          padding: '10px 14px', borderRadius: '12px', textAlign: 'center', flexShrink: 0,
+          background: 'rgba(99,102,241,0.08)', border: '1px solid rgba(99,102,241,0.2)',
+        }}>
+          <div style={{ fontSize: '12px', fontWeight: 700, color: 'var(--blue)', marginBottom: '2px' }}>Event in progress</div>
+          <div style={{ fontSize: '10px', color: 'var(--t3)', whiteSpace: 'nowrap' }}>Turn advances when it ends</div>
+        </div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0, position: 'relative' }}>
           <button
-            disabled={busy === 'skip'}
-            onClick={() => handleAction(onSkip, 'skip')}
+            onClick={() => navigate(info.route)}
             style={{
-              fontSize: '10px', fontWeight: 600, color: 'var(--t3)',
-              background: 'none', border: 'none', cursor: busy ? 'wait' : 'pointer', padding: '2px 0',
-              opacity: busy && busy !== 'skip' ? 0.4 : 1,
+              padding: '8px 16px', borderRadius: '10px', fontSize: '12px', fontWeight: 700,
+              background: 'var(--rose)', color: '#fff', border: 'none', cursor: 'pointer',
+              boxShadow: '0 2px 12px rgba(244,63,94,0.35)', whiteSpace: 'nowrap',
             }}
           >
-            {busy === 'skip' ? 'Skipping...' : 'Skip turn'}
+            Browse {info.emoji}
           </button>
-        )}
-        <button
-          disabled={busy === 'done'}
-          onClick={() => handleAction(onAlreadyPicked, 'done')}
-          style={{
-            fontSize: '10px', fontWeight: 600, color: busy === 'done' ? 'var(--green, #10b981)' : 'var(--t3)',
-            background: 'none', border: 'none', cursor: busy ? 'wait' : 'pointer', padding: '2px 0',
-            opacity: busy && busy !== 'done' ? 0.4 : 1,
-          }}
-        >
-          {busy === 'done' ? 'Completing...' : 'Already picked ✓'}
-        </button>
-      </div>
+          <button
+            onClick={() => navigate(`/groups/${groupId}`)}
+            style={{
+              padding: '6px 16px', borderRadius: '10px', fontSize: '11px', fontWeight: 700,
+              background: 'var(--rose-glow)', color: 'var(--rose-soft)',
+              border: '1px solid var(--rose-border)', cursor: 'pointer', whiteSpace: 'nowrap',
+            }}
+          >
+            💬 Poll group
+          </button>
+          {onSkip && (
+            <button
+              disabled={busy === 'skip'}
+              onClick={() => handleAction(onSkip, 'skip')}
+              style={{
+                fontSize: '10px', fontWeight: 600, color: 'var(--t3)',
+                background: 'none', border: 'none', cursor: busy ? 'wait' : 'pointer', padding: '2px 0',
+                opacity: busy && busy !== 'skip' ? 0.4 : 1,
+              }}
+            >
+              {busy === 'skip' ? 'Skipping...' : 'Skip turn'}
+            </button>
+          )}
+          <button
+            disabled={busy === 'done'}
+            onClick={() => handleAction(onAlreadyPicked, 'done')}
+            style={{
+              fontSize: '10px', fontWeight: 600, color: busy === 'done' ? 'var(--green, #10b981)' : 'var(--t3)',
+              background: 'none', border: 'none', cursor: busy ? 'wait' : 'pointer', padding: '2px 0',
+              opacity: busy && busy !== 'done' ? 0.4 : 1,
+            }}
+          >
+            {busy === 'done' ? 'Completing...' : 'Already picked ✓'}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

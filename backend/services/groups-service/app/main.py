@@ -12,7 +12,7 @@ from app.models import (
     GroupCreate, GroupUpdate, GroupResponse, GroupDetailResponse,
     MemberAdd, MemberUpdateRole, MemberResponse,
     RotationTurnResponse, RotationAdvanceRequest, RotationResetRequest,
-    RotationSetTurnRequest, RotationSkipRequest, RotationReorderRequest,
+    RotationSetTurnRequest, RotationSkipRequest, RotationReorderRequest, CompleteTurnRequest,
     BannerUploadRequest, UploadUrlResponse,
     GroupCommentCreate, GroupCommentResponse,
     PollCreate, PollRespond, PollConvert, PollResponseModel,
@@ -24,6 +24,7 @@ from app.database import (
     add_member, get_member, get_members, update_member_role, remove_member, remove_user_from_all_groups,
     is_member, is_admin_or_owner, get_rotation_state, advance_rotation,
     reset_rotation, set_rotation_turn, skip_rotation, reorder_rotation,
+    set_picked_event, get_group_id_by_picked_event,
     add_group_comment, get_group_comments, get_group_comment, delete_group_comment,
     create_poll, get_poll, get_polls_for_group, get_pending_polls_for_user, get_my_active_polls,
     upsert_poll_response, get_poll_responses, get_poll_response,
@@ -387,7 +388,8 @@ async def get_rotation_endpoint(group_id: int):
         group_id=group_id,
         user_id=state["current_user_id"],
         turn_index=state["current_turn_index"],
-        rotation_type=group["rotation_type"]
+        rotation_type=group["rotation_type"],
+        picked_event_id=state.get("picked_event_id"),
     )
 
 
@@ -452,41 +454,83 @@ async def advance_rotation_endpoint(group_id: int, user_id: int = Depends(get_cu
 
 
 @app.post("/groups/{group_id}/rotation/complete-turn", response_model=RotationTurnResponse)
-async def complete_turn_endpoint(group_id: int, user_id: int = Depends(get_current_user_id)):
-    """Called by the current picker after creating an event — advances to the next person."""
+async def complete_turn_endpoint(group_id: int, body: Optional[CompleteTurnRequest] = None, user_id: int = Depends(get_current_user_id)):
+    """Called by the current picker after creating/picking an event.
+
+    If body.event_id is provided the turn is held until that event ends — rotation
+    does NOT advance immediately. If no event_id is given (Already Picked), the
+    turn advances right away.
+    """
     state = get_rotation_state(group_id)
     if not state:
         raise HTTPException(status_code=404, detail="Rotation state not found")
     if str(state.get("current_user_id")) != str(user_id):
         raise HTTPException(status_code=403, detail="Not your turn")
 
+    event_id = body.event_id if body else None
+
+    if event_id:
+        # Store the picked event and hold the turn — advance happens when the event ends
+        set_picked_event(group_id, event_id)
+        state = get_rotation_state(group_id)
+        return RotationTurnResponse(
+            group_id=group_id,
+            user_id=state["current_user_id"],
+            turn_index=state["current_turn_index"],
+            rotation_type=state.get("rotation_type", "round_robin") or "round_robin",
+            picked_event_id=event_id,
+        )
+
+    # No event linked — advance immediately (Already Picked fallback)
     result = advance_rotation(group_id)
     if not result:
         raise HTTPException(status_code=404, detail="Group not found or has no members")
 
-    # Notify the next picker if this is a sequential rotation
-    if result.get("rotation_type") != "none":
-        new_user_id = result.get("user_id")
-        if new_user_id:
-            group = get_group(group_id)
-            group_name = group["name"] if group else f"Group {group_id}"
-            internal_secret = os.getenv("INTERNAL_API_SECRET", "")
-            async with httpx.AsyncClient() as client:
-                try:
-                    await client.post(
-                        f"{GATEWAY_SERVICE_URL}/internal/notify/rotation",
-                        json={
-                            "user_id": new_user_id,
-                            "group_name": group_name,
-                            "group_id": group_id,
-                        },
-                        headers={"x-internal-secret": internal_secret},
-                        timeout=5.0,
-                    )
-                except Exception:
-                    pass  # non-blocking
-
+    await _notify_next_picker(group_id, result)
     return RotationTurnResponse(**result)
+
+
+async def _notify_next_picker(group_id: int, result: dict):
+    """Send rotation notification to the next picker (non-blocking)."""
+    if result.get("rotation_type") == "none":
+        return
+    new_user_id = result.get("user_id")
+    if not new_user_id:
+        return
+    group = get_group(group_id)
+    group_name = group["name"] if group else f"Group {group_id}"
+    internal_secret = os.getenv("INTERNAL_API_SECRET", "")
+    async with httpx.AsyncClient() as client:
+        try:
+            await client.post(
+                f"{GATEWAY_SERVICE_URL}/internal/notify/rotation",
+                json={"user_id": new_user_id, "group_name": group_name, "group_id": group_id},
+                headers={"x-internal-secret": internal_secret},
+                timeout=5.0,
+            )
+        except Exception:
+            pass
+
+
+@app.post("/internal/rotation/finalize-turn", status_code=200)
+async def finalize_turn_endpoint(event_id: int, x_internal_secret: Optional[str] = Header(None)):
+    """Internal: advance rotation for the group that picked the given event_id.
+    Called by events-service when an event is completed or cancelled.
+    """
+    internal_secret = os.getenv("INTERNAL_API_SECRET", "")
+    if not internal_secret or x_internal_secret != internal_secret:
+        raise HTTPException(status_code=403, detail="Internal access only")
+
+    group_id = get_group_id_by_picked_event(event_id)
+    if not group_id:
+        return {"message": "No rotation pending for this event"}
+
+    result = advance_rotation(group_id)
+    if not result:
+        return {"message": "Could not advance rotation"}
+
+    await _notify_next_picker(group_id, result)
+    return {"message": "Rotation advanced", "group_id": group_id}
 
 
 @app.post("/groups/{group_id}/rotation/reset", response_model=RotationTurnResponse)

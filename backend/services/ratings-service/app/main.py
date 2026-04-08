@@ -249,10 +249,13 @@ async def get_event_stats_endpoint(event_id: int):
 
 
 @app.get("/groups/{group_id}/leaderboard", response_model=GroupLeaderboardResponse)
-async def get_group_leaderboard_endpoint(group_id: int):
-    """Get leaderboard for a group."""
+async def get_group_leaderboard_endpoint(group_id: int, event_ids: Optional[str] = None):
+    """Get leaderboard for a group.
+
+    event_ids: optional comma-separated event IDs to compute group avg rating.
+    When provided the ratings service skips the inter-service call to events service.
+    """
     async with httpx.AsyncClient() as client:
-        # Get group members
         try:
             response = await client.get(f"{GROUPS_SERVICE_URL}/groups/{group_id}/members")
             if response.status_code != 200:
@@ -262,18 +265,21 @@ async def get_group_leaderboard_endpoint(group_id: int):
         except httpx.RequestError:
             raise HTTPException(status_code=503, detail="Groups service unavailable")
 
-        # Get group event IDs for event-based avg rating
-        event_ids: List[int] = []
-        try:
-            ev_resp = await client.get(f"{EVENTS_SERVICE_URL}/groups/{group_id}/events")
-            if ev_resp.status_code == 200:
-                event_ids = [e["id"] for e in ev_resp.json() if e.get("id")]
-        except httpx.RequestError:
-            pass  # non-fatal — avg rating falls back to None
+        # Resolve event IDs: prefer caller-supplied list, fall back to events service
+        parsed_event_ids: List[int] = []
+        if event_ids:
+            parsed_event_ids = [int(x) for x in event_ids.split(",") if x.strip().isdigit()]
+        else:
+            try:
+                ev_resp = await client.get(f"{EVENTS_SERVICE_URL}/groups/{group_id}/events")
+                if ev_resp.status_code == 200:
+                    parsed_event_ids = [e["id"] for e in ev_resp.json() if e.get("id")]
+            except httpx.RequestError:
+                pass
 
     leaderboard_data = get_group_leaderboard(group_id, member_ids)
     leaderboard = [LeaderboardEntry(**entry) for entry in leaderboard_data]
-    group_avg_rating = get_group_event_avg_rating(event_ids) if event_ids else None
+    group_avg_rating = get_group_event_avg_rating(parsed_event_ids) if parsed_event_ids else None
 
     return GroupLeaderboardResponse(
         group_id=group_id,

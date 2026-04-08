@@ -34,8 +34,8 @@ export const groupsApi = {
   advanceRotation: (groupId) =>
     groupsClient.post(`/groups/${groupId}/rotation/advance`).then(r => r.data),
 
-  completeTurn: (groupId) =>
-    groupsClient.post(`/groups/${groupId}/rotation/complete-turn`).then(r => r.data),
+  completeTurn: (groupId, eventId = null) =>
+    groupsClient.post(`/groups/${groupId}/rotation/complete-turn`, eventId ? { event_id: eventId } : {}).then(r => r.data),
 
   resetRotation: (groupId) =>
     groupsClient.post(`/groups/${groupId}/rotation/reset`).then(r => r.data),

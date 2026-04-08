@@ -63,9 +63,16 @@ def init_db():
             current_user_id INTEGER,
             current_turn_index INTEGER DEFAULT 0,
             last_rotation_at TIMESTAMP,
+            picked_event_id INTEGER DEFAULT NULL,
             FOREIGN KEY (group_id) REFERENCES groups(id) ON DELETE CASCADE
         )
     """)
+
+    # Migration: add picked_event_id to existing rotation_state rows
+    try:
+        cursor.execute("ALTER TABLE rotation_state ADD COLUMN IF NOT EXISTS picked_event_id INTEGER DEFAULT NULL")
+    except Exception:
+        pass
 
     # Group comments table
     cursor.execute("""
@@ -549,6 +556,33 @@ def get_rotation_state(group_id: int) -> Optional[dict]:
     return dict(row) if row else None
 
 
+def set_picked_event(group_id: int, event_id: int) -> bool:
+    """Store the picked event ID on the rotation state without advancing the turn."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "UPDATE rotation_state SET picked_event_id = %s WHERE group_id = %s",
+        (event_id, group_id)
+    )
+    updated = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return updated
+
+
+def get_group_id_by_picked_event(event_id: int) -> Optional[int]:
+    """Return the group_id whose rotation is waiting on the given picked_event_id."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT group_id FROM rotation_state WHERE picked_event_id = %s",
+        (event_id,)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return row['group_id'] if row else None
+
+
 def advance_rotation(group_id: int) -> Optional[dict]:
     """Advance to the next person in rotation."""
     conn = get_db()
@@ -597,10 +631,11 @@ def advance_rotation(group_id: int) -> Optional[dict]:
         next_index = current_index
         next_user_id = members[next_index] if members else None
 
-    # Update rotation state
+    # Update rotation state, clearing any pending picked_event_id
     cursor.execute(
         """UPDATE rotation_state
-           SET current_user_id = %s, current_turn_index = %s, last_rotation_at = CURRENT_TIMESTAMP
+           SET current_user_id = %s, current_turn_index = %s, last_rotation_at = CURRENT_TIMESTAMP,
+               picked_event_id = NULL
            WHERE group_id = %s""",
         (next_user_id, next_index, group_id)
     )

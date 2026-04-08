@@ -183,6 +183,7 @@ export default function Dashboard() {
           activityType: rotation?.activity_type || primaryGroupObj?.activity_type || '',
           dueDate: rotation?.due_date || null,
           memberCount,
+          pickedEventId: rotation?.picked_event_id || null,
         }
       : null
 

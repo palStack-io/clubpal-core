@@ -310,18 +310,26 @@ async def auto_complete_past_events():
     logger.info("Running auto-complete past events job")
     conn = get_db()
     cursor = conn.cursor()
+    # Capture IDs first so we can notify groups-service
     cursor.execute("""
-        UPDATE events
-        SET status = 'completed', updated_at = NOW()
+        SELECT id FROM events
         WHERE status = 'scheduled'
           AND scheduled_date IS NOT NULL
           AND scheduled_date < NOW() - INTERVAL '10 hours'
     """)
-    count = cursor.rowcount
+    event_ids = [row['id'] for row in cursor.fetchall()]
+    if event_ids:
+        cursor.execute("""
+            UPDATE events
+            SET status = 'completed', updated_at = NOW()
+            WHERE id = ANY(%s)
+        """, (event_ids,))
     conn.commit()
     conn.close()
-    if count:
-        logger.info(f"Auto-completed {count} past events")
+    if event_ids:
+        logger.info(f"Auto-completed {len(event_ids)} past events")
+        for eid in event_ids:
+            await _finalize_rotation_for_event(eid)
 
 
 async def send_rating_prompts():
@@ -755,6 +763,10 @@ async def update_event_endpoint(event_id: int, event_data: EventUpdate, user_id:
         except Exception as e:
             logger.warning(f"Failed to send edit alerts for event {event_id}: {e}")
 
+    # If status was explicitly set to completed or cancelled, finalize rotation
+    if event_data.status in ("completed", "cancelled"):
+        await _finalize_rotation_for_event(event_id)
+
     return EventResponse(**event)
 
 
@@ -769,7 +781,22 @@ async def end_event(event_id: int, user_id: int = Depends(get_current_user_id)):
     if event["status"] not in ("scheduled", "in_progress"):
         raise HTTPException(status_code=400, detail="Event is already completed or cancelled")
     update_event(event_id, status="completed")
+    # Advance rotation if this event was the picked turn
+    await _finalize_rotation_for_event(event_id)
     return EventResponse(**get_event(event_id))
+
+
+async def _finalize_rotation_for_event(event_id: int):
+    """Notify groups-service to advance rotation for a completed/cancelled event (non-blocking)."""
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            await client.post(
+                f"{GROUPS_SERVICE_URL}/internal/rotation/finalize-turn",
+                params={"event_id": event_id},
+                headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
+            )
+    except Exception:
+        pass
 
 
 @app.delete("/events/{event_id}/cover", status_code=204)

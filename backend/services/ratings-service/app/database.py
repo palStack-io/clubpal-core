@@ -445,11 +445,11 @@ def get_group_event_avg_rating(event_ids: List[int]) -> Optional[float]:
         cursor = conn.cursor()
         placeholders = ','.join(['%s'] * len(event_ids))
         cursor.execute(
-            f"SELECT AVG(score) FROM ratings WHERE event_id IN ({placeholders})",
+            f"SELECT AVG(score) AS avg_score FROM ratings WHERE event_id IN ({placeholders})",
             event_ids
         )
         row = cursor.fetchone()
-        avg = row[0] if row else None
+        avg = row['avg_score'] if row else None
         return round(float(avg), 2) if avg is not None else None
     finally:
         conn.close()

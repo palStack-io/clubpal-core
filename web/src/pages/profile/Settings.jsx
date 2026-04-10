@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { useLocation } from 'react-router-dom'
-import AppShell from '../../components/shell/AppShell'
+import { useLocation, useNavigate } from 'react-router-dom'
 import Avatar from '../../components/ui/Avatar'
 import Button from '../../components/ui/Button'
 import { FormSection, FormRow, FormGroup, FormInput } from '../../components/ui/Form'
@@ -1803,6 +1802,7 @@ function AboutSection() {
 export default function Settings() {
   const { user } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const [section, setSection] = useState(location.state?.scrollTo || 'profile')
 
   const renderSection = () => {
@@ -1820,19 +1820,55 @@ export default function Settings() {
   }
 
   return (
-    <AppShell activeRoute="/settings">
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: '200px 1fr',
-          minHeight: 'calc(100vh - 56px)',
-        }}
-      >
+    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }}>
+      {/* Settings top bar */}
+      <div style={{
+        height: '56px',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '14px',
+        padding: '0 20px',
+        borderBottom: '1px solid var(--glass)',
+        background: 'var(--s1)',
+        position: 'sticky',
+        top: 0,
+        zIndex: 10,
+        flexShrink: 0,
+      }}>
+        <button
+          onClick={() => navigate(-1)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '5px 10px',
+            borderRadius: '8px',
+            border: '1px solid var(--glass)',
+            background: 'transparent',
+            color: 'var(--t2)',
+            fontSize: '13px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'background 0.12s, color 0.12s',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = 'var(--s3)'; e.currentTarget.style.color = 'var(--t1)' }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--t2)' }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="15 18 9 12 15 6" />
+          </svg>
+          Back
+        </button>
+        <span style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t1)', letterSpacing: '-0.01em' }}>Settings</span>
+      </div>
+
+      {/* Two-column layout */}
+      <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', flex: 1 }}>
         <SettingsNav active={section} onChange={setSection} isAdmin={!!user?.is_admin} />
         <div style={{ padding: '22px', background: 'var(--bg)' }}>
           {renderSection()}
         </div>
       </div>
-    </AppShell>
+    </div>
   )
 }

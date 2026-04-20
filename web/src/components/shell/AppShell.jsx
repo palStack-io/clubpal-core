@@ -1,5 +1,6 @@
 import Sidebar from './Sidebar'
 import BottomTabBar from './BottomTabBar'
+import ReleaseBanner from '../ui/ReleaseBanner'
 import { useAuth } from '../../contexts/AuthContext'
 import { useMobileNav } from '../../contexts/MobileNavContext'
 
@@ -31,6 +32,8 @@ export default function AppShell({ children, activeRoute, user: userProp, groupC
             support@palstack.io
           </a>
         </div>
+        {/* Release banner — shown once per version until dismissed */}
+        <ReleaseBanner />
         {children}
         {/* Footer */}
         <div className="cp-footer">

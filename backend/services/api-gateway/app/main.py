@@ -226,6 +226,21 @@ async def health_check():
     return {"status": "healthy", "service": "api-gateway"}
 
 
+# ===== Release Notes =====
+
+@app.get("/releases/latest")
+async def get_latest_release():
+    """Return the latest release notes (read from releases.json).
+    To publish a new release: edit releases.json and redeploy.
+    """
+    try:
+        releases_path = os.path.join(os.path.dirname(__file__), "releases.json")
+        with open(releases_path) as f:
+            return json.load(f)
+    except Exception:
+        return None
+
+
 # ===== Authentication Endpoints =====
 
 @app.post("/auth/register", response_model=SessionResponse, status_code=201)

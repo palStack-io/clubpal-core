@@ -1,0 +1,10 @@
+{
+  "version": "1.1.6",
+  "title": "What's New",
+  "date": "2026-04-20",
+  "items": [
+    { "emoji": "💬", "text": "@mentions in comments — tag group members directly" },
+    { "emoji": "📧", "text": "Branded email notifications with mobile deep links" },
+    { "emoji": "🎉", "text": "What's New banner — see release notes on every update" }
+  ]
+}

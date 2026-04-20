@@ -329,6 +329,8 @@ export default function GroupDetail() {
               currentUser={user}
               onAdd={handleAddComment}
               onDelete={handleDeleteComment}
+              members={members}
+              mentionContext={{ linkType: 'group', linkId: Number(id) }}
             />
           </div>
 

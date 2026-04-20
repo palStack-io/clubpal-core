@@ -315,6 +315,8 @@ export default function EventDetail() {
               currentUser={user}
               onAdd={handleAddComment}
               onDelete={handleDeleteComment}
+              members={attendees}
+              mentionContext={{ linkType: 'event', linkId: Number(id) }}
             />
           </div>
 

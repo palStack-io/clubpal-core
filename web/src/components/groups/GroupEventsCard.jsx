@@ -32,6 +32,7 @@ function EventRow({ event, onClick, onSplitBill }) {
 
   return (
     <div
+      onClick={onClick}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
@@ -42,6 +43,7 @@ function EventRow({ event, onClick, onSplitBill }) {
         borderBottom: '1px solid rgba(255,255,255,0.04)',
         background: hovered ? 'var(--glass-hover)' : 'transparent',
         transition: 'background 0.15s',
+        cursor: 'pointer',
       }}
     >
       {/* Activity icon / cover thumbnail */}
@@ -75,10 +77,9 @@ function EventRow({ event, onClick, onSplitBill }) {
         </div>
       )}
 
-      {/* Meta block — clickable to go to event */}
+      {/* Meta block */}
       <div
-        onClick={onClick}
-        style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}
+        style={{ flex: 1, minWidth: 0 }}
       >
         <div
           style={{
@@ -126,13 +127,11 @@ function EventRow({ event, onClick, onSplitBill }) {
 
       {/* Chevron */}
       <div
-        onClick={onClick}
         style={{
           fontSize: '12px',
           color: hovered ? 'var(--rose-soft)' : 'var(--t3)',
           transition: 'color 0.15s',
           flexShrink: 0,
-          cursor: 'pointer',
         }}
       >
         →

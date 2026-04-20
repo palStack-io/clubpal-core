@@ -1377,6 +1377,33 @@ async def notify_rotation(req: RotationNotifyRequest, x_internal_secret: Optiona
     return {"sent": sent}
 
 
+class MentionNotifyRequest(BaseModel):
+    mentioned_user_ids: List[int]
+    link_type: str          # 'event' or 'group'
+    link_id: int
+    comment_preview: Optional[str] = None
+
+
+@app.post("/comments/mention", status_code=202)
+async def notify_mention(req: MentionNotifyRequest, current_user: dict = Depends(get_current_user)):
+    """Notify users mentioned in a comment via in-app + push."""
+    sender_name = current_user.get("full_name") or current_user.get("username") or "Someone"
+    preview = (req.comment_preview or "").strip()
+    title = f"💬 {sender_name} mentioned you"
+    body = preview[:80] if preview else "You were mentioned in a comment"
+    notified = 0
+    for uid in req.mentioned_user_ids:
+        if uid == current_user["id"]:
+            continue  # don't notify yourself
+        create_notification(uid, "mention", title, body, link_type=req.link_type, link_id=req.link_id)
+        prefs = get_notification_prefs(uid)
+        if prefs.get("push_enabled", True):
+            tokens = get_push_tokens_for_users([uid])
+            await _send_push(tokens, title, body, {"link_type": req.link_type, "link_id": req.link_id})
+        notified += 1
+    return {"notified": notified}
+
+
 class PushNotifyRequest(BaseModel):
     user_id: int
     title: str

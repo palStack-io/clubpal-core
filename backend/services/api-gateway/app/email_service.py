@@ -5,7 +5,7 @@ import os
 from typing import Optional
 
 
-def _base(subject: str, content: str, frontend_url: str) -> str:
+def _base(subject: str, content: str, app_url: str) -> str:
     """Wrap content in the branded clubPal / palStack.io email shell."""
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -27,9 +27,9 @@ def _base(subject: str, content: str, frontend_url: str) -> str:
             <td style="background:#0e0e12;border-radius:12px 12px 0 0;padding:22px 32px;">
               <table cellpadding="0" cellspacing="0" role="presentation">
                 <tr>
-                  <td style="width:32px;height:32px;background:linear-gradient(135deg,#fb7185,#f43f5e);
-                              border-radius:8px;text-align:center;vertical-align:middle;">
-                    <span style="font-size:17px;line-height:32px;">🍽️</span>
+                  <td style="width:32px;height:32px;border-radius:8px;vertical-align:middle;">
+                    <img src="{app_url}/clubPal.png" alt="CP" width="32" height="32"
+                         style="border-radius:8px;display:block;" />
                   </td>
                   <td style="padding-left:10px;font-size:19px;font-weight:900;color:#ffffff;
                               letter-spacing:-0.5px;">
@@ -57,7 +57,7 @@ def _base(subject: str, content: str, frontend_url: str) -> str:
                   clubPal is a product of
                   <a href="https://palstack.io" style="color:#f43f5e;text-decoration:none;">palStack.io</a>
                   &nbsp;·&nbsp;
-                  <a href="{frontend_url}/settings" style="color:#aaa;text-decoration:none;">Notification preferences</a>
+                  <a href="{app_url}/settings" style="color:#aaa;text-decoration:none;">Notification preferences</a>
                 </p>
               </div>
             </td>
@@ -110,6 +110,7 @@ class EmailService:
         self.from_name     = os.getenv("FROM_NAME", "clubPal")
         self.from_email    = os.getenv("FROM_EMAIL") or self.smtp_user or "noreply@palstack.io"
         self.frontend_url  = os.getenv("FRONTEND_URL", "http://localhost:3000")
+        self.app_url       = os.getenv("APP_URL") or self.frontend_url
         self.enabled       = bool(self.smtp_user and self.smtp_password)
 
     def _send(self, to_email: str, subject: str, html: str) -> bool:
@@ -142,7 +143,7 @@ class EmailService:
     # ── Auth emails ──────────────────────────────────────────────────────────
 
     def send_verification(self, to_email: str, username: str, token: str) -> bool:
-        url = f"{self.frontend_url}/verify-email/{token}"
+        url = f"{self.app_url}/verify-email/{token}"
         content = (
             _h1("Confirm your email address")
             + _p(f"Hey <strong>{username}</strong>, welcome to clubPal!")
@@ -150,10 +151,10 @@ class EmailService:
             + _btn("Verify Email Address", url, "#f43f5e")
             + _note("Link expires in <strong>24 hours</strong>. If you didn't sign up, you can safely ignore this email.")
         )
-        return self._send(to_email, "Confirm your clubPal email", _base("Confirm your email", content, self.frontend_url))
+        return self._send(to_email, "Confirm your clubPal email", _base("Confirm your email", content, self.app_url))
 
     def send_password_reset(self, to_email: str, username: str, token: str) -> bool:
-        url = f"{self.frontend_url}/reset-password/{token}"
+        url = f"{self.app_url}/reset-password/{token}"
         content = (
             _h1("Reset your password")
             + _p(f"Hi <strong>{username}</strong>,")
@@ -161,13 +162,13 @@ class EmailService:
             + _btn("Reset Password", url, "#f43f5e")
             + _note("This link expires in <strong>1 hour</strong>. If you didn't request a reset, no action is needed — your password is unchanged.")
         )
-        return self._send(to_email, "Reset your clubPal password", _base("Reset your password", content, self.frontend_url))
+        return self._send(to_email, "Reset your clubPal password", _base("Reset your password", content, self.app_url))
 
     # ── Invite emails ─────────────────────────────────────────────────────────
 
     def send_invite(self, to_email: str, group_name: str, invited_by_name: str,
                     invite_token: str, user_exists: bool) -> bool:
-        url = f"{self.frontend_url}/invite/{invite_token}"
+        url = f"{self.app_url}/invite/{invite_token}"
 
         if user_exists:
             subject = f"{invited_by_name} invited you to {group_name}"
@@ -189,14 +190,14 @@ class EmailService:
                 + _note("Invitation expires in <strong>7 days</strong>.")
             )
 
-        return self._send(to_email, subject, _base(subject, content, self.frontend_url))
+        return self._send(to_email, subject, _base(subject, content, self.app_url))
 
     # ── Notification emails ───────────────────────────────────────────────────
 
     def send_rotation_alert(self, to_email: str, username: str,
                             group_name: str, group_id: int) -> bool:
         """Send 'it's your turn to pick an activity' alert."""
-        url = f"{self.frontend_url}/groups/{group_id}"
+        url = f"{self.app_url}/groups/{group_id}"
         subject = f"It's your turn in {group_name}!"
         content = (
             _h1("Your turn to pick! 🎯")
@@ -205,15 +206,15 @@ class EmailService:
                  "It's your turn to pick the next activity.")
             + _btn("Pick an Activity", url, "#f43f5e")
             + _note("You can change your notification preferences in your "
-                    f'<a href="{self.frontend_url}/settings" style="color:#f43f5e;">account settings</a>.')
+                    f'<a href="{self.app_url}/settings" style="color:#f43f5e;">account settings</a>.')
         )
-        return self._send(to_email, subject, _base(subject, content, self.frontend_url))
+        return self._send(to_email, subject, _base(subject, content, self.app_url))
 
     def send_event_created(self, to_email: str, username: str, event_title: str,
                            event_date: str, group_name: str,
                            creator_name: str, event_id: int, has_rsvp: bool = True) -> bool:
         """Notify group member that a new event has been scheduled."""
-        url = f"{self.frontend_url}/events/{event_id}"
+        url = f"{self.app_url}/events/{event_id}"
         if has_rsvp:
             subject = f"RSVP: {event_title} in {group_name}"
             heading = "Are you in? 📅"
@@ -240,14 +241,14 @@ class EmailService:
             + _btn(btn_label, url, "#f43f5e")
             + _note("You're receiving this because you're a member of "
                     f"<strong>{group_name}</strong>. Update preferences in "
-                    f'<a href="{self.frontend_url}/settings" style="color:#f43f5e;">settings</a>.')
+                    f'<a href="{self.app_url}/settings" style="color:#f43f5e;">settings</a>.')
         )
-        return self._send(to_email, subject, _base(subject, content, self.frontend_url))
+        return self._send(to_email, subject, _base(subject, content, self.app_url))
 
     def send_recurring_event_created(self, to_email: str, username: str, event_title: str,
                                      event_date: str, group_name: str, event_id: int) -> bool:
         """Notify group member that a recurring event instance has been auto-scheduled."""
-        url = f"{self.frontend_url}/events/{event_id}"
+        url = f"{self.app_url}/events/{event_id}"
         subject = f"Recurring event scheduled: {event_title}"
         content = (
             _h1(f"🔁 Recurring event: {event_title}")
@@ -264,15 +265,15 @@ class EmailService:
             + _btn("View Event", url, "#f43f5e")
             + _note("You're receiving this because you're a member of "
                     f"<strong>{group_name}</strong>. You can update your notification preferences "
-                    f'in <a href="{self.frontend_url}/settings" style="color:#f43f5e;">account settings</a>.')
+                    f'in <a href="{self.app_url}/settings" style="color:#f43f5e;">account settings</a>.')
         )
-        return self._send(to_email, subject, _base(subject, content, self.frontend_url))
+        return self._send(to_email, subject, _base(subject, content, self.app_url))
 
     def send_rsvp_deadline_reminder(self, to_email: str, username: str, event_title: str,
                                     event_date: str, group_name: str,
                                     deadline_str: str, event_id: int) -> bool:
         """Notify group member that the RSVP deadline is approaching."""
-        url = f"{self.frontend_url}/events/{event_id}"
+        url = f"{self.app_url}/events/{event_id}"
         subject = f"RSVP closes soon for {event_title}"
         content = (
             _h1("RSVP deadline approaching ⏰")
@@ -289,16 +290,16 @@ class EmailService:
             + _btn("RSVP Now", url, "#f43f5e")
             + _note("You're receiving this because you're a member of "
                     f"<strong>{group_name}</strong>. Update preferences in "
-                    f'<a href="{self.frontend_url}/settings" style="color:#f43f5e;">settings</a>.')
+                    f'<a href="{self.app_url}/settings" style="color:#f43f5e;">settings</a>.')
         )
-        return self._send(to_email, subject, _base(subject, content, self.frontend_url))
+        return self._send(to_email, subject, _base(subject, content, self.app_url))
 
     def send_rsvp_deadline_final_count(self, to_email: str, username: str, event_title: str,
                                        event_date: str, group_name: str,
                                        going: int, maybe: int, not_going: int,
                                        event_id: int) -> bool:
         """Notify event creator of final RSVP counts after the deadline has passed."""
-        url = f"{self.frontend_url}/events/{event_id}"
+        url = f"{self.app_url}/events/{event_id}"
         subject = f"Final RSVP count for {event_title}"
         content = (
             _h1("RSVP deadline passed — final counts 📊")
@@ -320,12 +321,12 @@ class EmailService:
             + _note("You're receiving this as the organiser of "
                     f"<strong>{event_title}</strong> in <strong>{group_name}</strong>.")
         )
-        return self._send(to_email, subject, _base(subject, content, self.frontend_url))
+        return self._send(to_email, subject, _base(subject, content, self.app_url))
 
     def send_poll_created(self, to_email: str, username: str, activity_name: str,
                          group_name: str, creator_name: str, group_id: int) -> bool:
         """Notify group member that a new poll is open for their vote."""
-        url = f"{self.frontend_url}/groups/{group_id}"
+        url = f"{self.app_url}/groups/{group_id}"
         subject = f"🗳️ {creator_name} wants your vote in {group_name}"
         content = (
             _h1(f"New vote: {activity_name}")
@@ -343,9 +344,9 @@ class EmailService:
 </div>"""
             + _btn("Vote Now →", url, "#f43f5e")
             + _note(f"You're receiving this because you're a member of <strong>{group_name}</strong>. "
-                    f'Update preferences in <a href="{self.frontend_url}/settings" style="color:#f43f5e;">settings</a>.')
+                    f'Update preferences in <a href="{self.app_url}/settings" style="color:#f43f5e;">settings</a>.')
         )
-        return self._send(to_email, subject, _base(subject, content, self.frontend_url))
+        return self._send(to_email, subject, _base(subject, content, self.app_url))
 
     def send_quota_alert(self, to_email: str, api_name: str,
                          today_calls: int, daily_limit: int,
@@ -369,12 +370,12 @@ class EmailService:
             + _p("To resume API calls, visit the admin panel to approve the block or increase the daily limit.")
             + _btn("Review &amp; Approve in Admin Panel", approve_url, "#f43f5e")
         )
-        return self._send(to_email, subject, _base(subject, content, self.frontend_url))
+        return self._send(to_email, subject, _base(subject, content, self.app_url))
 
     def send_event_cancelled(self, to_email: str, username: str, event_title: str,
                              event_date: str, group_name: str, group_id: int) -> bool:
         """Notify an attendee that an event they RSVPed to has been cancelled."""
-        url = f"{self.frontend_url}/groups/{group_id}"
+        url = f"{self.app_url}/groups/{group_id}"
         subject = f"Cancelled: {event_title}"
         content = (
             _h1(f"❌ {event_title} has been cancelled")
@@ -390,12 +391,12 @@ class EmailService:
             + _p(f"Stay tuned for future events in <strong>{group_name}</strong>.")
             + _btn("View Group", url, "#f43f5e")
         )
-        return self._send(to_email, subject, _base(subject, content, self.frontend_url))
+        return self._send(to_email, subject, _base(subject, content, self.app_url))
 
     def send_group_membership(self, to_email: str, username: str, group_name: str,
                                group_id: int, message: str) -> bool:
         """Generic membership email — added to group, approved, declined."""
-        url = f"{self.frontend_url}/groups/{group_id}"
+        url = f"{self.app_url}/groups/{group_id}"
         subject = f"clubPal: {group_name}"
         content = (
             _h1(message)
@@ -403,13 +404,13 @@ class EmailService:
             + _p(f"This update is about your membership in <strong>{group_name}</strong>.")
             + _btn("Open Group", url, "#f43f5e")
         )
-        return self._send(to_email, subject, _base(subject, content, self.frontend_url))
+        return self._send(to_email, subject, _base(subject, content, self.app_url))
 
     def send_event_reminder(self, to_email: str, username: str, event_title: str,
                             event_date: str, group_name: str,
                             hours_until: int, event_id: int) -> bool:
         """Send a reminder before an event."""
-        url = f"{self.frontend_url}/events/{event_id}"
+        url = f"{self.app_url}/events/{event_id}"
         when = f"{hours_until} hour{'s' if hours_until != 1 else ''}"
         subject = f"Reminder: {event_title} starts in {when}"
         content = (
@@ -425,13 +426,13 @@ class EmailService:
 </div>"""
             + _btn("View Event", url, "#f43f5e")
         )
-        return self._send(to_email, subject, _base(subject, content, self.frontend_url))
+        return self._send(to_email, subject, _base(subject, content, self.app_url))
 
     def send_bill_split_assigned(self, to_email: str, username: str, event_title: str,
                                   event_id: int, payer_name: str,
                                   amount: Optional[float] = None) -> bool:
         """Notify a participant that a bill has been split and they have a share."""
-        url = f"{self.frontend_url}/events/{event_id}"
+        url = f"{self.app_url}/events/{event_id}"
         subject = f"{payer_name} split the bill for {event_title}"
         amount_line = (f"Your share is <strong>${amount:.2f}</strong>."
                        if amount else "Check the app for your share amount.")
@@ -443,7 +444,7 @@ class EmailService:
             + _btn("View Bill Split", url, "#f43f5e")
             + _note("You'll receive a separate email with your itemized breakdown and payment link.")
         )
-        return self._send(to_email, subject, _base(subject, content, self.frontend_url))
+        return self._send(to_email, subject, _base(subject, content, self.app_url))
 
 
 # Singleton

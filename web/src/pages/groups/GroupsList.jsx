@@ -7,6 +7,8 @@ import ActivityPill from '../../components/ui/ActivityPill'
 import GroupCard from '../../components/groups/GroupCard'
 import CreateGroupModal from '../../components/modals/CreateGroupModal'
 import { groupsApi } from '../../api/groups'
+import { eventsApi } from '../../api/events'
+import { ratingsApi } from '../../api/ratings'
 import { useAuth } from '../../contexts/AuthContext'
 
 const PILLS = [
@@ -47,9 +49,34 @@ export default function GroupsList() {
     if (!user?.id) return
     setLoading(true)
     groupsApi.getUserGroups(user.id)
-      .then(data => setGroups(Array.isArray(data) ? data : data?.groups || []))
-      .catch(() => setGroups([]))
-      .finally(() => setLoading(false))
+      .then(data => {
+        const gs = Array.isArray(data) ? data : data?.groups || []
+        setGroups(gs)
+        setLoading(false)
+        if (gs.length > 0) {
+          Promise.all(
+            gs.map(async (g) => {
+              try {
+                const [events, lb] = await Promise.all([
+                  eventsApi.getGroupEvents(g.id),
+                  ratingsApi.getLeaderboard(g.id),
+                ])
+                return {
+                  id: g.id,
+                  event_count: Array.isArray(events) ? events.length : 0,
+                  avg_rating: lb?.group_avg_rating ?? null,
+                }
+              } catch {
+                return { id: g.id, event_count: 0, avg_rating: null }
+              }
+            })
+          ).then(stats => {
+            const statsMap = Object.fromEntries(stats.map(s => [s.id, s]))
+            setGroups(prev => prev.map(g => ({ ...g, ...statsMap[g.id] })))
+          })
+        }
+      })
+      .catch(() => { setGroups([]); setLoading(false) })
   }, [user?.id])
 
   const filtered = filter === 'all'

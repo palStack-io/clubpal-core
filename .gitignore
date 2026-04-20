@@ -59,6 +59,10 @@ htmlcov/
 
 # ── Local tool workspace ─────────────────────────────────────────────────────
 .claude/
+CLAUDE.md
+
+# ── Test assets ──────────────────────────────────────────────────────────────
+receipt.jpg
 
 # ── Internal docs / audit files ──────────────────────────────────────────────
 docs/

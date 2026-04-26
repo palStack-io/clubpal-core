@@ -1050,7 +1050,7 @@ async def get_user_public_profile(user_id: int, current_user: dict = Depends(get
     """Get a user's public profile (id, username, full_name, avatar_url)."""
     user = get_user_by_id(user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        return {"id": user_id, "username": "Deleted User", "full_name": "Deleted User", "avatar_url": None}
     return {
         "id": user["id"],
         "username": user["username"],

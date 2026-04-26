@@ -337,7 +337,7 @@ function SearchRow({ query, locationLabel, locationOverride, onChange, onSubmit,
           {/* Suggestions */}
           {locSuggestions.map((s, i) => (
             <button
-              key={i}
+              key={s.label || i}
               onMouseDown={(e) => { e.preventDefault(); pickSuggestion(s) }}
               style={{
                 width: '100%', display: 'flex', alignItems: 'flex-start', gap: '10px',

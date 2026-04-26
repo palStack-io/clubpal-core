@@ -6,6 +6,7 @@ import AppShell from '../../components/shell/AppShell'
 import Topbar from '../../components/shell/Topbar'
 import ActivityPill from '../../components/ui/ActivityPill'
 import Button from '../../components/ui/Button'
+import { useToast } from '../../components/ui/Toast'
 
 const CATEGORIES = ['All', 'Food & Drink', 'Entertainment', 'Outdoors', 'Games', 'Social']
 
@@ -19,6 +20,7 @@ const CATEGORY_ICONS = {
 
 export default function ActivityPicker() {
   const navigate = useNavigate()
+  const toast = useToast()
   const [activities, setActivities] = useState([])
   const [popular, setPopular] = useState([])
   const [loading, setLoading] = useState(true)
@@ -31,7 +33,7 @@ export default function ActivityPicker() {
         setActivities(all || [])
         setPopular((pop || []).map(a => a.id))
       })
-      .catch(console.error)
+      .catch(() => toast.error('Failed to load activities.'))
       .finally(() => setLoading(false))
   }, [])
 

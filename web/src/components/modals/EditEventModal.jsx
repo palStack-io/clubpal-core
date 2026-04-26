@@ -3,21 +3,8 @@ import Modal from '../ui/Modal'
 import Button from '../ui/Button'
 import { eventsApi } from '../../api/events'
 import BackgroundPicker from '../ui/BackgroundPicker'
-
-const ACTIVITY = {
-  dining: { emoji: '🍽️', color: '#f43f5e', rgb: '244,63,94' },
-  movies: { emoji: '🎬', color: '#6366f1', rgb: '99,102,241' },
-  books:  { emoji: '📚', color: '#a855f7', rgb: '168,85,247' },
-  hiking: { emoji: '🥾', color: '#14b8a6', rgb: '20,184,166' },
-  gaming: { emoji: '🎮', color: '#22d3a0', rgb: '34,211,160' },
-  arts:   { emoji: '🎨', color: '#f59e0b', rgb: '245,158,11' },
-}
-
-const toggleStyle = (active) => ({
-  width: '40px', height: '22px', borderRadius: '11px',
-  background: active ? 'var(--rose)' : 'var(--glass)',
-  position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0,
-})
+import ToggleRow from '../ui/ToggleRow'
+import { resolveActivity } from '../../constants/activities'
 
 const inputStyle = {
   background: 'var(--s2)',
@@ -123,7 +110,7 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
   if (!event) return null
 
   const actKey = event.activity_type?.toLowerCase() || 'dining'
-  const act = ACTIVITY[actKey] || ACTIVITY.dining
+  const act = resolveActivity(actKey)
 
   const handleSubmit = async () => {
     setError('')
@@ -381,27 +368,18 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
         />
       </div>
 
-      {/* Bill Split toggle */}
-      <div style={{ ...sectionStyle, display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }} onClick={() => setBillSplitEnabled(v => !v)}>
-        <div style={toggleStyle(billSplitEnabled)}>
-          <div style={{ position: 'absolute', top: '2px', left: billSplitEnabled ? '20px' : '2px', width: '18px', height: '18px', borderRadius: '9px', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
-        </div>
-        <div>
-          <div style={{ fontSize: '13px', fontWeight: 600, color: billSplitEnabled ? 'var(--rose-soft)' : 'var(--t2)' }}>💳 Enable Bill Split</div>
-          <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>Allow members to split and track expenses for this event</div>
-        </div>
-      </div>
-
-      {/* Ratings toggle */}
-      <div style={{ ...sectionStyle, display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }} onClick={() => setRatingsEnabled(v => !v)}>
-        <div style={toggleStyle(ratingsEnabled)}>
-          <div style={{ position: 'absolute', top: '2px', left: ratingsEnabled ? '20px' : '2px', width: '18px', height: '18px', borderRadius: '9px', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
-        </div>
-        <div>
-          <div style={{ fontSize: '13px', fontWeight: 600, color: ratingsEnabled ? 'var(--rose-soft)' : 'var(--t2)' }}>⭐ Enable Ratings</div>
-          <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>Allow members to rate and review this event after it ends</div>
-        </div>
-      </div>
+      <ToggleRow
+        value={billSplitEnabled}
+        onChange={() => setBillSplitEnabled(v => !v)}
+        label="💳 Enable Bill Split"
+        description="Allow members to split and track expenses for this event"
+      />
+      <ToggleRow
+        value={ratingsEnabled}
+        onChange={() => setRatingsEnabled(v => !v)}
+        label="⭐ Enable Ratings"
+        description="Allow members to rate and review this event after it ends"
+      />
 
       {/* Section 5: Danger Zone */}
       <div

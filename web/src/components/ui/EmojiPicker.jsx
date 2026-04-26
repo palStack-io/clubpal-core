@@ -77,9 +77,9 @@ export default function EmojiPicker({ onSelect, onClose }) {
         maxHeight: '200px',
         overflowY: 'auto',
       }}>
-        {CATEGORIES[activeCategory].map((emoji, i) => (
+        {CATEGORIES[activeCategory].map((emoji) => (
           <button
-            key={i}
+            key={emoji}
             onClick={() => { onSelect?.(emoji); onClose?.() }}
             style={{
               background: 'none',

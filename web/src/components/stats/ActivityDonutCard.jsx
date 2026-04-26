@@ -1,22 +1,5 @@
 import Card from '../ui/Card'
-
-const ACTIVITY_COLORS = {
-  dining: '#f43f5e',
-  movies: '#6366f1',
-  books: '#a855f7',
-  gaming: '#22d3a0',
-  arts: '#f59e0b',
-  hiking: '#14b8a6',
-}
-
-const ACTIVITY_EMOJIS = {
-  dining: '🍽️',
-  movies: '🎬',
-  books: '📚',
-  gaming: '🎮',
-  arts: '🎨',
-  hiking: '🥾',
-}
+import { resolveActivity } from '../../constants/activities'
 
 export default function ActivityDonutCard({ breakdown = [] }) {
   // breakdown: [{ type, count }]
@@ -25,7 +8,7 @@ export default function ActivityDonutCard({ breakdown = [] }) {
   // Build conic gradient stops
   let currentPct = 0
   const stops = breakdown.map(b => {
-    const color = ACTIVITY_COLORS[b.type] || '#9898b0'
+    const color = resolveActivity(b.type).color
     const pct = (b.count / total) * 100
     const stop = `${color} ${currentPct.toFixed(1)}% ${(currentPct + pct).toFixed(1)}%`
     currentPct += pct
@@ -49,7 +32,7 @@ export default function ActivityDonutCard({ breakdown = [] }) {
                 height: '110px',
                 borderRadius: '50%',
                 background: gradient,
-                boxShadow: '0 0 20px rgba(244,63,94,0.2)',
+                boxShadow: '0 0 20px var(--rose-glow)',
               }}
             />
             <div
@@ -79,13 +62,13 @@ export default function ActivityDonutCard({ breakdown = [] }) {
           {/* Legend */}
           <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '7px' }}>
             {breakdown.map(b => {
-              const color = ACTIVITY_COLORS[b.type] || '#9898b0'
+              const color = resolveActivity(b.type).color
               const pct = Math.round((b.count / total) * 100)
               return (
                 <div key={b.type} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: color, flexShrink: 0 }} />
                   <span style={{ flex: 1, fontSize: '12px', fontWeight: 500, color: 'var(--t2)' }}>
-                    {ACTIVITY_EMOJIS[b.type] || ''} {b.type.charAt(0).toUpperCase() + b.type.slice(1)}
+                    {resolveActivity(b.type).emoji} {resolveActivity(b.type).label}
                   </span>
                   <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--t1)' }}>{pct}%</span>
                 </div>

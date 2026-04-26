@@ -9,6 +9,7 @@ import ActivityPill from '../../components/ui/ActivityPill'
 import EventListRow from '../../components/events/EventListRow'
 import { eventsApi } from '../../api/events'
 import { useAuth } from '../../contexts/AuthContext'
+import { resolveActivity } from '../../constants/activities'
 
 const ACTIVITY_PILLS = [
   { id: 'all',    label: 'All' },
@@ -45,14 +46,6 @@ function Skeleton() {
   )
 }
 
-const ACTIVITY_COLORS = {
-  dining:  '#f43f5e',
-  movies:  '#6366f1',
-  books:   '#22d3a0',
-  gaming:  '#a855f7',
-  hiking:  '#14b8a6',
-  arts:    '#f59e0b',
-}
 const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
 function CalendarView({ events, onEventClick }) {
@@ -153,7 +146,7 @@ function CalendarView({ events, onEventClick }) {
               {/* Event dots / labels */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flex: 1 }}>
                 {dots.map(ev => {
-                  const color = ACTIVITY_COLORS[ev.activity_type?.toLowerCase()] || 'var(--rose)'
+                  const color = resolveActivity(ev.activity_type).color
                   return (
                     <div
                       key={ev.id}
@@ -161,7 +154,7 @@ function CalendarView({ events, onEventClick }) {
                       title={ev.title || ev.venue_name}
                       style={{
                         fontSize: '9px', fontWeight: 700,
-                        color: '#fff',
+                        color: '#fff', /* intentional: text on activity-colored bg */
                         background: color,
                         borderRadius: '4px',
                         padding: '1px 4px',
@@ -307,7 +300,7 @@ export default function EventsList() {
             onChange={e => setSearch(e.target.value)}
             style={{
               flex: 1,
-              background: 'rgba(255,255,255,0.06)',
+              background: 'var(--glass)',
               border: '1px solid var(--glass)',
               borderRadius: '10px',
               padding: '6px 12px',

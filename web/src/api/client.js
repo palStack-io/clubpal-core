@@ -11,13 +11,11 @@ function createClient(baseURL, { injectUserId = false } = {}) {
   const client = axios.create({
     baseURL,
     headers: { 'Content-Type': 'application/json' },
+    withCredentials: true,
     timeout: 30000,
   })
 
   client.interceptors.request.use((config) => {
-    const token = localStorage.getItem('session_token')
-    if (token) config.headers['Authorization'] = `Bearer ${token}`
-
     // Groups-service and events-service require user_id as a query param
     if (injectUserId) {
       try {
@@ -33,9 +31,10 @@ function createClient(baseURL, { injectUserId = false } = {}) {
     (response) => response,
     (error) => {
       if (error.response?.status === 401) {
-        localStorage.removeItem('session_token')
         localStorage.removeItem('user')
-        window.location.href = '/login'
+        const pub = ['/login', '/register', '/forgot-password', '/reset-password', '/invite']
+        const onPublic = pub.some(p => window.location.pathname.startsWith(p))
+        if (!onPublic) window.location.href = '/login'
       }
       return Promise.reject(error)
     }

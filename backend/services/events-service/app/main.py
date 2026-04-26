@@ -44,13 +44,80 @@ def _cover_object_key(cover_url: str) -> Optional[str]:
     return None
 
 
+import ipaddress
+from urllib.parse import urlparse as _urlparse
+
+_MIRROR_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+_COVER_MAX_BYTES = 10 * 1024 * 1024   # 10 MB
+_ALLOWED_IMAGE_CT = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+_ALLOWED_IMAGE_MAGIC = {
+    b"\xff\xd8\xff": "jpg",
+    b"\x89PNG\r\n": "png",
+    b"GIF87a": "gif",
+    b"GIF89a": "gif",
+    b"RIFF": "webp",
+}
+
+def _detect_cover_type(data: bytes) -> str:
+    for magic, ext in _ALLOWED_IMAGE_MAGIC.items():
+        if data[:len(magic)] == magic:
+            return ext
+    raise HTTPException(status_code=415, detail="Unsupported image type — JPEG, PNG, GIF or WebP only")
+
+
+def _strip_exif(data: bytes, ext: str) -> bytes:
+    """Re-encode image through Pillow to strip EXIF/metadata."""
+    try:
+        from PIL import Image
+        import io as _io
+        img = Image.open(_io.BytesIO(data))
+        out = _io.BytesIO()
+        fmt = {"jpg": "JPEG", "jpeg": "JPEG", "png": "PNG", "gif": "GIF", "webp": "WEBP"}.get(ext, "JPEG")
+        if fmt == "JPEG" and img.mode in ("RGBA", "P", "LA"):
+            img = img.convert("RGB")
+        img.save(out, format=fmt)
+        return out.getvalue()
+    except Exception:
+        return data  # if strip fails, upload original
+
+
+def _validate_mirror_url(url: str) -> None:
+    """Raise ValueError if the URL targets a private/internal address (SSRF guard)."""
+    try:
+        parsed = _urlparse(url)
+    except Exception:
+        raise ValueError("Malformed URL")
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("Only http/https allowed")
+    host = parsed.hostname or ""
+    if not host:
+        raise ValueError("No host")
+    # Reject bare internal hostnames (docker service names, localhost)
+    _blocked_hosts = {"localhost", "127.0.0.1", "0.0.0.0", "::1"}
+    if host.lower() in _blocked_hosts:
+        raise ValueError("Private host")
+    try:
+        addr = ipaddress.ip_address(host)
+        if addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved:
+            raise ValueError("Private IP address")
+    except ValueError as exc:
+        # Re-raise if it was our own raise, ignore if it's from ip_address() parsing a hostname
+        if "Private" in str(exc) or "host" in str(exc).lower():
+            raise
+
+
 async def _mirror_external_cover(event_id: int, url: str) -> str:
     """Fetch an external image URL and upload it to MinIO. Returns the MinIO public URL."""
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
-            r = await client.get(url, follow_redirects=True)
+        _validate_mirror_url(url)
+        async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
+            r = await client.get(url)
             r.raise_for_status()
+        if len(r.content) > _MIRROR_MAX_BYTES:
+            raise ValueError("Response too large")
         content_type = r.headers.get("content-type", "image/jpeg").split(";")[0].strip()
+        if content_type not in _ALLOWED_IMAGE_CT:
+            raise ValueError(f"Unexpected content-type: {content_type}")
         ext = {"image/png": "png", "image/gif": "gif", "image/webp": "webp"}.get(content_type, "jpg")
         object_name = f"events/{event_id}/cover-{uuid.uuid4().hex[:8]}.{ext}"
         return storage.upload_bytes(storage.BUCKET_EVENTS, object_name, r.content, content_type)
@@ -62,9 +129,10 @@ app = FastAPI(title="ClubPal Events Service", version="1.0.0")
 scheduler = AsyncIOScheduler()
 
 # CORS
+_CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,http://localhost").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -92,6 +160,18 @@ def get_current_user_id(authorization: Optional[str] = Header(None)) -> int:
     except Exception:
         pass
     raise HTTPException(status_code=401, detail="Invalid or expired session")
+
+
+async def _is_group_member(group_id: int, user_id: int) -> bool:
+    """Return True if user_id is a member of group_id (calls groups-service)."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{GROUPS_SERVICE_URL}/groups/{group_id}/members")
+            if r.status_code == 200:
+                return any(m["user_id"] == user_id for m in r.json())
+    except Exception:
+        pass
+    return False
 
 
 def _next_occurrence(rule: str, day_of_week: Optional[int], from_date: date) -> date:
@@ -137,7 +217,8 @@ async def _notify_group_members(group_id: int, event_id: int, event_title: str,
         async with httpx.AsyncClient(timeout=10) as client:
             await client.post(
                 f"{GATEWAY_URL}/internal/notify/event",
-                json=payload
+                json=payload,
+                headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
             )
     except Exception as e:
         logger.warning(f"Failed to notify members for event {event_id}: {e}")
@@ -223,7 +304,10 @@ async def send_rsvp_deadline_final_counts():
                 "not_going_count": not_going,
             }
             async with httpx.AsyncClient(timeout=10) as client:
-                await client.post(f"{GATEWAY_URL}/internal/notify/event", json=payload)
+                await client.post(
+                    f"{GATEWAY_URL}/internal/notify/event", json=payload,
+                    headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
+                )
 
             # Mark as sent so we don't re-send
             cur2.execute(
@@ -378,6 +462,7 @@ async def send_rating_prompts():
                             "group_id": event["group_id"],
                             "type": "rating_prompt",
                         },
+                        headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
                     )
 
             # Mark as sent regardless to avoid re-processing
@@ -504,6 +589,9 @@ async def get_activity_name(activity_id: int) -> Optional[str]:
 @app.post("/events", response_model=EventResponse, status_code=201)
 async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(get_current_user_id)):
     """Create a new event. If is_recurring=True, also registers a recurring schedule."""
+    if not await _is_group_member(event_data.group_id, user_id):
+        raise HTTPException(status_code=403, detail="Not a member of this group")
+
     # creator may be passed explicitly from the web UI payload
     creator_id = event_data.created_by or user_id
 
@@ -653,12 +741,15 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(
 
 
 @app.get("/events/{event_id}", response_model=EventDetailResponse)
-async def get_event_endpoint(event_id: int):
-    """Get event details with attendees."""
+async def get_event_endpoint(event_id: int, user_id: int = Depends(get_current_user_id)):
+    """Get event details. Caller must be a member of the event's group."""
     event = get_event(event_id)
 
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
+
+    if not await _is_group_member(event["group_id"], user_id):
+        raise HTTPException(status_code=403, detail="You are not a member of this group")
 
     # Get attendees
     attendees = get_attendees(event_id)
@@ -679,22 +770,28 @@ async def get_event_endpoint(event_id: int):
 
 
 @app.get("/groups/{group_id}/events", response_model=List[EventResponse])
-async def get_group_events(group_id: int, status: Optional[str] = None):
-    """Get all events for a group."""
+async def get_group_events(group_id: int, status: Optional[str] = None, user_id: int = Depends(get_current_user_id)):
+    """Get all events for a group. Caller must be a group member."""
+    if not await _is_group_member(group_id, user_id):
+        raise HTTPException(status_code=403, detail="You are not a member of this group")
     events = get_events_by_group(group_id, status)
     return [EventResponse(**event) for event in events]
 
 
 @app.get("/users/{user_id}/events", response_model=List[EventResponse])
-async def get_user_events(user_id: int, status: Optional[str] = None):
-    """Get all events a user is attending."""
+async def get_user_events(user_id: int, status: Optional[str] = None, current_user_id: int = Depends(get_current_user_id)):
+    """Get all events a user is attending. Caller may only fetch their own events."""
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot access another user's events")
     events = get_events_by_user(user_id, status)
     return [EventResponse(**event) for event in events]
 
 
 @app.get("/users/{user_id}/hosting", response_model=List[EventResponse])
-async def get_user_hosting_events(user_id: int, status: Optional[str] = None):
-    """Get all events hosted by a user."""
+async def get_user_hosting_events(user_id: int, status: Optional[str] = None, current_user_id: int = Depends(get_current_user_id)):
+    """Get all events hosted by a user. Caller may only fetch their own hosted events."""
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot access another user's events")
     events = get_events_by_host(user_id, status)
     return [EventResponse(**event) for event in events]
 
@@ -728,6 +825,7 @@ async def update_event_endpoint(event_id: int, event_data: EventUpdate, user_id:
         bg_value=event_data.bg_value,
         bg_scope=event_data.bg_scope,
         ratings_enabled=event_data.ratings_enabled,
+        bill_split_enabled=event_data.bill_split_enabled,
     )
 
     if not success:
@@ -759,6 +857,7 @@ async def update_event_endpoint(event_id: int, event_data: EventUpdate, user_id:
                             "group_id": event["group_id"],
                             "type": "event_edit",
                         },
+                        headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
                     )
         except Exception as e:
             logger.warning(f"Failed to send edit alerts for event {event_id}: {e}")
@@ -846,6 +945,7 @@ async def delete_event_endpoint(event_id: int, user_id: int = Depends(get_curren
                         "group_id": event["group_id"],
                         "type": "event_cancelled",
                     },
+                    headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
                 )
     except Exception as e:
         logger.warning(f"Failed to send cancellation notifications for event {event_id}: {e}")
@@ -911,6 +1011,7 @@ async def send_rsvp_reminder(event_id: int, user_id: int = Depends(get_current_u
                     "creator_id": user_id,
                     "type": "rsvp_nudge",
                 },
+                headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
             )
     except Exception as e:
         logger.warning(f"Failed to send RSVP nudge for event {event_id}: {e}")
@@ -977,6 +1078,7 @@ async def rsvp_event(event_id: int, rsvp_data: AttendeeRSVP, user_id: int = Depe
                                 "creator_id": user_id,
                                 "type": "social_rsvp",
                             },
+                            headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
                         )
 
             # Event-full notification to host when max_attendees just reached
@@ -993,6 +1095,7 @@ async def rsvp_event(event_id: int, rsvp_data: AttendeeRSVP, user_id: int = Depe
                                 "link_type": "event",
                                 "link_id": event_id,
                             },
+                            headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
                         )
         except Exception as e:
             logger.warning(f"Failed to send post-RSVP notifications for event {event_id}: {e}")
@@ -1129,10 +1232,14 @@ async def upload_event_cover(event_id: int, file: UploadFile = File(...), user_i
     event = get_event(event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
-    ext = (file.filename or "cover.jpg").rsplit(".", 1)[-1].lower()
+    content = await file.read(_COVER_MAX_BYTES + 1)
+    if len(content) > _COVER_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+    ext = _detect_cover_type(content)
+    content = _strip_exif(content, ext)
     object_name = f"events/{event_id}/cover-{uuid.uuid4().hex[:8]}.{ext}"
-    content = await file.read()
-    public_url = storage.upload_bytes(storage.BUCKET_EVENTS, object_name, content, file.content_type or "image/jpeg")
+    ct_map = {"jpg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp"}
+    public_url = storage.upload_bytes(storage.BUCKET_EVENTS, object_name, content, ct_map[ext])
     update_event(event_id, cover_url=public_url)
     return {"cover_url": public_url}
 
@@ -1147,6 +1254,8 @@ async def get_event_cover_upload_url(event_id: int, request: EventImageUploadReq
 
     if event["host_user_id"] != user_id and event["created_by"] != user_id:
         raise HTTPException(status_code=403, detail="Only the host can update the cover image")
+    if request.content_type not in _ALLOWED_IMAGE_CT:
+        raise HTTPException(status_code=415, detail="Unsupported content type — JPEG, PNG, GIF or WebP only")
 
     ext = request.filename.rsplit(".", 1)[-1].lower() if "." in request.filename else "jpg"
     object_name = f"events/{event_id}/cover-{uuid.uuid4().hex[:8]}.{ext}"
@@ -1164,6 +1273,8 @@ async def get_photo_upload_url(event_id: int, request: EventImageUploadRequest, 
     """Get a pre-signed URL to upload a member photo for an event."""
     if not get_event(event_id):
         raise HTTPException(status_code=404, detail="Event not found")
+    if request.content_type not in _ALLOWED_IMAGE_CT:
+        raise HTTPException(status_code=415, detail="Unsupported content type — JPEG, PNG, GIF or WebP only")
 
     ext = request.filename.rsplit(".", 1)[-1].lower() if "." in request.filename else "jpg"
     object_name = f"events/{event_id}/photos/{user_id}/{uuid.uuid4().hex}.{ext}"

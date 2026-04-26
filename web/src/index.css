@@ -85,21 +85,6 @@
   --item-hover-bg:   #f8fafc;
   --item-border:     #f1f5f9;
 
-  /* Legacy surface tokens kept for older pages */
-  --surface-bg:      #f9fafb;
-  --surface-sidebar: #ffffff;
-  --surface-card:    #ffffff;
-  --surface-input:   #ffffff;
-  --surface-hover:   #f3f4f6;
-  --surface-active:  #fef2f2;
-  --border-default:  #e5e7eb;
-  --border-input:    #d1d5db;
-  --border-strong:   #9ca3af;
-  --text-1:          #111827;
-  --text-2:          #4b5563;
-  --text-3:          #6b7280;
-  --text-4:          #9ca3af;
-  --text-active:     #be123c;
 }
 
 .dark {
@@ -157,21 +142,6 @@
   --shadow-lg:  0 10px 15px rgba(0,0,0,0.4);
   --shadow-xl:  0 20px 25px rgba(0,0,0,0.45);
 
-  /* Legacy surface tokens (dark) */
-  --surface-bg:      #08080a;
-  --surface-sidebar: #0e0e12;
-  --surface-card:    #131318;
-  --surface-input:   #1a1a22;
-  --surface-hover:   #22222c;
-  --surface-active:  rgba(244,63,94,0.12);
-  --border-default:  rgba(255,255,255,0.08);
-  --border-input:    rgba(255,255,255,0.12);
-  --border-strong:   rgba(255,255,255,0.18);
-  --text-1:          #ffffff;
-  --text-2:          #c4c4d4;
-  --text-3:          #9898b0;
-  --text-4:          #55556a;
-  --text-active:     #fb7185;
 }
 
 @layer base {

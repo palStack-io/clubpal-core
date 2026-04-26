@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
 import { MobileNavProvider } from './contexts/MobileNavContext'
+import { ToastProvider } from './components/ui/Toast'
 import OnboardingWizard from './components/onboarding/OnboardingWizard'
 
 // Eager-loaded (small, always needed)
@@ -156,11 +157,13 @@ export default function App() {
   return (
     <BrowserRouter>
       <ThemeProvider>
-        <MobileNavProvider>
-          <AuthProvider>
-            <AppRoutes />
-          </AuthProvider>
-        </MobileNavProvider>
+        <ToastProvider>
+          <MobileNavProvider>
+            <AuthProvider>
+              <AppRoutes />
+            </AuthProvider>
+          </MobileNavProvider>
+        </ToastProvider>
       </ThemeProvider>
     </BrowserRouter>
   )

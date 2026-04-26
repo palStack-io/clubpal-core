@@ -1,7 +1,7 @@
-from fastapi import FastAPI, HTTPException, Header, Depends, UploadFile, File
+from fastapi import FastAPI, HTTPException, Header, Depends, UploadFile, File, Request, Response, Cookie
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import ENCODERS_BY_TYPE
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, validator
 from datetime import datetime
 ENCODERS_BY_TYPE[datetime] = lambda dt: dt.strftime('%Y-%m-%dT%H:%M:%SZ') if dt else None
 from typing import Optional, List
@@ -12,6 +12,10 @@ import httpx
 from datetime import datetime, timedelta
 import jwt as pyjwt
 from cachetools import TTLCache
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+import asyncio
 
 from app.models import (
     UserCreate, UserLogin, UserResponse, SessionResponse,
@@ -32,7 +36,7 @@ from app.database import (
     update_user_profile, get_sessions_for_user, delete_session_by_token_for_user,
     delete_sessions_except,
     get_all_users, admin_update_user, deactivate_user, get_admin_emails,
-    get_all_integrations, set_integration, delete_integration,
+    get_all_integrations, set_integration, delete_integration, log_admin_action,
     get_notification_prefs, set_notification_prefs,
     upsert_push_token, get_push_tokens_for_users,
     create_notification, get_notifications_for_user,
@@ -42,16 +46,50 @@ from app.database import (
     create_pending_link, consume_pending_link,
     get_saved_items, get_saved_item, save_item, delete_saved_item,
     search_users_by_username,
+    log_invite_send, count_recent_domain_invites,
 )
 from app.email_service import email_service
 from app import storage
 
+limiter = Limiter(key_func=get_remote_address)
+_IS_PRODUCTION = os.environ.get("APP_ENV", "development") == "production"
+
+
+def _apply_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        key="session_token",
+        value=token,
+        httponly=True,
+        secure=_IS_PRODUCTION,   # Secure flag in production (HTTPS), off in dev (HTTP)
+        samesite="strict",
+        max_age=2592000,          # 30 days
+        path="/",
+    )
+
+
 app = FastAPI(title="ClubPal API Gateway", version="1.0.0")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+from fastapi import Request as _Request
+from fastapi.responses import JSONResponse as _JSONResponse
+from fastapi.exception_handlers import http_exception_handler as _http_exception_handler
+from starlette.exceptions import HTTPException as _StarletteHTTPException
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(req: _Request, exc: Exception):
+    if isinstance(exc, _StarletteHTTPException):
+        return await _http_exception_handler(req, exc)
+    import logging, traceback
+    logging.getLogger("api-gateway").error("Unhandled exception: %s", traceback.format_exc())
+    msg = "An internal error occurred" if _IS_PRODUCTION else str(exc)
+    return _JSONResponse(status_code=500, content={"detail": msg})
 
 # CORS
+_CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,http://localhost").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -165,6 +203,15 @@ INTEGRATION_KEYS = [
 ]
 
 
+async def _session_cleanup_loop():
+    while True:
+        await asyncio.sleep(3600)  # every hour
+        try:
+            cleanup_expired_sessions()
+        except Exception:
+            pass
+
+
 @app.on_event("startup")
 async def startup():
     """Initialize database on startup."""
@@ -172,7 +219,13 @@ async def startup():
     cleanup_expired_sessions()
     storage.ensure_buckets()
     if not INTERNAL_API_SECRET:
-        print("WARNING: INTERNAL_API_SECRET is not set — /internal/* endpoints are unprotected")
+        import sys
+        print("CRITICAL: INTERNAL_API_SECRET is not set — /internal/* endpoints are UNPROTECTED", file=sys.stderr)
+    asyncio.create_task(_session_cleanup_loop())
+    _MINIO_DEFAULT_PAIRS = {("clubpal", "clubpalpassword"), ("minioadmin", "minioadmin"), ("minio", "minio")}
+    if _IS_PRODUCTION and (os.getenv("MINIO_ACCESS_KEY", ""), os.getenv("MINIO_SECRET_KEY", "")) in _MINIO_DEFAULT_PAIRS:
+        import sys
+        print("CRITICAL: Default MinIO credentials detected in production — change MINIO_ACCESS_KEY and MINIO_SECRET_KEY", file=sys.stderr)
     print("API Gateway started")
 
 
@@ -244,15 +297,12 @@ async def get_latest_release():
 # ===== Authentication Endpoints =====
 
 @app.post("/auth/register", response_model=SessionResponse, status_code=201)
-async def register(user_data: UserCreate):
+@limiter.limit("5/minute")
+async def register(request: Request, user_data: UserCreate, response: Response):
     """Register a new user."""
-    # Check if username exists
-    if get_user_by_username(user_data.username):
-        raise HTTPException(status_code=400, detail="Username already exists")
-
-    # Check if email exists
-    if get_user_by_email(user_data.email):
-        raise HTTPException(status_code=400, detail="Email already registered")
+    # Check if username or email already taken (unified message prevents enumeration)
+    if get_user_by_username(user_data.username) or get_user_by_email(user_data.email):
+        raise HTTPException(status_code=400, detail="An account with that username or email already exists")
 
     # First user to register becomes admin automatically
     is_first_user = get_user_count() == 0
@@ -279,6 +329,7 @@ async def register(user_data: UserCreate):
 
     # Create session
     session_token, expires_at = create_session(user_id)
+    _apply_session_cookie(response, session_token)
     update_last_login(user_id)
 
     return SessionResponse(
@@ -289,7 +340,8 @@ async def register(user_data: UserCreate):
 
 
 @app.post("/auth/login", response_model=SessionResponse)
-async def login(credentials: UserLogin):
+@limiter.limit("10/minute")
+async def login(request: Request, credentials: UserLogin, response: Response):
     """Login user."""
     # Get user
     user = get_user_by_username(credentials.username)
@@ -315,6 +367,7 @@ async def login(credentials: UserLogin):
 
     # Create session
     session_token, expires_at = create_session(user["id"])
+    _apply_session_cookie(response, session_token)
     update_last_login(user["id"])
 
     return SessionResponse(
@@ -325,7 +378,7 @@ async def login(credentials: UserLogin):
 
 
 @app.post("/auth/oidc", response_model=SessionResponse)
-async def oidc_login(req: OIDCAuthRequest):
+async def oidc_login(req: OIDCAuthRequest, response: Response):
     """Sign in or register using an OIDC provider (Google, etc.).
 
     Send either `id_token` (preferred — a signed JWT from the provider) or
@@ -359,32 +412,25 @@ async def oidc_login(req: OIDCAuthRequest):
     # 1. Find user by OIDC sub (already linked)
     user = get_user_by_oidc_sub(oidc_sub)
 
-    # 2. Email matches an existing account — linking behaviour differs by provider:
-    #    • Google (email verified by Google) → auto-link silently
-    #    • Apple (or any other provider)    → require explicit confirmation via link_token
+    # 2. Email matches an existing account — always require explicit confirmation before linking,
+    #    regardless of provider. This prevents account takeover if a provider account is compromised.
     if not user:
         existing = get_user_by_email(email)
         if existing:
-            if req.provider == "google":
-                # Trusted provider: auto-link
-                link_oidc_sub(existing["id"], oidc_sub)
-                user = get_user_by_id(existing["id"])
-            else:
-                # Prompt the user to confirm before linking
-                link_token = create_pending_link(oidc_sub, email, full_name, avatar_url)
-                raise HTTPException(
-                    status_code=409,
-                    detail={
-                        "code": "LINK_REQUIRED",
-                        "link_token": link_token,
-                        "email": email,
-                        "provider": req.provider,
-                        "message": (
-                            f"An account with this email already exists. "
-                            f"Confirm to link your {req.provider.capitalize()} account."
-                        ),
-                    },
-                )
+            link_token = create_pending_link(oidc_sub, email, full_name, avatar_url)
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "LINK_REQUIRED",
+                    "link_token": link_token,
+                    "email": email,
+                    "provider": req.provider,
+                    "message": (
+                        f"An account with this email already exists. "
+                        f"Confirm to link your {req.provider.capitalize()} account."
+                    ),
+                },
+            )
 
     # 3. Create brand-new OIDC-only user
     if not user:
@@ -398,6 +444,7 @@ async def oidc_login(req: OIDCAuthRequest):
         raise HTTPException(status_code=403, detail="Account is disabled")
 
     session_token, expires_at = create_session(user["id"])
+    _apply_session_cookie(response, session_token)
     update_last_login(user["id"])
 
     return SessionResponse(
@@ -408,7 +455,7 @@ async def oidc_login(req: OIDCAuthRequest):
 
 
 @app.post("/auth/oidc/confirm-link", response_model=SessionResponse)
-async def confirm_oidc_link(body: dict):
+async def confirm_oidc_link(body: dict, response: Response):
     """Consume a pending OIDC link token (issued during Apple sign-in) and link the accounts.
 
     Body: { "link_token": "<token>" }
@@ -444,6 +491,7 @@ async def confirm_oidc_link(body: dict):
         raise HTTPException(status_code=403, detail="Account is disabled")
 
     session_token, expires_at = create_session(user["id"])
+    _apply_session_cookie(response, session_token)
     update_last_login(user["id"])
     return SessionResponse(
         user=user_to_response(user),
@@ -492,11 +540,15 @@ async def unlink_oidc_account(provider: str, current_user: dict = Depends(get_cu
 
 
 @app.post("/auth/logout")
-async def logout(current_user: dict = Depends(get_current_user),
-                authorization: str = Header(...)):
+async def logout(
+    response: Response,
+    current_user: dict = Depends(get_current_user),
+    authorization: Optional[str] = Header(None),
+):
     """Logout user."""
-    token = authorization.replace("Bearer ", "")
-    delete_session(token)
+    if authorization and authorization.startswith("Bearer "):
+        delete_session(authorization.removeprefix("Bearer "))
+    response.delete_cookie("session_token", path="/")
     return {"message": "Logged out successfully"}
 
 
@@ -544,7 +596,8 @@ async def update_profile(profile: UserProfileUpdate,
 # ===== Invite Endpoints =====
 
 @app.post("/invites/send", response_model=InviteResponse)
-async def send_invite(invite_data: InviteSendRequest, current_user: dict = Depends(get_current_user)):
+@limiter.limit("20/hour")
+async def send_invite(request: Request, invite_data: InviteSendRequest, current_user: dict = Depends(get_current_user)):
     """Send a group invitation."""
     # Verify user has access to this group via groups service
     async with httpx.AsyncClient() as client:
@@ -556,6 +609,10 @@ async def send_invite(invite_data: InviteSendRequest, current_user: dict = Depen
                 raise HTTPException(status_code=403, detail="Not authorized to send invites for this group")
         except httpx.RequestError:
             raise HTTPException(status_code=503, detail="Groups service unavailable")
+
+    # Domain abuse check — block if sender already sent 10+ invites to this domain in past hour
+    if count_recent_domain_invites(current_user["id"], invite_data.email) >= 10:
+        raise HTTPException(status_code=429, detail="Too many invites to this domain — try again later")
 
     # Check if user with email exists
     existing_user = get_user_by_email(invite_data.email)
@@ -577,6 +634,8 @@ async def send_invite(invite_data: InviteSendRequest, current_user: dict = Depen
         invite_token=token,
         user_exists=user_exists
     )
+
+    log_invite_send(current_user["id"], invite_data.email)
 
     return InviteResponse(
         invite_token=token,
@@ -622,7 +681,7 @@ async def get_invite_context(token: str):
 
 
 @app.post("/auth/invite/join", response_model=InviteAcceptResponse)
-async def join_via_invite(request: InviteAcceptRequest):
+async def join_via_invite(request: InviteAcceptRequest, response: Response):
     """Existing user joins a group via invite token (no registration needed)."""
     invite = get_invite_by_token(request.token)
 
@@ -648,6 +707,7 @@ async def join_via_invite(request: InviteAcceptRequest):
 
     mark_invite_accepted(request.token)
     session_token, expires_at = create_session(user["id"])
+    _apply_session_cookie(response, session_token)
     update_last_login(user["id"])
 
     return InviteAcceptResponse(
@@ -696,7 +756,7 @@ async def validate_invite(request: InviteValidateRequest):
 
 
 @app.post("/invites/accept", response_model=InviteAcceptResponse)
-async def accept_invite(request: InviteAcceptRequest):
+async def accept_invite(request: InviteAcceptRequest, response: Response):
     """Accept an invitation."""
     invite = get_invite_by_token(request.token)
 
@@ -741,6 +801,7 @@ async def accept_invite(request: InviteAcceptRequest):
 
     # Create session
     session_token, expires_at = create_session(user["id"])
+    _apply_session_cookie(response, session_token)
     update_last_login(user["id"])
 
     return InviteAcceptResponse(
@@ -784,9 +845,10 @@ async def resend_verification(current_user: dict = Depends(get_current_user)):
 # ===== Password Reset Endpoints =====
 
 @app.post("/auth/forgot-password")
-async def forgot_password(request: ForgotPasswordRequest):
+@limiter.limit("3/minute")
+async def forgot_password(request: Request, body: ForgotPasswordRequest):
     """Request password reset."""
-    user = get_user_by_email(request.email)
+    user = get_user_by_email(body.email)
 
     if not user:
         # Don't reveal if user exists
@@ -838,6 +900,14 @@ async def change_password(
 class SetPasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=8)
 
+    @validator('new_password')
+    def password_strength(cls, v):
+        if not any(c.isupper() for c in v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Password must contain at least one number')
+        return v
+
 
 @app.post("/auth/set-password")
 async def set_password(
@@ -865,13 +935,52 @@ class UploadUrlResponse(BaseModel):
     object_name: str
 
 
+_AVATAR_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
+_ALLOWED_IMAGE_MAGIC = {
+    b"\xff\xd8\xff": "jpg",       # JPEG
+    b"\x89PNG\r\n\x1a\n": "png",  # PNG
+    b"GIF87a": "gif",             # GIF
+    b"GIF89a": "gif",
+    b"RIFF": "webp",              # WebP (RIFF....WEBP)
+}
+
+def _detect_image_type(data: bytes) -> str:
+    """Return detected image extension or raise HTTPException if not a safe image type."""
+    for magic, ext in _ALLOWED_IMAGE_MAGIC.items():
+        if data[:len(magic)].startswith(magic):
+            if ext == "webp" and data[8:12] != b"WEBP":
+                continue
+            return ext
+    raise HTTPException(status_code=415, detail="Unsupported image type. Allowed: JPEG, PNG, GIF, WebP")
+
+
+def _strip_exif(data: bytes, ext: str) -> bytes:
+    """Re-encode image through Pillow to strip EXIF/metadata."""
+    try:
+        from PIL import Image
+        import io as _io
+        img = Image.open(_io.BytesIO(data))
+        out = _io.BytesIO()
+        fmt = {"jpg": "JPEG", "jpeg": "JPEG", "png": "PNG", "gif": "GIF", "webp": "WEBP"}.get(ext, "JPEG")
+        if fmt == "JPEG" and img.mode in ("RGBA", "P", "LA"):
+            img = img.convert("RGB")
+        img.save(out, format=fmt)
+        return out.getvalue()
+    except Exception:
+        return data  # if strip fails, upload original
+
+
 @app.post("/users/me/avatar/upload")
 async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
     """Upload a user avatar image directly (no presigned URL required)."""
-    ext = (file.filename or "avatar.jpg").rsplit(".", 1)[-1].lower()
+    content = await file.read(_AVATAR_MAX_BYTES + 1)
+    if len(content) > _AVATAR_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 5 MB)")
+    ext = _detect_image_type(content)
+    content = _strip_exif(content, ext)
     object_name = f"user-{current_user['id']}-{uuid.uuid4().hex[:8]}.{ext}"
-    content = await file.read()
-    public_url = storage.upload_bytes(storage.BUCKET_AVATARS, object_name, content, file.content_type or "image/jpeg")
+    mime = {"jpg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp"}[ext]
+    public_url = storage.upload_bytes(storage.BUCKET_AVATARS, object_name, content, mime)
     update_user_profile(current_user["id"], avatar_url=public_url)
     return {"avatar_url": public_url}
 
@@ -927,7 +1036,8 @@ async def list_users(limit: int = 100, offset: int = 0,
 
 
 @app.get("/users/search")
-async def search_users(username: str, current_user: dict = Depends(get_current_user)):
+@limiter.limit("30/minute")
+async def search_users(request: Request, username: str, current_user: dict = Depends(get_current_user)):
     """Search users by partial username match. Returns id, username, full_name, avatar_url."""
     if not username or len(username.strip()) < 1:
         return []
@@ -964,6 +1074,9 @@ async def admin_update_user_endpoint(user_id: int, data: UserAdminUpdate,
         email_verified=data.email_verified,
         is_active=data.is_active,
     )
+    log_admin_action(admin["id"], admin["username"], "user.update",
+                     target_user_id=user_id, target_email=user.get("email"),
+                     detail=data.model_dump(exclude_none=True))
 
     user = get_user_by_id(user_id)
     return user_to_response(user)
@@ -976,6 +1089,8 @@ async def admin_deactivate_user(user_id: int, admin: dict = Depends(get_admin_us
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     deactivate_user(user_id)
+    log_admin_action(admin["id"], admin["username"], "user.deactivate",
+                     target_user_id=user_id, target_email=user.get("email"))
     # Remove from all groups and events (best-effort — don't fail the deletion if these error)
     internal_secret = os.getenv("INTERNAL_API_SECRET", "")
     async with httpx.AsyncClient() as client:
@@ -1019,6 +1134,8 @@ async def admin_create_user(user_data: AdminUserCreate, admin: dict = Depends(ge
         raise HTTPException(status_code=400, detail=str(e))
 
     user = get_user_by_id(user_id)
+    log_admin_action(admin["id"], admin["username"], "user.create",
+                     target_user_id=user_id, target_email=user_data.email)
     return user_to_response(user)
 
 
@@ -1358,7 +1475,7 @@ class EventNotifyRequest(BaseModel):
 @app.post("/internal/notify/rotation", status_code=202)
 async def notify_rotation(req: RotationNotifyRequest, x_internal_secret: Optional[str] = Header(None)):
     """Internal: send rotation-alert email + push + in-app to a user if opted in."""
-    if INTERNAL_API_SECRET and x_internal_secret != INTERNAL_API_SECRET:
+    if not INTERNAL_API_SECRET or x_internal_secret != INTERNAL_API_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
     user = get_user_by_id(req.user_id)
     if not user or not user.get("email"):
@@ -1402,10 +1519,13 @@ class MentionNotifyRequest(BaseModel):
 @app.post("/comments/mention", status_code=202)
 async def notify_mention(req: MentionNotifyRequest, current_user: dict = Depends(get_current_user)):
     """Notify users mentioned in a comment via in-app + push."""
+    import re as _re
     sender_name = current_user.get("full_name") or current_user.get("username") or "Someone"
-    preview = (req.comment_preview or "").strip()
+    raw_preview = (req.comment_preview or "").strip()
+    # Strip HTML tags from user-supplied comment preview before sending in notifications
+    safe_preview = _re.sub(r"<[^>]+>", "", raw_preview)
     title = f"💬 {sender_name} mentioned you"
-    body = preview[:80] if preview else "You were mentioned in a comment"
+    body = safe_preview[:80] if safe_preview else "You were mentioned in a comment"
     notified = 0
     for uid in req.mentioned_user_ids:
         if uid == current_user["id"]:
@@ -1430,7 +1550,7 @@ class PushNotifyRequest(BaseModel):
 @app.post("/internal/notify/push", status_code=202)
 async def notify_push(req: PushNotifyRequest, x_internal_secret: Optional[str] = Header(None)):
     """Internal: send a one-off push + in-app notification to a single user."""
-    if INTERNAL_API_SECRET and x_internal_secret != INTERNAL_API_SECRET:
+    if not INTERNAL_API_SECRET or x_internal_secret != INTERNAL_API_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
     create_notification(
         req.user_id, "system",
@@ -1453,7 +1573,7 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
     Accepts either an explicit ``user_ids`` list or a ``group_id`` — in the
     latter case the gateway fetches the current member list from groups-service.
     """
-    if INTERNAL_API_SECRET and x_internal_secret != INTERNAL_API_SECRET:
+    if not INTERNAL_API_SECRET or x_internal_secret != INTERNAL_API_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
     # ── Resolve recipient list ───────────────────────────────────────────────
     user_ids = req.user_ids or []
@@ -1544,15 +1664,14 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                     )
 
             elif req.type == "reminder":
-                if not prefs["notify_reminders"] or not user.get("email"):
-                    continue
                 create_notification(uid, "reminder", f"⏰ Coming up: {req.event_title}",
                                     f"Starting in {req.hours_until or 24} hours",
                                     link_type="event", link_id=req.event_id)
-                email_service.send_event_reminder(
-                    user["email"], name, req.event_title, req.event_date, group_name,
-                    req.hours_until or 24, req.event_id,
-                )
+                if prefs["notify_reminders"] and user.get("email"):
+                    email_service.send_event_reminder(
+                        user["email"], name, req.event_title, req.event_date, group_name,
+                        req.hours_until or 24, req.event_id,
+                    )
 
             elif req.type == "recurring":
                 if not prefs["notify_events"] or not user.get("email"):
@@ -1743,7 +1862,7 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
 @app.get("/internal/integrations")
 async def internal_integrations(x_internal_secret: Optional[str] = Header(None)):
     """Internal-only: return stored API key values for enrichment-service reload."""
-    if INTERNAL_API_SECRET and x_internal_secret != INTERNAL_API_SECRET:
+    if not INTERNAL_API_SECRET or x_internal_secret != INTERNAL_API_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
     stored = get_all_integrations()
     return {k: v for k, v in stored.items() if k in INTEGRATION_KEYS}
@@ -1752,7 +1871,7 @@ async def internal_integrations(x_internal_secret: Optional[str] = Header(None))
 @app.get("/internal/admin-email")
 async def internal_admin_email(x_internal_secret: Optional[str] = Header(None)):
     """Internal-only: return alert recipient emails (ADMIN_EMAIL env var or first admin user)."""
-    if INTERNAL_API_SECRET and x_internal_secret != INTERNAL_API_SECRET:
+    if not INTERNAL_API_SECRET or x_internal_secret != INTERNAL_API_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
     # Explicit env var takes priority; otherwise use the first admin user's email
     if ADMIN_EMAIL:
@@ -1767,7 +1886,7 @@ async def internal_get_user_profile(
     x_internal_secret: Optional[str] = Header(None),
 ):
     """Internal-only: fetch a user's profile for service-to-service calls (no user auth required)."""
-    if INTERNAL_API_SECRET and x_internal_secret != INTERNAL_API_SECRET:
+    if not INTERNAL_API_SECRET or x_internal_secret != INTERNAL_API_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
     user = get_user_by_id(user_id)
     if not user:

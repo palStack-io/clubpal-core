@@ -64,7 +64,9 @@ async def extract_receipt(
         }
         async with httpx.AsyncClient(timeout=20.0) as client:
             resp = await client.post(
-                f"{VISION_URL}?key={_vision_api_key}", json=payload
+                VISION_URL,
+                json=payload,
+                headers={"X-Goog-Api-Key": _vision_api_key},
             )
             resp.raise_for_status()
 

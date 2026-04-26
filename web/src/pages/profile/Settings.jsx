@@ -22,7 +22,6 @@ const NAV_SECTIONS = [
     { id: 'discover', icon: '🗺️', label: 'Discover' },
   ]},
   { group: 'System', items: [
-    { id: 'apikeys', icon: '🔑', label: 'API Keys' },
     { id: 'integrations', icon: '🛡️', label: 'Admin Panel', adminOnly: true },
     { id: 'appearance', icon: '🎨', label: 'Appearance' },
   ]},
@@ -459,7 +458,11 @@ function ApiKeysSection() {
         </Button>
 
         {loading ? (
-          <div style={{ color: 'var(--t3)', fontSize: '13px' }}>Loading…</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {[1, 2].map(i => (
+              <div key={i} className="cp-skeleton" style={{ height: '44px', borderRadius: '8px', background: 'var(--s3)' }} />
+            ))}
+          </div>
         ) : keys.length === 0 ? (
           <div style={{ color: 'var(--t3)', fontSize: '13px' }}>No API keys yet.</div>
         ) : (
@@ -793,7 +796,11 @@ function IntegrationsSection({ user }) {
           </p>
 
           {loading ? (
-            <div style={{ color: 'var(--t3)', fontSize: '13px' }}>Loading…</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              {[1, 2, 3].map(i => (
+                <div key={i} className="cp-skeleton" style={{ height: '56px', borderRadius: '10px', background: 'var(--s3)' }} />
+              ))}
+            </div>
           ) : (
             <>
               {INTEGRATION_FIELDS.map(group => (

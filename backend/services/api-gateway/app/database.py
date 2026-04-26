@@ -3,10 +3,15 @@ import psycopg2.extras
 import os
 from datetime import datetime, timedelta
 import secrets
+import hashlib
 from passlib.context import CryptContext
 
 # Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
+
+
+def _hash_session_token(token: str) -> str:
+    return hashlib.sha256(token.encode()).hexdigest()
 
 # Database URL
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://clubpal:clubpal@db:5432/clubpal_gateway")
@@ -228,6 +233,22 @@ def init_db():
         )
     """)
 
+    # Admin audit log
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS admin_audit_log (
+            id SERIAL PRIMARY KEY,
+            admin_id INTEGER NOT NULL,
+            admin_username TEXT NOT NULL,
+            action TEXT NOT NULL,
+            target_user_id INTEGER,
+            target_email TEXT,
+            detail JSONB DEFAULT '{}',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_log_admin ON admin_audit_log(admin_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_audit_log_created ON admin_audit_log(created_at)")
+
     # Indexes
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_username ON users(username)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
@@ -242,6 +263,18 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_notifications_read ON user_notifications(user_id, read)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_saved_items_user ON saved_items(user_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_saved_items_lookup ON saved_items(user_id, item_type, item_id)")
+
+    # Invite send log — for per-sender domain rate limiting (SEC-M8)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS invite_send_log (
+            id SERIAL PRIMARY KEY,
+            sender_user_id INTEGER NOT NULL,
+            to_email TEXT NOT NULL,
+            to_domain TEXT NOT NULL,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_invite_log_sender_domain ON invite_send_log(sender_user_id, to_domain, sent_at)")
 
     conn.commit()
     conn.close()
@@ -411,7 +444,7 @@ def update_user_email_verified(user_id: int):
 
 
 def update_user_password(user_id: int, new_password: str):
-    """Update user's password and mark it as changed."""
+    """Update user's password, invalidate all reset tokens, and mark it as changed."""
     conn = get_db()
     cursor = conn.cursor()
 
@@ -420,6 +453,8 @@ def update_user_password(user_id: int, new_password: str):
         "UPDATE users SET password_hash = %s, password_changed = 1, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
         (password_hash, user_id)
     )
+    # Invalidate any outstanding reset tokens so a previously-issued link cannot be replayed
+    cursor.execute("UPDATE reset_tokens SET used = 1 WHERE user_id = %s AND used = 0", (user_id,))
 
     conn.commit()
     conn.close()
@@ -432,11 +467,12 @@ def create_session(user_id: int) -> tuple[str, datetime]:
     cursor = conn.cursor()
 
     session_token = secrets.token_urlsafe(32)
+    token_hash = _hash_session_token(session_token)
     expires_at = datetime.utcnow() + timedelta(days=30)
 
     cursor.execute(
         "INSERT INTO sessions (user_id, session_token, expires_at) VALUES (%s, %s, %s)",
-        (user_id, session_token, expires_at)
+        (user_id, token_hash, expires_at)   # store hash, never the raw token
     )
 
     conn.commit()
@@ -450,13 +486,14 @@ def get_user_by_session(session_token: str) -> dict:
     conn = get_db()
     cursor = conn.cursor()
 
+    token_hash = _hash_session_token(session_token)
     cursor.execute("""
         SELECT u.*, COALESCE(p.onboarding_complete, 0) AS onboarding_complete
         FROM users u
         JOIN sessions s ON u.id = s.user_id
         LEFT JOIN user_preferences p ON u.id = p.user_id
         WHERE s.session_token = %s AND s.expires_at > CURRENT_TIMESTAMP
-    """, (session_token,))
+    """, (token_hash,))
 
     row = cursor.fetchone()
     conn.close()
@@ -469,7 +506,8 @@ def delete_session(session_token: str):
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("DELETE FROM sessions WHERE session_token = %s", (session_token,))
+    token_hash = _hash_session_token(session_token)
+    cursor.execute("DELETE FROM sessions WHERE session_token = %s", (token_hash,))
 
     conn.commit()
     conn.close()
@@ -705,9 +743,10 @@ def delete_sessions_except(user_id: int, keep_token: str) -> int:
     """Delete all sessions for a user except the specified one (used on password change)."""
     conn = get_db()
     cursor = conn.cursor()
+    keep_hash = _hash_session_token(keep_token)
     cursor.execute(
         "DELETE FROM sessions WHERE user_id = %s AND session_token != %s",
-        (user_id, keep_token)
+        (user_id, keep_hash)
     )
     deleted = cursor.rowcount
     conn.commit()
@@ -732,7 +771,55 @@ def delete_session_by_token_for_user(token: str, user_id: int) -> bool:
     return success
 
 
+# ── Invite abuse detection (SEC-M8) ──────────────────────────────────────────
+
+def log_invite_send(sender_user_id: int, to_email: str) -> None:
+    """Record an outgoing invite in the send log for domain rate-limit tracking."""
+    domain = to_email.split("@")[-1].lower() if "@" in to_email else to_email
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT INTO invite_send_log (sender_user_id, to_email, to_domain) VALUES (%s, %s, %s)",
+        (sender_user_id, to_email.lower(), domain)
+    )
+    conn.commit()
+    conn.close()
+
+
+def count_recent_domain_invites(sender_user_id: int, to_email: str, hours: int = 1) -> int:
+    """Return the number of invites this sender has sent to the same domain in the past hour."""
+    domain = to_email.split("@")[-1].lower() if "@" in to_email else to_email
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        """SELECT COUNT(*) FROM invite_send_log
+           WHERE sender_user_id = %s AND to_domain = %s
+             AND sent_at > NOW() - INTERVAL '1 hour'""",
+        (sender_user_id, domain)
+    )
+    count = cursor.fetchone()[0]
+    conn.close()
+    return count
+
+
 # Admin user management
+def log_admin_action(admin_id: int, admin_username: str, action: str,
+                     target_user_id=None, target_email=None, detail=None):
+    """Append an entry to the admin audit log."""
+    import json as _json
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        """INSERT INTO admin_audit_log
+           (admin_id, admin_username, action, target_user_id, target_email, detail)
+           VALUES (%s, %s, %s, %s, %s, %s)""",
+        (admin_id, admin_username, action, target_user_id, target_email,
+         _json.dumps(detail or {}))
+    )
+    conn.commit()
+    conn.close()
+
+
 def get_admin_emails() -> list:
     """Return email addresses of all admin users, oldest first.
     Used as fallback alert recipients when ADMIN_EMAIL env var is not set."""

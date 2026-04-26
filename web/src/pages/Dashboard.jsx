@@ -18,6 +18,7 @@ import CreateEventModal from '../components/modals/CreateEventModal'
 import { useTour } from '../components/onboarding/useTour'
 import TourOverlay from '../components/onboarding/TourOverlay'
 import { tourSteps } from '../components/onboarding/tourSteps'
+import { useToast } from '../components/ui/Toast'
 
 function getGreeting() {
   const h = new Date().getHours()
@@ -46,6 +47,7 @@ function eventsThisMonth(events) {
 export default function Dashboard() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const toast = useToast()
 
   const [groups, setGroups] = useState([])
   const [events, setEvents] = useState([])
@@ -114,7 +116,7 @@ export default function Dashboard() {
       // Activity feed: recent comments from each group (up to 5 groups)
       loadActivityFeed(g.slice(0, 5))
     } catch (err) {
-      console.error('Dashboard load error', err)
+      toast.error('Failed to load dashboard data. Please refresh.')
     } finally {
       setLoading(false)
     }

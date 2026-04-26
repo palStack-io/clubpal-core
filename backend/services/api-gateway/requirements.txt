@@ -28,6 +28,10 @@ python-dateutil==2.9.0
 
 # Object Storage
 minio==7.2.13
+Pillow==11.2.1
 
 # Cache
 cachetools==5.5.0
+
+# Rate limiting
+slowapi==0.1.9

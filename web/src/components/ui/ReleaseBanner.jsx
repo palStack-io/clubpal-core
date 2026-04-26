@@ -55,7 +55,7 @@ export default function ReleaseBanner() {
       {expanded && release.items?.length > 0 && (
         <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '5px' }}>
           {release.items.map((item, i) => (
-            <div key={i} style={{ display: 'flex', gap: '8px', fontSize: '12px', color: 'var(--t2)', paddingLeft: '26px' }}>
+            <div key={item.text || i} style={{ display: 'flex', gap: '8px', fontSize: '12px', color: 'var(--t2)', paddingLeft: '26px' }}>
               <span>{item.emoji}</span>
               <span>{item.text}</span>
             </div>

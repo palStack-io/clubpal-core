@@ -347,7 +347,10 @@ def get_events_by_user(user_id: int, status: str = None) -> List[dict]:
 
     if status:
         cursor.execute(
-            """SELECT e.*, ea.status AS my_rsvp_status FROM events e
+            """SELECT e.*, ea.status AS my_rsvp_status,
+                  (SELECT COUNT(*) FROM event_attendees
+                   WHERE event_id = e.id AND status = 'going') AS attendee_count
+               FROM events e
                JOIN event_attendees ea ON e.id = ea.event_id
                WHERE ea.user_id = %s AND e.status = %s
                ORDER BY e.scheduled_date ASC""",
@@ -355,7 +358,10 @@ def get_events_by_user(user_id: int, status: str = None) -> List[dict]:
         )
     else:
         cursor.execute(
-            """SELECT e.*, ea.status AS my_rsvp_status FROM events e
+            """SELECT e.*, ea.status AS my_rsvp_status,
+                  (SELECT COUNT(*) FROM event_attendees
+                   WHERE event_id = e.id AND status = 'going') AS attendee_count
+               FROM events e
                JOIN event_attendees ea ON e.id = ea.event_id
                WHERE ea.user_id = %s
                ORDER BY e.scheduled_date ASC""",
@@ -397,7 +403,7 @@ def update_event(event_id: int, title: str = None, description: str = None,
                 cover_url: str = None, updated_by: int = None,
                 rsvp_deadline=None, max_attendees: int = None,
                 bg_type: str = None, bg_value: str = None, bg_scope: str = None,
-                ratings_enabled: bool = None) -> bool:
+                ratings_enabled: bool = None, bill_split_enabled: bool = None) -> bool:
     """Update event details."""
     conn = get_db()
     cursor = conn.cursor()
@@ -470,6 +476,11 @@ def update_event(event_id: int, title: str = None, description: str = None,
         updates.append("ratings_enabled = %s")
         params.append(ratings_enabled)
         changes.append(f"ratings_enabled set to {ratings_enabled}")
+
+    if bill_split_enabled is not None:
+        updates.append("bill_split_enabled = %s")
+        params.append(bill_split_enabled)
+        changes.append(f"bill_split_enabled set to {bill_split_enabled}")
 
     if not updates:
         conn.close()

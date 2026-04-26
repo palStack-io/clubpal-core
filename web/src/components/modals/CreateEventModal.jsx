@@ -5,21 +5,8 @@ import { eventsApi } from '../../api/events'
 import { groupsApi } from '../../api/groups'
 import { useAuth } from '../../contexts/AuthContext'
 import { enrichClient } from '../../api/client'
-
-const toggleStyle = (active) => ({
-  width: '40px', height: '22px', borderRadius: '11px',
-  background: active ? 'var(--rose)' : 'var(--glass)',
-  position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0,
-})
-
-const ACTIVITY = {
-  dining: { emoji: '🍽️', color: '#f43f5e', rgb: '244,63,94' },
-  movies: { emoji: '🎬', color: '#6366f1', rgb: '99,102,241' },
-  books:  { emoji: '📚', color: '#a855f7', rgb: '168,85,247' },
-  hiking: { emoji: '🥾', color: '#14b8a6', rgb: '20,184,166' },
-  gaming: { emoji: '🎮', color: '#22d3a0', rgb: '34,211,160' },
-  arts:   { emoji: '🎨', color: '#f59e0b', rgb: '245,158,11' },
-}
+import ToggleRow from '../ui/ToggleRow'
+import { resolveActivity, ACTIVITY_LIST } from '../../constants/activities'
 
 const inputStyle = {
   background: 'var(--s2)',
@@ -140,7 +127,7 @@ export default function CreateEventModal({
   const resolvedGroupId = groupId || selectedGroupId
   const resolvedActivity = activityType || selectedActivity
   const actKey = resolvedActivity?.toLowerCase() || 'dining'
-  const act = ACTIVITY[actKey] || ACTIVITY.dining
+  const act = resolveActivity(actKey)
 
   const handleCoverPick = (e) => {
     const file = e.target.files?.[0]
@@ -284,16 +271,16 @@ export default function CreateEventModal({
           {/* Activity picker */}
           {!activityType && (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '6px', marginTop: '12px' }}>
-              {Object.entries(ACTIVITY).map(([key, a]) => (
-                <div key={key} onClick={() => setSelectedActivity(key)}
+              {ACTIVITY_LIST.map((a) => (
+                <div key={a.key} onClick={() => setSelectedActivity(a.key)}
                   style={{
                     padding: '10px 4px', textAlign: 'center', borderRadius: '10px', cursor: 'pointer',
-                    border: selectedActivity === key ? `1px solid rgba(${a.rgb},0.35)` : '1px solid var(--glass)',
-                    background: selectedActivity === key ? `rgba(${a.rgb},0.12)` : 'var(--s3)',
+                    border: selectedActivity === a.key ? `1px solid rgba(${a.rgb},0.35)` : '1px solid var(--glass)',
+                    background: selectedActivity === a.key ? `rgba(${a.rgb},0.12)` : 'var(--s3)',
                     transition: 'all 0.15s',
                   }}>
                   <div style={{ fontSize: '22px' }}>{a.emoji}</div>
-                  <div style={{ fontSize: '9px', fontWeight: 700, color: selectedActivity === key ? a.color : 'var(--t4)', marginTop: '3px' }}>{key}</div>
+                  <div style={{ fontSize: '9px', fontWeight: 700, color: selectedActivity === a.key ? a.color : 'var(--t4)', marginTop: '3px' }}>{a.key}</div>
                 </div>
               ))}
             </div>
@@ -556,16 +543,12 @@ export default function CreateEventModal({
         )}
       </div>
 
-      {/* Pulse Check toggle */}
-      <div style={{ ...sectionStyle, display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }} onClick={() => setPulseCheck(v => !v)}>
-        <div style={toggleStyle(pulseCheck)}>
-          <div style={{ position: 'absolute', top: '2px', left: pulseCheck ? '20px' : '2px', width: '18px', height: '18px', borderRadius: '9px', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
-        </div>
-        <div>
-          <div style={{ fontSize: '13px', fontWeight: 600, color: pulseCheck ? 'var(--rose-soft)' : 'var(--t2)' }}>💬 Send Pulse Check</div>
-          <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>Ask the group how they feel about this pick after creating the event</div>
-        </div>
-      </div>
+      <ToggleRow
+        value={pulseCheck}
+        onChange={() => setPulseCheck(v => !v)}
+        label="💬 Send Pulse Check"
+        description="Ask the group how they feel about this pick after creating the event"
+      />
 
       {/* Bill Split hint — shown first time only */}
       {showBillHint && (
@@ -593,27 +576,19 @@ export default function CreateEventModal({
         </div>
       )}
 
-      {/* Bill Split toggle */}
-      <div style={{ ...sectionStyle, display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }} onClick={() => setBillSplitEnabled(v => !v)}>
-        <div style={toggleStyle(billSplitEnabled)}>
-          <div style={{ position: 'absolute', top: '2px', left: billSplitEnabled ? '20px' : '2px', width: '18px', height: '18px', borderRadius: '9px', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
-        </div>
-        <div>
-          <div style={{ fontSize: '13px', fontWeight: 600, color: billSplitEnabled ? 'var(--green)' : 'var(--t2)' }}>💸 Enable Bill Splitting</div>
-          <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>Let the host split and track costs with attendees after the event</div>
-        </div>
-      </div>
-
-      {/* Ratings toggle */}
-      <div style={{ ...sectionStyle, display: 'flex', alignItems: 'flex-start', gap: '12px', cursor: 'pointer' }} onClick={() => setRatingsEnabled(v => !v)}>
-        <div style={toggleStyle(ratingsEnabled)}>
-          <div style={{ position: 'absolute', top: '2px', left: ratingsEnabled ? '20px' : '2px', width: '18px', height: '18px', borderRadius: '9px', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
-        </div>
-        <div>
-          <div style={{ fontSize: '13px', fontWeight: 600, color: ratingsEnabled ? 'var(--rose-soft)' : 'var(--t2)' }}>⭐ Enable Ratings</div>
-          <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>Allow members to rate and review this event after it ends</div>
-        </div>
-      </div>
+      <ToggleRow
+        value={billSplitEnabled}
+        onChange={() => setBillSplitEnabled(v => !v)}
+        label="💸 Enable Bill Splitting"
+        description="Let the host split and track costs with attendees after the event"
+        activeColor="var(--green)"
+      />
+      <ToggleRow
+        value={ratingsEnabled}
+        onChange={() => setRatingsEnabled(v => !v)}
+        label="⭐ Enable Ratings"
+        description="Allow members to rate and review this event after it ends"
+      />
 
       {/* Section 4: Description */}
       <div style={sectionStyle}>

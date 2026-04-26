@@ -7,6 +7,7 @@ export default function ThemeToggle() {
   return (
     <button
       onClick={toggle}
+      aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
       style={{
         display: 'inline-flex',

@@ -5,16 +5,7 @@ import Avatar from '../ui/Avatar'
 import StatusChip from '../ui/StatusChip'
 import { groupsApi } from '../../api/groups'
 import { gatewayClient } from '../../api/client'
-
-const ACTIVITY_OPTIONS = [
-  { key: 'dining',  emoji: '🍽️', label: 'Dining',  rgb: '244,63,94' },
-  { key: 'movies',  emoji: '🎬', label: 'Movies',  rgb: '99,102,241' },
-  { key: 'books',   emoji: '📚', label: 'Books',   rgb: '168,85,247' },
-  { key: 'hiking',  emoji: '🥾', label: 'Hiking',  rgb: '20,184,166' },
-  { key: 'gaming',  emoji: '🎮', label: 'Gaming',  rgb: '34,211,160' },
-  { key: 'arts',    emoji: '🎨', label: 'Arts',    rgb: '245,158,11' },
-  { key: 'other',   emoji: '✨', label: 'Other',   rgb: '100,116,139' },
-]
+import { ACTIVITY_LIST, resolveActivity } from '../../constants/activities'
 
 const ROTATION_MODES = [
   { value: 'sequential', label: 'Sequential' },
@@ -221,8 +212,6 @@ export default function CreateGroupModal({ isOpen, onClose, onCreated }) {
     )
   }
 
-  const selectedAct = ACTIVITY_OPTIONS.find((a) => a.key === form.activity_type)
-
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Create Club" size="lg">
       {/* Section 1: Club Details */}
@@ -367,7 +356,7 @@ export default function CreateGroupModal({ isOpen, onClose, onCreated }) {
             gap: '8px',
           }}
         >
-          {ACTIVITY_OPTIONS.map((act) => {
+          {ACTIVITY_LIST.map((act) => {
             const isSelected = form.activity_type === act.key
             return (
               <div

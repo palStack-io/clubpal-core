@@ -20,6 +20,14 @@ class UserCreate(BaseModel):
     def email_lowercase(cls, v):
         return v.lower()
 
+    @validator('password')
+    def password_strength(cls, v):
+        if not any(c.isupper() for c in v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Password must contain at least one number')
+        return v
+
 
 class UserLogin(BaseModel):
     username: str
@@ -101,6 +109,14 @@ class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str = Field(..., min_length=8)
 
+    @validator('new_password')
+    def password_strength(cls, v):
+        if not any(c.isupper() for c in v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Password must contain at least one number')
+        return v
+
 
 # Admin models
 class AdminUserCreate(BaseModel):
@@ -110,6 +126,14 @@ class AdminUserCreate(BaseModel):
     full_name: Optional[str] = None
     is_admin: bool = False
     email_verified: bool = False
+
+    @validator('password')
+    def password_strength(cls, v):
+        if not any(c.isupper() for c in v):
+            raise ValueError('Password must contain at least one uppercase letter')
+        if not any(c.isdigit() for c in v):
+            raise ValueError('Password must contain at least one number')
+        return v
 
 
 # Profile update

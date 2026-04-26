@@ -65,9 +65,10 @@ def get_current_user_id(user: dict = Depends(get_current_user)) -> int:
 app = FastAPI(title="ClubPal Groups Service", version="1.0.0")
 
 # CORS
+_CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,http://localhost").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -124,12 +125,15 @@ async def create_group_endpoint(group_data: GroupCreate, user_id: int = Depends(
 
 
 @app.get("/groups/{group_id}", response_model=GroupDetailResponse)
-async def get_group_endpoint(group_id: int):
-    """Get group details with members."""
+async def get_group_endpoint(group_id: int, user_id: int = Depends(get_current_user_id)):
+    """Get group details with members. Caller must be a member of the group."""
     group = get_group(group_id)
 
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
+
+    if not is_member(group_id, user_id):
+        raise HTTPException(status_code=403, detail="You are not a member of this group")
 
     members = get_members(group_id)
     member_responses = [MemberResponse(**member) for member in members]
@@ -138,8 +142,10 @@ async def get_group_endpoint(group_id: int):
 
 
 @app.get("/users/{user_id}/groups", response_model=List[GroupResponse])
-async def get_user_groups(user_id: int):
-    """Get all groups for a user."""
+async def get_user_groups(user_id: int, current_user_id: int = Depends(get_current_user_id)):
+    """Get all groups for a user. Caller may only fetch their own groups."""
+    if current_user_id != user_id:
+        raise HTTPException(status_code=403, detail="Cannot access another user's groups")
     groups = get_groups_by_user(user_id)
     return [GroupResponse(**group) for group in groups]
 
@@ -807,6 +813,7 @@ async def create_poll_endpoint(group_id: int, data: PollCreate, user: dict = Dep
                 json={"group_id": group_id, "type": "poll",
                       "event_title": data.activity_name, "event_id": poll_id,
                       "creator_id": user_id},
+                headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
                 timeout=3.0,
             )
         except Exception:
@@ -1122,6 +1129,7 @@ async def notify_join_request(group_id: int, user_id: int = Depends(get_current_
                         "link_type": "group",
                         "link_id": group_id,
                     },
+                    headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
                     timeout=3.0,
                 )
             except Exception:

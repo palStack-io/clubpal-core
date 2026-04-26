@@ -10,9 +10,11 @@ import Topbar from '../../components/shell/Topbar'
 import Card, { CardHeader } from '../../components/ui/Card'
 import Avatar from '../../components/ui/Avatar'
 import { StarDisplay } from '../../components/ui/StarRating'
+import { useToast } from '../../components/ui/Toast'
 
 export default function Profile() {
   const { user } = useAuth()
+  const toast = useToast()
   const [stats, setStats] = useState(null)
   const [ratings, setRatings] = useState([])
   const [groupCount, setGroupCount] = useState(0)
@@ -30,7 +32,7 @@ export default function Profile() {
       setRatings((r || []).slice(0, 5))
       setGroupCount((Array.isArray(g) ? g : g?.groups || []).length)
       setHostCount((Array.isArray(h) ? h : h?.events || []).length)
-    }).catch(console.error).finally(() => setLoading(false))
+    }).catch(() => toast.error('Failed to load profile data.')).finally(() => setLoading(false))
   }, [user.id])
 
   return (

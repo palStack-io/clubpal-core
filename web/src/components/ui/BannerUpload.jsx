@@ -77,14 +77,16 @@ export default function BannerUpload({ value, onChange, aspectRatio = '16/5', la
                 <button
                   type="button"
                   onClick={() => inputRef.current?.click()}
-                  style={{ fontSize: '12px', fontWeight: 600, color: '#fff', background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', borderRadius: '8px', padding: '5px 12px', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
+                  /* intentional: glass overlay on banner image, always dark bg */
+                  style={{ fontSize: '12px', fontWeight: 600, color: '#fff', background: 'rgba(255,255,255,0.2)', border: '1px solid var(--glass)', borderRadius: '8px', padding: '5px 12px', cursor: 'pointer', backdropFilter: 'blur(4px)' }}
                 >
                   Change
                 </button>
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); onChange(null) }}
-                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.3)', borderRadius: '8px', cursor: 'pointer' }}
+                  /* intentional: glass overlay on banner image, always dark bg */
+                  style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px', background: 'rgba(0,0,0,0.5)', border: '1px solid var(--glass)', borderRadius: '8px', cursor: 'pointer' }}
                 >
                   <XMarkIcon style={{ width: '14px', height: '14px', color: '#fff' }} />
                 </button>

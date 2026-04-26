@@ -10,6 +10,7 @@ import Button from '../../components/ui/Button'
 import BannerUpload from '../../components/ui/BannerUpload'
 import { FormSection, FormRow, FormGroup, FormInput, FormSelect } from '../../components/ui/Form'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
+import { useToast } from '../../components/ui/Toast'
 
 // Maps group activity_type → activity category for filtering
 const ACTIVITY_TYPE_TO_CATEGORY = {
@@ -51,6 +52,7 @@ async function uploadCover(eventId, file) {
 export default function CreateEvent() {
   const { user } = useAuth()
   const navigate = useNavigate()
+  const toast = useToast()
   const [searchParams] = useSearchParams()
   const preselectedGroupId = searchParams.get('groupId')
   const preselectedActivityId = searchParams.get('activityId')
@@ -102,7 +104,7 @@ export default function CreateEvent() {
     ]).then(([g, a]) => {
       setGroups(g || [])
       setActivities(a || [])
-    }).catch(console.error).finally(() => setDataLoading(false))
+    }).catch(() => toast.error('Failed to load form data.')).finally(() => setDataLoading(false))
   }, [user.id])
 
   const set = (key) => (e) => {
@@ -149,7 +151,7 @@ export default function CreateEvent() {
 
       // Upload cover photo if provided
       if (coverFile) {
-        await uploadCover(event.id, coverFile).catch(console.error)
+        await uploadCover(event.id, coverFile).catch(() => toast.error('Event created, but cover photo failed to upload.'))
       }
 
       window.location.href = `/events/${event.id}`

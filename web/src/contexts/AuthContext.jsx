@@ -8,19 +8,14 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const token = localStorage.getItem('session_token')
-    if (!token) {
-      setLoading(false)
-      return
-    }
-    // Always verify the token and fetch fresh user data on startup so we
-    // pick up any server-side changes (e.g. password_changed flag, avatar, etc.)
+    const publicPaths = ['/login', '/register', '/forgot-password', '/reset-password', '/invite']
+    const onPublic = publicPaths.some(p => window.location.pathname.startsWith(p))
+    if (onPublic) { setLoading(false); return }
+
     authApi.me().then(freshUser => {
       localStorage.setItem('user', JSON.stringify(freshUser))
       setUser(freshUser)
     }).catch(() => {
-      // Session expired or invalid — clear it
-      localStorage.removeItem('session_token')
       localStorage.removeItem('user')
     }).finally(() => setLoading(false))
   }, [])
@@ -28,7 +23,6 @@ export function AuthProvider({ children }) {
   const login = async (username, password) => {
     try {
       const data = await authApi.login(username, password)
-      localStorage.setItem('session_token', data.session_token)
       localStorage.setItem('user', JSON.stringify(data.user))
       setUser(data.user)
       return { success: true }
@@ -40,7 +34,6 @@ export function AuthProvider({ children }) {
   const register = async (username, email, password, fullName) => {
     try {
       const data = await authApi.register(username, email, password, fullName)
-      localStorage.setItem('session_token', data.session_token)
       localStorage.setItem('user', JSON.stringify(data.user))
       setUser(data.user)
       return { success: true }
@@ -51,10 +44,8 @@ export function AuthProvider({ children }) {
 
   const logout = async () => {
     try {
-      const token = localStorage.getItem('session_token')
-      if (token) await authApi.logout(token)
+      await authApi.logout()
     } catch {}
-    localStorage.removeItem('session_token')
     localStorage.removeItem('user')
     setUser(null)
   }
@@ -68,7 +59,6 @@ export function AuthProvider({ children }) {
   const loginWithGoogle = async (credential) => {
     try {
       const data = await authApi.oidcLogin(credential, 'google')
-      localStorage.setItem('session_token', data.session_token)
       localStorage.setItem('user', JSON.stringify(data.user))
       setUser(data.user)
       return { success: true }

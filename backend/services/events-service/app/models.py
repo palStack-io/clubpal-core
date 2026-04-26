@@ -83,6 +83,7 @@ class EventUpdate(BaseModel):
     bg_value: Optional[str] = None
     bg_scope: Optional[str] = None
     ratings_enabled: Optional[bool] = None
+    bill_split_enabled: Optional[bool] = None
 
 
 class EventResponse(BaseModel):
@@ -108,6 +109,7 @@ class EventResponse(BaseModel):
     bill_split_enabled: bool = False
     ratings_enabled: bool = True
     my_rsvp_status: Optional[str] = None
+    attendee_count: int = 0
 
 
 class EventDetailResponse(EventResponse):

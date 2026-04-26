@@ -6,16 +6,7 @@ import { groupsApi } from '../../api/groups'
 import { gatewayClient } from '../../api/client'
 import InviteMemberModal from './InviteMemberModal'
 import BackgroundPicker from '../ui/BackgroundPicker'
-
-const ACTIVITY_OPTIONS = [
-  { key: 'dining',  emoji: '🍽️', label: 'Dining',  rgb: '244,63,94'  },
-  { key: 'movies',  emoji: '🎬', label: 'Movies',  rgb: '99,102,241' },
-  { key: 'books',   emoji: '📚', label: 'Books',   rgb: '168,85,247' },
-  { key: 'hiking',  emoji: '🥾', label: 'Hiking',  rgb: '20,184,166' },
-  { key: 'gaming',  emoji: '🎮', label: 'Gaming',  rgb: '34,211,160' },
-  { key: 'arts',    emoji: '🎨', label: 'Arts',    rgb: '245,158,11'  },
-  { key: 'other',   emoji: '✨', label: 'Other',   rgb: '100,116,139' },
-]
+import { ACTIVITY_LIST } from '../../constants/activities'
 
 const ROTATION_MODES = [
   { value: 'sequential', label: 'Sequential' },
@@ -509,7 +500,7 @@ export default function EditGroupModal({
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>Activity Type</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-          {ACTIVITY_OPTIONS.map(act => {
+          {ACTIVITY_LIST.map(act => {
             const isSelected = form.activity_type === act.key
             return (
               <div

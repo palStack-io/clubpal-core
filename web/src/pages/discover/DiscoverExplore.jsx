@@ -519,7 +519,7 @@ export default function DiscoverExplore() {
   // Load user prefs to filter tabs
   useEffect(() => {
     if (!user?.id) return
-    gatewayClient.get(`/users/${user.id}/preferences`)
+    gatewayClient.get('/users/me/preferences')
       .then(res => {
         const acts = res.data?.activities ?? res.data?.prefs?.activities ?? []
         if (Array.isArray(acts) && acts.length > 0) setPreferredActivities(acts)

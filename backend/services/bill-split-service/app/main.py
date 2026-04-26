@@ -76,9 +76,10 @@ _session_cache: TTLCache = TTLCache(maxsize=256, ttl=60)
 app = FastAPI(title="ClubPal Bill Split Service", version="1.0.0")
 scheduler = AsyncIOScheduler()
 
+_CORS_ORIGINS = [o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:5173,http://localhost:3000,http://localhost").split(",") if o.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -358,7 +359,7 @@ async def health():
 
 @app.post("/admin/reload-config")
 async def admin_reload_config(x_internal_secret: Optional[str] = Header(None)):
-    if x_internal_secret != INTERNAL_API_SECRET or not INTERNAL_API_SECRET:
+    if not INTERNAL_API_SECRET or x_internal_secret != INTERNAL_API_SECRET:
         raise HTTPException(status_code=403, detail="Forbidden")
     await reload_config()
     return {"ok": True}

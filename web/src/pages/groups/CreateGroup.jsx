@@ -9,6 +9,7 @@ import ActivityTypePicker from '../../components/groups/ActivityTypePicker'
 import InviteRow from '../../components/groups/InviteRow'
 import { groupsApi } from '../../api/groups'
 import { gatewayClient } from '../../api/client'
+import { useToast } from '../../components/ui/Toast'
 
 // Map frontend rotation labels to backend rotation_type values
 const ROTATION_TYPE_MAP = { sequential: 'round_robin', random: 'random', manual: 'none' }
@@ -26,6 +27,7 @@ async function uploadBanner(groupId, file) {
 
 export default function CreateGroup() {
   const navigate = useNavigate()
+  const toast = useToast()
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -90,7 +92,7 @@ export default function CreateGroup() {
 
       // Upload banner if provided
       if (bannerFile) {
-        await uploadBanner(group.id, bannerFile).catch(console.error)
+        await uploadBanner(group.id, bannerFile).catch(() => toast.error('Club created, but banner failed to upload.'))
       }
 
       // Send invites

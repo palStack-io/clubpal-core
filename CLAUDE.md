@@ -238,6 +238,27 @@ backend/services/api-gateway/app/admin_auth.py
 | Architecture change (new service, new pattern) | `docs/ARCHITECTURE.md` |
 | This CLAUDE.md is outdated | Update it inline |
 
+## palStack Homepage — When to Update
+
+For any **major** changes (new features, new services, changed API behaviour, new screens, pricing/plan changes), also update the clubPal section of the palStack marketing site:
+
+```
+/Users/basestation/Documents/Palstacks/palStack/palstack Homepage/clubpal/clubpal.html  — feature list, screenshots, marketing copy
+/Users/basestation/Documents/Palstacks/palStack/palstack Homepage/clubpal/docs.html     — public-facing API & feature documentation
+```
+
+**Triggers that require a homepage update:**
+- New feature visible to end users (new page, new capability, new flow)
+- New or removed API endpoint that external consumers would use
+- New service added or removed from the architecture
+- Pricing, plan, or onboarding flow changes
+- New mobile screen or significant UI redesign
+
+**Does NOT require a homepage update:**
+- Internal bug fixes with no user-visible behaviour change
+- Refactors, dependency upgrades, config changes
+- Security patches that don't change the API surface
+
 ---
 
 ## Rules — Never Do These

@@ -10,7 +10,8 @@ export function StarDisplay({ score, size = 'sm' }) {
       {[1, 2, 3, 4, 5].map((star) => (
         <StarIcon
           key={star}
-          className={`${sizes[size]} ${star <= score ? 'text-yellow-400' : 'text-gray-200'}`}
+          className={sizes[size]}
+          style={{ color: star <= score ? 'var(--amber)' : 'var(--t4)' }}
         />
       ))}
     </div>
@@ -29,15 +30,15 @@ export function StarPicker({ value, onChange }) {
             className="focus:outline-none transition-transform hover:scale-110"
           >
             {star <= value ? (
-              <StarIcon className="h-10 w-10 text-yellow-400" />
+              <StarIcon className="h-10 w-10" style={{ color: 'var(--amber)' }} />
             ) : (
-              <StarOutlineIcon className="h-10 w-10 text-gray-300 hover:text-yellow-300" />
+              <StarOutlineIcon className="h-10 w-10" style={{ color: 'var(--t3)' }} />
             )}
           </button>
         ))}
       </div>
       {value > 0 && (
-        <span className="text-sm font-medium text-gray-600">{labels[value]}</span>
+        <span className="text-sm font-medium" style={{ color: 'var(--t2)' }}>{labels[value]}</span>
       )}
     </div>
   )

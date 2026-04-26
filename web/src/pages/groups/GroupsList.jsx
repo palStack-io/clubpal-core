@@ -57,10 +57,9 @@ export default function GroupsList() {
           Promise.all(
             gs.map(async (g) => {
               try {
-                const [events, lb] = await Promise.all([
-                  eventsApi.getGroupEvents(g.id),
-                  ratingsApi.getLeaderboard(g.id),
-                ])
+                const events = await eventsApi.getGroupEvents(g.id)
+                const eventIds = Array.isArray(events) ? events.map(e => e.id).filter(Boolean).join(',') : ''
+                const lb = await ratingsApi.getLeaderboard(g.id, eventIds ? `?event_ids=${eventIds}` : '')
                 return {
                   id: g.id,
                   event_count: Array.isArray(events) ? events.length : 0,

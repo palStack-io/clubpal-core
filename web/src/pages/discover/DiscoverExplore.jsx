@@ -680,7 +680,13 @@ export default function DiscoverExplore() {
   }
 
   const handleNavigate = (item) => {
-    const tabKey = item._tabKey || activeTabKey
+    const rawKey = item._tabKey || activeTabKey
+    // Normalize singular types saved by DetailPage to the plural tab keys used by DETAIL_ROUTE
+    const SINGULAR_TO_TAB = {
+      movie: 'movies', show: 'shows', book: 'books', game: 'games',
+      hike: 'hikes', dining: 'restaurants',
+    }
+    const tabKey = SINGULAR_TO_TAB[rawKey] || rawKey
     // Mock items don't have real API IDs — navigate to the category explore page instead
     if (item._isMock) {
       const tabRoute = TABS.find(t => t.key === tabKey)?.route

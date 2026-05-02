@@ -30,13 +30,16 @@ export default function ResetPassword() {
     setError('')
     if (form.password !== form.confirm) { setError('Passwords do not match'); return }
     if (form.password.length < 8) { setError('Password must be at least 8 characters'); return }
+    if (!/[A-Z]/.test(form.password)) { setError('Password must contain at least one uppercase letter'); return }
+    if (!/[0-9]/.test(form.password)) { setError('Password must contain at least one number'); return }
     setLoading(true)
     try {
       await authApi.resetPassword(token, form.password)
       setDone(true)
       setTimeout(() => navigate('/login'), 3000)
     } catch (err) {
-      setError(err.response?.data?.detail || 'Reset link is invalid or expired')
+      const detail = err.response?.data?.detail
+      setError(Array.isArray(detail) ? (detail[0]?.msg || 'Password does not meet requirements') : (detail || 'Reset link is invalid or expired'))
     } finally {
       setLoading(false)
     }

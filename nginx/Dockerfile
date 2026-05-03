@@ -4,7 +4,7 @@ WORKDIR /web
 ARG VITE_GOOGLE_CLIENT_ID=""
 ENV VITE_GOOGLE_CLIENT_ID=$VITE_GOOGLE_CLIENT_ID
 COPY web/package*.json ./
-RUN npm install --prefer-offline
+RUN npm ci
 COPY web/ .
 RUN npm run build
 

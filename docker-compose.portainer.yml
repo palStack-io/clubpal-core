@@ -215,6 +215,7 @@ services:
       MINIO_PUBLIC_URL: http://your-server-ip:9000/storage  # ← public URL
       GATEWAY_SERVICE_URL: http://api-gateway:8001
       EVENTS_SERVICE_URL: http://events-service:8003
+      INTERNAL_API_SECRET: CHANGEME_INTERNAL_SECRET
     networks:
       - clubpal-network
     depends_on:
@@ -249,6 +250,7 @@ services:
       GROUPS_SERVICE_URL: http://groups-service:8002
       ACTIVITIES_SERVICE_URL: http://activities-service:8005
       GATEWAY_URL: http://api-gateway:8001
+      INTERNAL_API_SECRET: CHANGEME_INTERNAL_SECRET
     networks:
       - clubpal-network
     depends_on:

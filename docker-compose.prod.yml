@@ -170,6 +170,9 @@ services:
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-clubpal}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
       - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-http://localhost:9000/storage}
+      - GATEWAY_SERVICE_URL=http://api-gateway:8001
+      - EVENTS_SERVICE_URL=http://events-service:8003
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-}
     networks:
       - clubpal-network
     depends_on:
@@ -199,6 +202,10 @@ services:
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-clubpal}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
       - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-http://localhost:9000/storage}
+      - GROUPS_SERVICE_URL=http://groups-service:8002
+      - ACTIVITIES_SERVICE_URL=http://activities-service:8005
+      - GATEWAY_URL=http://api-gateway:8001
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-}
     networks:
       - clubpal-network
     depends_on:

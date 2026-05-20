@@ -1648,10 +1648,14 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                     )
 
             elif req.type == "rsvp_nudge":
-                # Manual nudge from event creator — always in-app + push, no email
                 create_notification(uid, "reminder", f"📅 RSVP needed: {req.event_title}",
                                     f"{creator_name} is asking — are you in?",
                                     link_type="event", link_id=req.event_id)
+                if prefs["notify_reminders"] and user.get("email"):
+                    email_service.send_rsvp_nudge(
+                        user["email"], name, req.event_title, req.event_date or "", group_name,
+                        creator_name, req.event_id,
+                    )
 
             elif req.type == "rsvp_reminder":
                 create_notification(uid, "reminder", f"⏰ RSVP closes soon: {req.event_title}",
@@ -1674,15 +1678,14 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                     )
 
             elif req.type == "recurring":
-                if not prefs["notify_events"] or not user.get("email"):
-                    continue
                 create_notification(uid, "event", f"🔁 {req.event_title}",
                                     f"Recurring event scheduled in {group_name}",
                                     link_type="event", link_id=req.event_id)
-                email_service.send_recurring_event_created(
-                    user["email"], name, req.event_title, req.event_date, group_name,
-                    req.event_id,
-                )
+                if prefs["notify_events"] and user.get("email"):
+                    email_service.send_recurring_event_created(
+                        user["email"], name, req.event_title, req.event_date, group_name,
+                        req.event_id,
+                    )
 
             elif req.type == "invite":
                 # Membership notifications (new member, join request, approval) — always in-app + push
@@ -1780,8 +1783,6 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                 # Skip the creator — they made the event, no need to notify themselves
                 if req.creator_id and uid == req.creator_id:
                     continue
-                if not prefs["notify_events"] or not user.get("email"):
-                    continue
                 if req.has_rsvp:
                     notif_body = f"{creator_name} scheduled an event in {group_name} — RSVP now"
                 else:
@@ -1789,10 +1790,11 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                 create_notification(uid, "event", f"📅 New event: {req.event_title}",
                                     notif_body,
                                     link_type="event", link_id=req.event_id)
-                email_service.send_event_created(
-                    user["email"], name, req.event_title, req.event_date, group_name,
-                    creator_name, req.event_id, has_rsvp=req.has_rsvp,
-                )
+                if prefs["notify_events"] and user.get("email"):
+                    email_service.send_event_created(
+                        user["email"], name, req.event_title, req.event_date, group_name,
+                        creator_name, req.event_id, has_rsvp=req.has_rsvp,
+                    )
 
             results.append(uid)
 

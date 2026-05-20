@@ -352,7 +352,10 @@ def get_user_by_username(username: str) -> dict:
     cursor = conn.cursor()
 
     cursor.execute(
-        "SELECT * FROM users WHERE username = %s OR email = %s",
+        """SELECT u.*, COALESCE(p.onboarding_complete, 0) AS onboarding_complete
+           FROM users u
+           LEFT JOIN user_preferences p ON u.id = p.user_id
+           WHERE u.username = %s OR u.email = %s""",
         (username.lower(), username.lower())
     )
     row = cursor.fetchone()
@@ -366,7 +369,13 @@ def get_user_by_email(email: str) -> dict:
     conn = get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM users WHERE email = %s", (email.lower(),))
+    cursor.execute(
+        """SELECT u.*, COALESCE(p.onboarding_complete, 0) AS onboarding_complete
+           FROM users u
+           LEFT JOIN user_preferences p ON u.id = p.user_id
+           WHERE u.email = %s""",
+        (email.lower(),)
+    )
     row = cursor.fetchone()
     conn.close()
 

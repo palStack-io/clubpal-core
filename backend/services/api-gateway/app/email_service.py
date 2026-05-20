@@ -428,6 +428,31 @@ class EmailService:
         )
         return self._send(to_email, subject, _base(subject, content, self.app_url))
 
+    def send_rsvp_nudge(self, to_email: str, username: str, event_title: str,
+                        event_date: str, group_name: str,
+                        creator_name: str, event_id: int) -> bool:
+        """Notify a group member that the event creator is asking them to RSVP."""
+        url = f"{self.app_url}/events/{event_id}"
+        subject = f"{creator_name} wants to know — are you in for {event_title}?"
+        content = (
+            _h1("RSVP requested 📅")
+            + _p(f"Hey <strong>{username}</strong>,")
+            + _p(f"<strong>{creator_name}</strong> is asking if you're in for "
+                 f"<strong>{event_title}</strong> in <strong>{group_name}</strong>.")
+            + f"""
+<div style="background:#f9f9fb;border-left:3px solid #f43f5e;border-radius:0 8px 8px 0;
+            padding:14px 18px;margin:20px 0;">
+  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{event_title}</p>
+  <p style="margin:4px 0 0;font-size:13px;color:#666;">{event_date}</p>
+  <p style="margin:4px 0 0;font-size:12px;color:#aaa;">{group_name}</p>
+</div>"""
+            + _btn("RSVP Now", url, "#f43f5e")
+            + _note("You're receiving this because you're a member of "
+                    f"<strong>{group_name}</strong>. Update preferences in "
+                    f'<a href="{self.app_url}/settings" style="color:#f43f5e;">settings</a>.')
+        )
+        return self._send(to_email, subject, _base(subject, content, self.app_url))
+
     def send_bill_split_assigned(self, to_email: str, username: str, event_title: str,
                                   event_id: int, payer_name: str,
                                   amount: Optional[float] = None) -> bool:

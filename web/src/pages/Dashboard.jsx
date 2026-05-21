@@ -51,6 +51,7 @@ export default function Dashboard() {
 
   const [groups, setGroups] = useState([])
   const [events, setEvents] = useState([])
+  const [allEvents, setAllEvents] = useState([])
   const [rotation, setRotation] = useState(null)
   const [allRotations, setAllRotations] = useState([])
   const [primaryGroupId, setPrimaryGroupId] = useState(null)
@@ -81,6 +82,7 @@ export default function Dashboard() {
       const e = eventsData || []
       setGroups(g)
 
+      setAllEvents(e)
       const upcoming = e.filter(ev => ev.status === 'scheduled' || ev.status === 'in_progress')
       setEvents(upcoming)
 
@@ -189,7 +191,7 @@ export default function Dashboard() {
         }
       : null
 
-  const monthEvents = eventsThisMonth(events)
+  const monthEvents = eventsThisMonth(allEvents)
   const activeGroups = groups.length
 
   const turnPosition = activeTurn ? '1st 🔄' : (rotation?.turn_index != null ? ordinal(rotation.turn_index + 1) : '—')

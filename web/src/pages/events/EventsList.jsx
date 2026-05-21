@@ -8,6 +8,7 @@ import CreateEventModal from '../../components/modals/CreateEventModal'
 import ActivityPill from '../../components/ui/ActivityPill'
 import EventListRow from '../../components/events/EventListRow'
 import { eventsApi } from '../../api/events'
+import { ratingsApi } from '../../api/ratings'
 import { useAuth } from '../../contexts/AuthContext'
 import { resolveActivity } from '../../constants/activities'
 
@@ -23,7 +24,7 @@ const ACTIVITY_PILLS = [
 
 const STATUS_FILTERS = ['Upcoming', 'Completed', 'Cancelled']
 
-function EventGroup({ title, events }) {
+function EventGroup({ title, events, ratingsMap = {} }) {
   if (events.length === 0) return null
   return (
     <div style={{ marginBottom: '20px' }}>
@@ -35,7 +36,7 @@ function EventGroup({ title, events }) {
           {events.length}
         </span>
       </div>
-      {events.map(ev => <EventListRow key={ev.id} event={ev} />)}
+      {events.map(ev => <EventListRow key={ev.id} event={ev} avgRating={ratingsMap[ev.id] ?? null} />)}
     </div>
   )
 }
@@ -203,6 +204,7 @@ export default function EventsList() {
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [viewMode, setViewMode] = useState('list')
+  const [ratingsMap, setRatingsMap] = useState({})
 
   useEffect(() => {
     if (!user?.id) return
@@ -212,6 +214,31 @@ export default function EventsList() {
       .catch(() => setEvents([]))
       .finally(() => setLoading(false))
   }, [user?.id])
+
+  useEffect(() => {
+    if (statusFilter !== 'Completed' || events.length === 0) return
+    const completedIds = events
+      .filter(e => {
+        const s = e.status
+        if (s === 'completed') return true
+        if (s === 'scheduled' || s === 'in_progress') {
+          const d = e.scheduled_date || e.event_date
+          return d && new Date(d) < new Date()
+        }
+        return false
+      })
+      .map(e => e.id)
+    if (completedIds.length === 0) return
+    Promise.allSettled(
+      completedIds.map(id => ratingsApi.getEventStats(id).then(s => ({ id, avg: s?.average_score ?? null, count: s?.total_ratings ?? 0 })))
+    ).then(results => {
+      const map = {}
+      results.forEach(r => {
+        if (r.status === 'fulfilled' && r.value.count > 0) map[r.value.id] = r.value.avg
+      })
+      setRatingsMap(map)
+    })
+  }, [statusFilter, events])
 
   const now = new Date()
   const effectiveStatus = (e) => {
@@ -246,9 +273,14 @@ export default function EventsList() {
   }
 
   const getDate = e => e.event_date || e.scheduled_date
-  const thisWeek  = filtered.filter(e => getDate(e) && isThisWeek(new Date(getDate(e)), { weekStartsOn: 1 }))
-  const thisMonth = filtered.filter(e => getDate(e) && !isThisWeek(new Date(getDate(e)), { weekStartsOn: 1 }) && isThisMonth(new Date(getDate(e))))
-  const other     = filtered.filter(e => !getDate(e) || (!isThisWeek(new Date(getDate(e)), { weekStartsOn: 1 }) && !isThisMonth(new Date(getDate(e)))))
+
+  // Completed: single newest-first list. Others: week/month/later buckets.
+  const sortedCompleted = statusFilter === 'Completed'
+    ? [...filtered].sort((a, b) => new Date(getDate(b) || 0) - new Date(getDate(a) || 0))
+    : []
+  const thisWeek  = statusFilter !== 'Completed' ? filtered.filter(e => getDate(e) && isThisWeek(new Date(getDate(e)), { weekStartsOn: 1 })) : []
+  const thisMonth = statusFilter !== 'Completed' ? filtered.filter(e => getDate(e) && !isThisWeek(new Date(getDate(e)), { weekStartsOn: 1 }) && isThisMonth(new Date(getDate(e)))) : []
+  const other     = statusFilter !== 'Completed' ? filtered.filter(e => !getDate(e) || (!isThisWeek(new Date(getDate(e)), { weekStartsOn: 1 }) && !isThisMonth(new Date(getDate(e))))) : []
 
   const upcoming   = events.filter(e => effectiveStatus(e) === 'scheduled' || effectiveStatus(e) === 'in_progress').length
   const completed  = events.filter(e => effectiveStatus(e) === 'completed').length
@@ -388,6 +420,8 @@ export default function EventsList() {
               <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t2)', marginBottom: '6px' }}>No events found</div>
               <div style={{ fontSize: '13px' }}>Try a different filter or create a new event</div>
             </div>
+          ) : statusFilter === 'Completed' ? (
+            <EventGroup title="Past Events" events={sortedCompleted} ratingsMap={ratingsMap} />
           ) : (
             <>
               <EventGroup title="This Week" events={thisWeek} />

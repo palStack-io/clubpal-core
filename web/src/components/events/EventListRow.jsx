@@ -21,7 +21,7 @@ const statusMap = {
   cancelled: 'not-going',
 }
 
-export default function EventListRow({ event }) {
+export default function EventListRow({ event, avgRating = null }) {
   const navigate = useNavigate()
   const type = event.activity_type?.toLowerCase() || 'dining'
   const meta = activityMeta[type] || activityMeta.dining
@@ -104,9 +104,15 @@ export default function EventListRow({ event }) {
 
       {/* Right */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-        <StatusChip variant={statusMap[event.status] || 'pending'}>
-          {event.status || 'upcoming'}
-        </StatusChip>
+        {avgRating != null ? (
+          <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--amber)' }}>
+            ⭐ {Number(avgRating).toFixed(1)}
+          </span>
+        ) : (
+          <StatusChip variant={statusMap[event.status] || 'pending'}>
+            {event.status || 'upcoming'}
+          </StatusChip>
+        )}
         <span style={{ fontSize: '12px', color: 'var(--rose-soft)', fontWeight: 600 }}>
           View →
         </span>

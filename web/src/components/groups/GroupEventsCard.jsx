@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { format } from 'date-fns'
 import Card from '../ui/Card'
 import Button from '../ui/Button'
 import StatusChip from '../ui/StatusChip'
 import { resolveMediaUrl } from '../../utils/resolveMediaUrl'
+import { ratingsApi } from '../../api/ratings'
 
 const ACTIVITY = {
   dining: { emoji: '🍽️', color: '#f43f5e', rgb: '244,63,94',  gradient: 'linear-gradient(135deg, rgba(244,63,94,0.10), rgba(244,63,94,0.04))' },
@@ -25,7 +26,7 @@ function getStatusChipVariant(status) {
   return 'pending'
 }
 
-function EventRow({ event, onClick, onSplitBill }) {
+function EventRow({ event, onClick, onSplitBill, avgRating = null }) {
   const [hovered, setHovered] = useState(false)
   const act = getActivityMeta(event.activity_type)
   const dateStr = event.scheduled_date || event.event_date
@@ -98,11 +99,17 @@ function EventRow({ event, onClick, onSplitBill }) {
         </div>
       </div>
 
-      {/* Status chip */}
-      <StatusChip
-        status={getStatusChipVariant(event.status)}
-        label={event.status || 'pending'}
-      />
+      {/* Rating or status chip */}
+      {avgRating != null ? (
+        <span style={{ fontSize: '12px', fontWeight: 700, color: 'var(--amber)', flexShrink: 0 }}>
+          ⭐ {Number(avgRating).toFixed(1)}
+        </span>
+      ) : (
+        <StatusChip
+          status={getStatusChipVariant(event.status)}
+          label={event.status || 'pending'}
+        />
+      )}
 
       {/* Split Bill button */}
       {event.status !== 'cancelled' && (
@@ -164,8 +171,28 @@ function TabPill({ label, active, onClick }) {
 
 export default function GroupEventsCard({ upcoming = [], past = [], groupId, isMyTurn, onNewEvent }) {
   const [activeTab, setActiveTab] = useState('upcoming')
+  const [ratingsMap, setRatingsMap] = useState({})
 
-  const events = activeTab === 'upcoming' ? upcoming : past
+  useEffect(() => {
+    if (activeTab !== 'past' || past.length === 0) return
+    Promise.allSettled(
+      past.map(e => ratingsApi.getEventStats(e.id).then(s => ({ id: e.id, avg: s?.average_score ?? null, count: s?.total_ratings ?? 0 })))
+    ).then(results => {
+      const map = {}
+      results.forEach(r => {
+        if (r.status === 'fulfilled' && r.value.count > 0) map[r.value.id] = r.value.avg
+      })
+      setRatingsMap(map)
+    })
+  }, [activeTab, past])
+
+  const sortedPast = [...past].sort((a, b) => {
+    const da = a.scheduled_date || a.event_date
+    const db = b.scheduled_date || b.event_date
+    return new Date(db || 0) - new Date(da || 0)
+  })
+
+  const events = activeTab === 'upcoming' ? upcoming : sortedPast
 
   const headerAction = (
     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -233,6 +260,7 @@ export default function GroupEventsCard({ upcoming = [], past = [], groupId, isM
                   event={event}
                   onClick={() => window.location.href = `/events/${event.id}`}
                   onSplitBill={id => window.location.href = `/events/${id}#bill-split`}
+                  avgRating={ratingsMap[event.id] ?? null}
                 />
               </div>
             ))}

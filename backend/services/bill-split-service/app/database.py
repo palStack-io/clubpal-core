@@ -642,6 +642,16 @@ def cancel_claiming(split_id: int) -> None:
     conn.close()
 
 
+def delete_split_by_id(split_id: int) -> None:
+    """Delete a split and all its items, shares, and claims (FK CASCADE handles children)."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM bill_splits WHERE id = %s", (split_id,))
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
 def mark_unpaid_reminder_sent(share_id: int) -> None:
     conn = get_conn()
     cur = conn.cursor()

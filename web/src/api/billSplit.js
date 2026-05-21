@@ -38,4 +38,6 @@ export const billSplitApi = {
     billSplitClient.post(`/${splitId}/finalize`).then(r => r.data),
   cancelClaiming: (splitId) =>
     billSplitClient.delete(`/${splitId}/claiming`).then(r => r.data),
+  cancelSplit: (splitId) =>
+    billSplitClient.delete(`/${splitId}`).then(r => r.data),
 }

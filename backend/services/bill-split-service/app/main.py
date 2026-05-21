@@ -38,6 +38,7 @@ from app.database import (
     get_claim_by_guest_token,
     apply_claims_to_items,
     delete_shares_by_split,
+    delete_split_by_id,
     get_unpaid_shares_for_reminder,
     mark_unpaid_reminder_sent,
     cancel_claiming,
@@ -885,6 +886,22 @@ async def cancel_claiming_endpoint(
         raise HTTPException(status_code=409, detail="Split is not currently in claiming state")
 
     cancel_claiming(split_id)
+    return {"ok": True}
+
+
+@app.delete("/{split_id}")
+async def delete_split(
+    split_id: int,
+    current_user: dict = Depends(verify_session),
+):
+    """Payer deletes a split entirely so a new one can be created."""
+    split = get_split_by_id(split_id)
+    if not split:
+        raise HTTPException(status_code=404, detail="Bill split not found")
+    if current_user["id"] != split["paid_by_user_id"]:
+        raise HTTPException(status_code=403, detail="Only the payer can cancel this split")
+
+    delete_split_by_id(split_id)
     return {"ok": True}
 
 

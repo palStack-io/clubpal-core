@@ -3,10 +3,11 @@ import { billSplitApi } from '../../api/billSplit'
 import Card from '../ui/Card'
 import Button from '../ui/Button'
 
-export default function SettlementTracker({ split, currentUser, onRefresh, onAddAnother }) {
+export default function SettlementTracker({ split, currentUser, onRefresh, onAddAnother, onCancel }) {
   const [remindSent, setRemindSent] = useState(false)
   const [remindLoading, setRemindLoading] = useState(false)
   const [markingPaid, setMarkingPaid] = useState(null) // userId being marked
+  const [cancelLoading, setCancelLoading] = useState(false)
 
   const shares = split.shares || []
   const payerShare = shares.find(s => s.user_id === split.paid_by_user_id)
@@ -42,6 +43,19 @@ export default function SettlementTracker({ split, currentUser, onRefresh, onAdd
       // ignore
     } finally {
       setRemindLoading(false)
+    }
+  }
+
+  const handleCancel = async () => {
+    if (!window.confirm('Cancel this split? This will remove all shares and let you start over.')) return
+    setCancelLoading(true)
+    try {
+      await billSplitApi.cancelSplit(split.id)
+      if (onCancel) onCancel()
+    } catch {
+      // ignore
+    } finally {
+      setCancelLoading(false)
     }
   }
 
@@ -264,6 +278,26 @@ export default function SettlementTracker({ split, currentUser, onRefresh, onAdd
               </div>
             )}
           </div>
+
+          {isPayer && onCancel && (
+            <div style={{ borderTop: '1px solid var(--glass)', paddingTop: '12px' }}>
+              <button
+                onClick={handleCancel}
+                disabled={cancelLoading}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  cursor: cancelLoading ? 'not-allowed' : 'pointer',
+                  color: 'var(--t3)',
+                  fontSize: '12px',
+                  padding: 0,
+                  opacity: cancelLoading ? 0.5 : 1,
+                }}
+              >
+                {cancelLoading ? 'Canceling…' : 'Cancel split'}
+              </button>
+            </div>
+          )}
         </div>
       </Card.Body>
     </Card>

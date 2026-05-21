@@ -100,6 +100,14 @@ export default function BillSplitSection({ event, attendees, currentUser }) {
     </div>
   )
 
+  const handleCancelSplit = async () => {
+    const arr = await loadSplits()
+    if (arr.length === 0) {
+      setStep('cta')
+    }
+    // if other rounds remain, loadSplits already updated state and activeSplit will reflect them
+  }
+
   if (step === 'settled' && activeSplit) return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <SettlementTracker
@@ -107,6 +115,7 @@ export default function BillSplitSection({ event, attendees, currentUser }) {
         currentUser={currentUser}
         onRefresh={loadSplits}
         onAddAnother={handleAddAnother}
+        onCancel={handleCancelSplit}
       />
       {pastSplits.length > 0 && (
         <PastBillsAccordion splits={pastSplits} currentUser={currentUser} />

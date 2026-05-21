@@ -75,12 +75,19 @@ async def health_check():
 # ===== Rating Endpoints =====
 
 @app.post("/ratings", response_model=RatingResponse, status_code=201)
-async def create_rating_endpoint(rating_data: RatingCreate, user_id: int = Depends(get_current_user_id)):
+async def create_rating_endpoint(
+    rating_data: RatingCreate,
+    authorization: Optional[str] = Header(None),
+    user_id: int = Depends(get_current_user_id),
+):
     """Create a new rating."""
-    # Verify event exists via events service
+    # Verify event exists via events service — forward caller's auth token
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(f"{EVENTS_SERVICE_URL}/events/{rating_data.event_id}")
+            response = await client.get(
+                f"{EVENTS_SERVICE_URL}/events/{rating_data.event_id}",
+                headers={"Authorization": authorization} if authorization else {},
+            )
             if response.status_code != 200:
                 raise HTTPException(status_code=404, detail="Event not found")
         except httpx.RequestError:
@@ -219,12 +226,15 @@ async def get_user_stats_endpoint(user_id: int):
 
 
 @app.get("/events/{event_id}/stats", response_model=EventStatsResponse)
-async def get_event_stats_endpoint(event_id: int):
+async def get_event_stats_endpoint(event_id: int, authorization: Optional[str] = Header(None)):
     """Get rating statistics for an event."""
-    # Verify event exists and get host
+    # Verify event exists and get host — forward caller's auth token
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(f"{EVENTS_SERVICE_URL}/events/{event_id}")
+            response = await client.get(
+                f"{EVENTS_SERVICE_URL}/events/{event_id}",
+                headers={"Authorization": authorization} if authorization else {},
+            )
             if response.status_code != 200:
                 raise HTTPException(status_code=404, detail="Event not found")
 

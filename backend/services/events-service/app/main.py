@@ -1000,7 +1000,7 @@ async def send_rsvp_reminder(event_id: int, user_id: int = Depends(get_current_u
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            await client.post(
+            resp = await client.post(
                 f"{GATEWAY_URL}/internal/notify/event",
                 json={
                     "user_ids": target_ids,
@@ -1013,6 +1013,10 @@ async def send_rsvp_reminder(event_id: int, user_id: int = Depends(get_current_u
                 },
                 headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
             )
+        if resp.status_code not in (200, 202):
+            logger.warning(f"RSVP nudge gateway returned {resp.status_code} for event {event_id}: {resp.text[:200]}")
+        else:
+            logger.info(f"RSVP nudge sent for event {event_id} to {len(target_ids)} user(s)")
     except Exception as e:
         logger.warning(f"Failed to send RSVP nudge for event {event_id}: {e}")
 

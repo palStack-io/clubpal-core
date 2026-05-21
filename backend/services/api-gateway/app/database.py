@@ -1066,6 +1066,35 @@ def get_push_tokens_for_users(user_ids: list) -> list:
     return [r["token"] for r in rows]
 
 
+def delete_push_token(token: str) -> None:
+    """Remove a stale or invalid Expo push token from the database."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM user_push_tokens WHERE token = %s", (token,))
+    conn.commit()
+    conn.close()
+
+
+def get_inactive_users(days_min: int, days_max: int) -> list:
+    """Return users whose last login was between days_min and days_max days ago.
+
+    Used by the re-engagement scheduler to find users who haven't checked in recently.
+    """
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT id, username, email, full_name, last_login_at
+        FROM users
+        WHERE is_active = 1
+          AND last_login_at IS NOT NULL
+          AND last_login_at < NOW() - INTERVAL '%s days'
+          AND last_login_at >= NOW() - INTERVAL '%s days'
+    """, (days_min, days_max))
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 # ── In-app notifications ──────────────────────────────────────────────────────
 
 def create_notification(user_id: int, type: str, title: str, body: str = None,

@@ -24,10 +24,14 @@ export const billSplitApi = {
   updateIntegrations: (data) => gatewayClient.put('/admin/integrations', data).then(r => r.data),
   startClaiming: (splitId) =>
     billSplitClient.post(`/${splitId}/start-claiming`).then(r => r.data),
-  getClaimView: (token) =>
-    billSplitClient.get(`/claim/${token}`).then(r => r.data),
-  submitClaim: (token, claimedItems) =>
-    billSplitClient.post(`/claim/${token}/submit`, { claimed_items: claimedItems }).then(r => r.data),
+  getClaimView: (token, guestToken) =>
+    billSplitClient.get(`/claim/${token}`, { params: guestToken ? { guest_token: guestToken } : undefined }).then(r => r.data),
+  submitClaim: (token, claimedItems, guestName, guestToken) =>
+    billSplitClient.post(`/claim/${token}/submit`, {
+      claimed_items: claimedItems,
+      ...(guestName ? { guest_name: guestName } : {}),
+      ...(guestToken ? { guest_token: guestToken } : {}),
+    }).then(r => r.data),
   getClaimingStatus: (splitId) =>
     billSplitClient.get(`/${splitId}/claiming-status`).then(r => r.data),
   finalizeClaims: (splitId) =>

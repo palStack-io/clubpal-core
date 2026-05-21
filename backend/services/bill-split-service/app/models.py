@@ -82,15 +82,18 @@ class StartClaimingResponse(BaseModel):
 
 class ClaimItemsRequest(BaseModel):
     claimed_items: list[int]  # list of item IDs this user claims
+    guest_name: Optional[str] = None   # required when submitting without an account
+    guest_token: Optional[str] = None  # browser session token for guest re-submission
 
 
 class ClaimStatusMember(BaseModel):
-    user_id: int
+    user_id: Optional[int]  # None for guests
     full_name: str
     avatar_url: Optional[str]
     submitted: bool
     submitted_at: Optional[str]
     claimed_items: list[int]
+    is_guest: bool = False
 
 
 class ClaimStatusResponse(BaseModel):

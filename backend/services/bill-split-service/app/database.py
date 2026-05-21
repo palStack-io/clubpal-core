@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 from typing import Optional
 
 import psycopg2
@@ -99,6 +100,23 @@ def init_db():
     cur.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_bill_claims_split_user ON bill_claims(split_id, user_id)")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_bill_splits_claim_token ON bill_splits(claim_token)")
     cur.execute("ALTER TABLE bill_shares ADD COLUMN IF NOT EXISTS unpaid_reminder_sent BOOLEAN DEFAULT FALSE")
+
+    # ── Guest claim support migration ─────────────────────────────────────────
+    # Make user_id nullable so guests (no account) can submit claims
+    cur.execute("ALTER TABLE bill_claims ALTER COLUMN user_id DROP NOT NULL")
+    cur.execute("ALTER TABLE bill_claims ADD COLUMN IF NOT EXISTS guest_name TEXT")
+    cur.execute("ALTER TABLE bill_claims ADD COLUMN IF NOT EXISTS guest_token TEXT")
+    # Replace full unique constraint with a partial index (non-null user_id only)
+    cur.execute("ALTER TABLE bill_claims DROP CONSTRAINT IF EXISTS bill_claims_split_id_user_id_key")
+    cur.execute("DROP INDEX IF EXISTS idx_bill_claims_split_user")
+    cur.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_bill_claims_split_user "
+        "ON bill_claims(split_id, user_id) WHERE user_id IS NOT NULL"
+    )
+    cur.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_bill_claims_guest_token "
+        "ON bill_claims(guest_token) WHERE guest_token IS NOT NULL"
+    )
 
     # ── Multi-round support migration ─────────────────────────────────────────
     # Drop old single-split-per-event constraint, replace with per-round unique
@@ -493,20 +511,41 @@ def get_split_by_claim_token(claim_token: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
-def submit_claim(split_id: int, user_id: int, claimed_items: list) -> dict:
+def submit_claim(
+    split_id: int,
+    user_id: Optional[int],
+    claimed_items: list,
+    guest_name: Optional[str] = None,
+    guest_token: Optional[str] = None,
+) -> dict:
     conn = get_conn()
     cur = conn.cursor()
-    cur.execute(
-        """
-        INSERT INTO bill_claims (split_id, user_id, claimed_items, submitted_at)
-        VALUES (%s, %s, %s, NOW())
-        ON CONFLICT (split_id, user_id) DO UPDATE
-            SET claimed_items = EXCLUDED.claimed_items,
-                submitted_at = NOW()
-        RETURNING *
-        """,
-        (split_id, user_id, json.dumps(claimed_items)),
-    )
+    if user_id is not None:
+        cur.execute(
+            """
+            INSERT INTO bill_claims (split_id, user_id, claimed_items, submitted_at)
+            VALUES (%s, %s, %s, NOW())
+            ON CONFLICT (split_id, user_id) WHERE user_id IS NOT NULL DO UPDATE
+                SET claimed_items = EXCLUDED.claimed_items,
+                    submitted_at = NOW()
+            RETURNING *
+            """,
+            (split_id, user_id, json.dumps(claimed_items)),
+        )
+    else:
+        effective_token = guest_token or str(uuid.uuid4())
+        cur.execute(
+            """
+            INSERT INTO bill_claims (split_id, user_id, claimed_items, submitted_at, guest_name, guest_token)
+            VALUES (%s, NULL, %s, NOW(), %s, %s)
+            ON CONFLICT (guest_token) WHERE guest_token IS NOT NULL DO UPDATE
+                SET claimed_items = EXCLUDED.claimed_items,
+                    submitted_at = NOW(),
+                    guest_name = EXCLUDED.guest_name
+            RETURNING *
+            """,
+            (split_id, json.dumps(claimed_items), guest_name, effective_token),
+        )
     row = dict(cur.fetchone())
     conn.commit()
     cur.close()
@@ -514,6 +553,21 @@ def submit_claim(split_id: int, user_id: int, claimed_items: list) -> dict:
     if not isinstance(row.get("claimed_items"), list):
         row["claimed_items"] = json.loads(row["claimed_items"]) if row["claimed_items"] else []
     return row
+
+
+def get_claim_by_guest_token(guest_token: str) -> Optional[dict]:
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM bill_claims WHERE guest_token = %s", (guest_token,))
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    if not row:
+        return None
+    d = dict(row)
+    if not isinstance(d.get("claimed_items"), list):
+        d["claimed_items"] = json.loads(d["claimed_items"]) if d["claimed_items"] else []
+    return d
 
 
 def get_claims_by_split(split_id: int) -> list:

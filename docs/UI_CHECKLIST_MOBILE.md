@@ -385,7 +385,47 @@ The mobile app is built with Expo Router (React Native). Test on a real device w
 
 ---
 
-## 9. Notifications (`/notifications`)
+## 9. Bill Split (`/events/[id]/billsplit/...`)
+
+> Bill split is initiated from the event detail screen by the payer. The claiming flow is accessible to anyone with the claim URL (no login required).
+
+### 9.1 Assign Screen (`/events/[id]/billsplit/assign`)
+- [ ] Receipt items list renders from OCR or manual entry
+- [ ] Each item row shows name + price
+- [ ] Attendees shown as selectable chips per item
+- [ ] Submitting assignment → navigates to claiming screen
+- [ ] "Cancel" returns to event detail without saving
+
+### 9.2 Claiming Screen (`/events/[id]/billsplit/claiming`)
+- [ ] "SHARE LINK" card visible at top of screen
+  - [ ] Claim URL rendered as readable text (truncated if long)
+  - [ ] "Copy Link" button — tapping copies URL to clipboard via `expo-clipboard`; button text briefly changes to "Copied!" feedback
+  - [ ] "Share" button — tapping opens native iOS/Android share sheet with the claim URL
+- [ ] Member list renders showing all RSVP'd attendees
+  - [ ] Each row shows avatar initials, name, items claimed (or "—" if none yet), submitted timestamp
+  - [ ] Members with `is_guest=true` show a purple "GUEST" badge next to their name
+  - [ ] Submitted members show claimed items in a readable list
+- [ ] Progress indicator shows how many of N members have submitted
+- [ ] Pull-to-refresh updates submission status
+- [ ] "Finalize" button visible to payer; disabled until sufficient members have submitted
+- [ ] Tapping "Finalize" opens confirmation; on confirm, bill shares are computed and members notified
+
+### 9.3 Claim Page — Web (public, no login required)
+> Tested in browser, not native app — included here for cross-platform reference.
+- [ ] Unauthenticated visitor sees **choice screen**: "Log in to your account", "Create a free account", and "Continue as Guest →"
+- [ ] "Log in" link → `/login?redirect=/claim/{token}`; after login, redirects back to claim page
+- [ ] "Create account" link → `/register?redirect=/claim/{token}`; same redirect after register
+- [ ] "Continue as Guest →" shows guest name input form with `autoFocus`
+- [ ] Guest name required; submit without name → validation error shown
+- [ ] "Have an account? Log in instead →" link visible on guest form
+- [ ] Authenticated visitor sees items list directly (no name prompt)
+- [ ] Items list: each item shows name, price, checkbox to select
+- [ ] Submitting items → success message; re-visiting with same `guest_token` (localStorage) pre-fills prior selection
+- [ ] Guest token persisted in `localStorage` under `claim_guest_{token}` key; re-submitting before finalization updates selection (no duplicate)
+
+---
+
+## 10. Notifications (`/notifications`)
 
 - [ ] Screen accessible via bell icon on Home header
 - [ ] Notification list renders (or empty state "All caught up")
@@ -405,7 +445,7 @@ The mobile app is built with Expo Router (React Native). Test on a real device w
 
 ---
 
-## 10. Dev Settings (`/dev-settings`)
+## 11. Dev Settings (`/dev-settings`)
 
 > Only visible in development builds (`__DEV__ === true`). Should not appear in production.
 
@@ -417,7 +457,7 @@ The mobile app is built with Expo Router (React Native). Test on a real device w
 
 ---
 
-## 11. Deep Links & Navigation
+## 12. Deep Links & Navigation
 
 - [ ] `/invite/[token]` — invite deep link opens correct screen from outside the app
 - [ ] Back navigation (swipe-back on iOS, hardware back on Android) works on all stack screens
@@ -426,7 +466,7 @@ The mobile app is built with Expo Router (React Native). Test on a real device w
 
 ---
 
-## 12. Haptics
+## 13. Haptics
 
 > All haptic calls should fire on real devices. Skip on simulator.
 
@@ -441,7 +481,7 @@ The mobile app is built with Expo Router (React Native). Test on a real device w
 
 ---
 
-## 13. Offline & Error States
+## 14. Offline & Error States
 
 - [ ] **No network:** app launches without crash; screens show empty states or stale cached data
 - [ ] **API unreachable:** discover screens show empty results, not a crash or blank white screen
@@ -453,7 +493,7 @@ The mobile app is built with Expo Router (React Native). Test on a real device w
 
 ---
 
-## 14. Keyboard Behaviour
+## 15. Keyboard Behaviour
 
 - [ ] Text inputs in modals/forms scroll above keyboard when focused (KeyboardAvoidingView or equivalent)
 - [ ] Keyboard dismisses on scroll in long forms
@@ -462,7 +502,7 @@ The mobile app is built with Expo Router (React Native). Test on a real device w
 
 ---
 
-## 15. Platform-Specific
+## 16. Platform-Specific
 
 ### iOS
 - [ ] Dynamic Island / notch — no content clipped at top
@@ -507,6 +547,7 @@ The mobile app is built with Expo Router (React Native). Test on a real device w
 | Discover — Hikes | | | | |
 | Discover — Games | | | | |
 | Discover — Arts | | | | |
+| Bill Split | | | | |
 | Profile Tab | | | | |
 | Notifications | | | | |
 | Haptics | | | | |

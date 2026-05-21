@@ -279,6 +279,31 @@ Check off items as you go. Items marked **[admin]** require an admin account.
 - [ ] Opens from event detail
 - [ ] Selecting status and saving updates AttendanceCard without page reload
 
+### 6.7 Bill Split — Claim Page (`/claim/:token`, public — no login required)
+
+> This page is accessible to anyone with the claim URL. No auth required.
+
+**Unauthenticated visitor (first visit, no prior guest session):**
+- [ ] Choice screen renders: "Log in to your account" button, "Create a free account" button, a divider, and "Continue as Guest →" button
+- [ ] "Log in to your account" → navigates to `/login?redirect=/claim/{token}`; after login, redirected back to the claim page as authenticated user
+- [ ] "Create a free account" → navigates to `/register?redirect=/claim/{token}`; same redirect after registration
+- [ ] "Continue as Guest →" → transitions to guest name input screen
+
+**Guest claiming view:**
+- [ ] Name input field renders with `autoFocus`
+- [ ] "Have an account? Log in instead →" link navigates to `/login?redirect=/claim/{token}`
+- [ ] Submitting with empty name → inline validation error shown
+- [ ] Items list: each item shows name and price; checkbox to claim it
+- [ ] Submit button disabled while submitting
+- [ ] Successful submit → success message shown; `guest_token` persisted to `localStorage` under key `claim_guest_{token}`
+- [ ] Re-visiting the same URL with a prior `guest_token` in localStorage → skips choice screen, goes straight to guest form with prior selections pre-filled
+- [ ] Re-submitting before finalization → updates existing claim (no duplicate row)
+
+**Authenticated view:**
+- [ ] Items list shown directly (no name prompt)
+- [ ] Submit → success message; claim stored with `user_id` for proper settlement tracking
+- [ ] Logged-in non-attendee who claims via URL is auto-included in finalization (gets a bill share row)
+
 ---
 
 ## 7. Discover — General (applies to all categories)

@@ -35,6 +35,7 @@ from app.database import (
     get_split_by_claim_token,
     submit_claim,
     get_claims_by_split,
+    get_claim_by_guest_token,
     apply_claims_to_items,
     delete_shares_by_split,
     get_unpaid_shares_for_reminder,
@@ -166,6 +167,28 @@ async def verify_session(authorization: Optional[str] = Header(None)) -> dict:
     raise HTTPException(status_code=401, detail="Invalid or expired session")
 
 
+async def _optional_user(authorization: Optional[str]) -> Optional[dict]:
+    """Try to authenticate but return None instead of raising 401 (for public endpoints)."""
+    if not authorization or not authorization.startswith("Bearer "):
+        return None
+    token = authorization[len("Bearer "):]
+    if token in _session_cache:
+        return _session_cache[token]
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(
+                f"{API_GATEWAY_URL}/auth/me",
+                headers={"Authorization": authorization},
+            )
+            if r.status_code == 200:
+                user = r.json()
+                _session_cache[token] = user
+                return user
+    except Exception:
+        pass
+    return None
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 async def _fetch_user_profile(uid: int) -> dict:
@@ -192,12 +215,14 @@ def _display_name(profile: dict) -> str:
     )
 
 
-async def _fetch_event(event_id: int, caller_id: int) -> Optional[dict]:
+async def _fetch_event(event_id: int, authorization: Optional[str] = None) -> Optional[dict]:
+    """Fetch event from events-service, forwarding caller's auth token."""
+    headers = {"Authorization": authorization} if authorization else {}
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             r = await client.get(
                 f"{EVENTS_SERVICE_URL}/events/{event_id}",
-                params={"user_id": caller_id},
+                headers=headers,
             )
             if r.status_code == 200:
                 return r.json()
@@ -206,12 +231,14 @@ async def _fetch_event(event_id: int, caller_id: int) -> Optional[dict]:
     return None
 
 
-async def _fetch_attendees(event_id: int, caller_id: int) -> list:
+async def _fetch_attendees(event_id: int, authorization: Optional[str] = None) -> list:
+    """Fetch attendees from events-service, forwarding caller's auth token."""
+    headers = {"Authorization": authorization} if authorization else {}
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             r = await client.get(
                 f"{EVENTS_SERVICE_URL}/events/{event_id}/attendees",
-                params={"user_id": caller_id},
+                headers=headers,
             )
             if r.status_code == 200:
                 data = r.json()
@@ -389,17 +416,18 @@ async def ocr_receipt(
 @app.post("/", response_model=BillSplitResponse, status_code=201)
 async def create_split(
     req: CreateBillSplitRequest,
+    authorization: Optional[str] = Header(None),
     current_user: dict = Depends(verify_session),
 ):
     caller_id = current_user["id"]
 
     # 1. Verify event exists
-    event = await _fetch_event(req.event_id, caller_id)
+    event = await _fetch_event(req.event_id, authorization)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
     # 2. Fetch attendees from events-service
-    attendees = await _fetch_attendees(req.event_id, caller_id)
+    attendees = await _fetch_attendees(req.event_id, authorization)
     real_attendee_ids = set()
     for a in attendees:
         uid = a.get("user_id") or a.get("id")
@@ -556,6 +584,7 @@ async def create_split(
 @app.get("/event/{event_id}", response_model=list[BillSplitResponse])
 async def get_split_for_event(
     event_id: int,
+    authorization: Optional[str] = Header(None),
     current_user: dict = Depends(verify_session),
 ):
     caller_id = current_user["id"]
@@ -565,7 +594,7 @@ async def get_split_for_event(
         return []
 
     # Validate caller is an attendee (check against any split's payer or event attendees)
-    attendees = await _fetch_attendees(event_id, caller_id)
+    attendees = await _fetch_attendees(event_id, authorization)
     attendee_ids = set()
     for a in attendees:
         uid = a.get("user_id") or a.get("id")
@@ -603,9 +632,9 @@ async def pay_by_token(payment_token: str):
         # Already paid — return success idempotently
         split = get_split_by_id(share["split_id"])
         event_name = f"Event {split['event_id']}" if split else "Event"
-        # Best effort: fetch event name
+        # Best effort: fetch event name (no auth available in public endpoint)
         if split:
-            event = await _fetch_event(split["event_id"], split["paid_by_user_id"])
+            event = await _fetch_event(split["event_id"])
             if event:
                 event_name = event.get("title") or event.get("name") or event_name
         already_profile = await _fetch_user_profile(share["user_id"])
@@ -623,7 +652,7 @@ async def pay_by_token(payment_token: str):
     event_name = f"Event {split['event_id']}" if split else "Event"
 
     if split:
-        event = await _fetch_event(split["event_id"], split["paid_by_user_id"])
+        event = await _fetch_event(split["event_id"])
         if event:
             event_name = event.get("title") or event.get("name") or event_name
 
@@ -643,6 +672,7 @@ async def pay_by_token(payment_token: str):
 async def mark_user_share_paid(
     split_id: int,
     user_id: int,
+    authorization: Optional[str] = Header(None),
     current_user: dict = Depends(verify_session),
 ):
     split = get_split_by_id(split_id)
@@ -672,8 +702,10 @@ async def mark_user_share_paid(
         event_title = f"Event {event_id}"
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                r = await client.get(f"{EVENTS_SERVICE_URL}/events/{event_id}",
-                                     params={"user_id": split["paid_by_user_id"]})
+                r = await client.get(
+                    f"{EVENTS_SERVICE_URL}/events/{event_id}",
+                    headers={"Authorization": authorization} if authorization else {},
+                )
                 if r.status_code == 200:
                     event_title = r.json().get("title") or event_title
         except Exception:
@@ -710,6 +742,7 @@ async def mark_user_share_paid(
 @app.post("/{split_id}/reminders")
 async def send_reminders(
     split_id: int,
+    authorization: Optional[str] = Header(None),
     current_user: dict = Depends(verify_session),
 ):
     split = get_split_by_id(split_id)
@@ -732,7 +765,7 @@ async def send_reminders(
         return {"sent": 0}
 
     # Best-effort: fetch event info
-    event = await _fetch_event(split["event_id"], current_user["id"])
+    event = await _fetch_event(split["event_id"], authorization)
     event_name = (event.get("title") or event.get("name") or f"Event {split['event_id']}") if event else f"Event {split['event_id']}"
     event_date = str(event.get("date") or event.get("event_date") or "") if event else ""
 
@@ -783,6 +816,7 @@ async def send_reminders(
 @app.post("/{split_id}/start-claiming", response_model=StartClaimingResponse)
 async def start_claiming(
     split_id: int,
+    authorization: Optional[str] = Header(None),
     current_user: dict = Depends(verify_session),
 ):
     split = get_split_by_id(split_id)
@@ -805,13 +839,13 @@ async def start_claiming(
     event_id = split["event_id"]
     payer_id = split["paid_by_user_id"]
     try:
-        attendees = await _fetch_attendees(event_id, payer_id)
+        attendees = await _fetch_attendees(event_id, authorization)
         attendee_ids = [
             int(a.get("user_id") or a.get("id"))
             for a in attendees
             if (a.get("user_id") or a.get("id")) and int(a.get("user_id") or a.get("id")) != payer_id
         ]
-        event = await _fetch_event(event_id, payer_id)
+        event = await _fetch_event(event_id, authorization)
         event_name = (event.get("title") or event.get("name") or f"Event {event_id}") if event else f"Event {event_id}"
         payer_profile = await _fetch_user_profile(payer_id)
         payer_name = _display_name(payer_profile)
@@ -838,8 +872,11 @@ async def start_claiming(
 @app.get("/claim/{claim_token}", response_model=ClaimViewResponse)
 async def get_claim_view(
     claim_token: str,
-    current_user: dict = Depends(verify_session),
+    guest_token: Optional[str] = None,
+    authorization: Optional[str] = Header(None),
 ):
+    current_user = await _optional_user(authorization)
+
     split = get_split_by_claim_token(claim_token)
     if not split:
         raise HTTPException(status_code=404, detail="Claim link not found or expired")
@@ -850,23 +887,29 @@ async def get_claim_view(
     items = get_items_by_split(split["id"])
     claims = get_claims_by_split(split["id"])
 
-    # Find current user's existing claim
-    my_claim = next((c for c in claims if c["user_id"] == current_user["id"]), None)
+    # Find current user/guest's existing claim
+    if current_user:
+        my_claim = next((c for c in claims if c.get("user_id") == current_user["id"]), None)
+    elif guest_token:
+        my_claim = next((c for c in claims if c.get("guest_token") == guest_token), None)
+    else:
+        my_claim = None
     my_claimed_items = my_claim["claimed_items"] if my_claim else []
     already_submitted = bool(my_claim and my_claim.get("submitted_at"))
 
     # Fetch event name and payer name
-    event = await _fetch_event(split["event_id"], current_user["id"])
+    event = await _fetch_event(split["event_id"], authorization)
     event_name = (event.get("title") or event.get("name") or f"Event {split['event_id']}") if event else f"Event {split['event_id']}"
 
     payer_profile = await _fetch_user_profile(split["paid_by_user_id"])
     payer_name = _display_name(payer_profile)
 
-    # Build per-item claimer names from submitted claims (excluding current user)
+    # Build per-item claimer names from submitted claims (excluding current viewer)
     claimer_uids: set[int] = set()
     for claim in claims:
-        if claim.get("submitted_at") and claim["user_id"] != current_user["id"]:
-            claimer_uids.add(claim["user_id"])
+        uid = claim.get("user_id")
+        if claim.get("submitted_at") and uid and (not current_user or uid != current_user["id"]):
+            claimer_uids.add(uid)
 
     if claimer_uids:
         profile_tasks = [_fetch_user_profile(uid) for uid in claimer_uids]
@@ -875,15 +918,22 @@ async def get_claim_view(
     else:
         claimer_profile_map = {}
 
-    # item_id -> list of other claimers' display names
+    # item_id -> list of other claimers' display names (app users + guests)
     item_claimer_names: dict[int, list[str]] = {}
     for claim in claims:
-        if claim.get("submitted_at") and claim["user_id"] != current_user["id"]:
-            name = _display_name(claimer_profile_map.get(claim["user_id"], {}))
-            for item_id in claim["claimed_items"]:
-                item_claimer_names.setdefault(item_id, [])
-                if name not in item_claimer_names[item_id]:
-                    item_claimer_names[item_id].append(name)
+        if not claim.get("submitted_at"):
+            continue
+        uid = claim.get("user_id")
+        # Skip current viewer's own claim
+        if current_user and uid == current_user["id"]:
+            continue
+        if guest_token and claim.get("guest_token") == guest_token:
+            continue
+        name = _display_name(claimer_profile_map.get(uid, {})) if uid else (claim.get("guest_name") or "Guest")
+        for item_id in claim["claimed_items"]:
+            item_claimer_names.setdefault(item_id, [])
+            if name not in item_claimer_names[item_id]:
+                item_claimer_names[item_id].append(name)
 
     item_responses = [
         ClaimItemResponse(
@@ -915,13 +965,20 @@ async def get_claim_view(
 async def submit_my_claim(
     claim_token: str,
     req: ClaimItemsRequest,
-    current_user: dict = Depends(verify_session),
+    authorization: Optional[str] = Header(None),
 ):
+    current_user = await _optional_user(authorization)
+
     split = get_split_by_claim_token(claim_token)
     if not split:
         raise HTTPException(status_code=404, detail="Claim link not found")
     if split["status"] not in ("claiming", "draft"):
         raise HTTPException(status_code=410, detail="Claiming is no longer open")
+
+    # Guests must supply a name
+    if not current_user:
+        if not req.guest_name or not req.guest_name.strip():
+            raise HTTPException(status_code=400, detail="guest_name is required when not logged in")
 
     # Validate item IDs belong to this split
     items = get_items_by_split(split["id"])
@@ -930,14 +987,23 @@ async def submit_my_claim(
     if invalid:
         raise HTTPException(status_code=400, detail=f"Invalid item IDs: {invalid}")
 
-    submit_claim(split["id"], current_user["id"], req.claimed_items)
+    if current_user:
+        submit_claim(split["id"], current_user["id"], req.claimed_items)
+        member_name = current_user.get("full_name") or current_user.get("username") or "Someone"
+        returned_guest_token = None
+    else:
+        row = submit_claim(
+            split["id"], None, req.claimed_items,
+            guest_name=req.guest_name.strip(),
+            guest_token=req.guest_token,
+        )
+        member_name = req.guest_name.strip()
+        returned_guest_token = row.get("guest_token")
 
-    # Notify payer that this member submitted their claim
+    # Notify payer
     payer_id = split["paid_by_user_id"]
-    if payer_id != current_user["id"]:
+    if not current_user or payer_id != current_user["id"]:
         try:
-            member_profile = await _fetch_user_profile(current_user["id"])
-            member_name = _display_name(member_profile)
             async with httpx.AsyncClient(timeout=5.0) as client:
                 await client.post(
                     f"{API_GATEWAY_URL}/internal/notify/push",
@@ -953,7 +1019,10 @@ async def submit_my_claim(
         except Exception as e:
             logger.warning(f"Failed to notify payer of claim submission: {e}")
 
-    return {"ok": True, "submitted": True}
+    response = {"ok": True, "submitted": True}
+    if returned_guest_token:
+        response["guest_token"] = returned_guest_token
+    return response
 
 
 @app.get("/{split_id}/claiming-status", response_model=ClaimStatusResponse)
@@ -976,7 +1045,7 @@ async def get_claiming_status(
     profiles_list = await asyncio.gather(*profile_tasks)
     profiles = {p["id"]: p for p in profiles_list}
 
-    claims_by_user = {c["user_id"]: c for c in claims}
+    claims_by_user = {c["user_id"]: c for c in claims if c.get("user_id") is not None}
 
     members = []
     submitted_count = 0
@@ -993,6 +1062,24 @@ async def get_claiming_status(
             submitted=submitted,
             submitted_at=str(claim["submitted_at"]) if claim and claim.get("submitted_at") else None,
             claimed_items=claim["claimed_items"] if claim else [],
+            is_guest=False,
+        ))
+
+    # Append guest claims (no account, not in shares list)
+    for gc in claims:
+        if gc.get("user_id") is not None:
+            continue  # already handled above
+        if not gc.get("submitted_at"):
+            continue
+        submitted_count += 1
+        members.append(ClaimStatusMember(
+            user_id=None,
+            full_name=gc.get("guest_name") or "Guest",
+            avatar_url=None,
+            submitted=True,
+            submitted_at=str(gc["submitted_at"]),
+            claimed_items=gc["claimed_items"],
+            is_guest=True,
         ))
 
     claim_token = split.get("claim_token") or ""
@@ -1010,6 +1097,7 @@ async def get_claiming_status(
 @app.post("/{split_id}/finalize")
 async def finalize_claims(
     split_id: int,
+    authorization: Optional[str] = Header(None),
     current_user: dict = Depends(verify_session),
 ):
     """
@@ -1030,11 +1118,14 @@ async def finalize_claims(
     claims = get_claims_by_split(split_id)
     items = get_items_by_split(split_id)
 
-    # Build item_assignments from claims: item_id -> set of user_ids who claimed it
+    # Build item_assignments from claims: item_id -> list of user_ids who claimed it
+    # Guest claims (user_id=None) are skipped — informational only, no bill share created
     item_assignments: dict = {}
     for claim in claims:
         if not claim.get("submitted_at"):
-            continue  # skip unsubmitted
+            continue
+        if claim.get("user_id") is None:
+            continue  # guest — no user_id to assign
         for item_id in claim["claimed_items"]:
             item_assignments.setdefault(item_id, [])
             if claim["user_id"] not in item_assignments[item_id]:
@@ -1050,6 +1141,18 @@ async def finalize_claims(
     # Get attending user IDs from existing shares
     old_shares = get_shares_by_split(split_id)
     attending_ids = [s["user_id"] for s in old_shares]
+
+    # Auto-include logged-in users who claimed via the link but weren't original attendees.
+    # They get a proper share row so they appear in the final settlement.
+    existing_attendee_set = set(attending_ids)
+    extra_claimant_ids = [
+        c["user_id"] for c in claims
+        if c.get("user_id") is not None
+        and c.get("submitted_at")
+        and c["user_id"] not in existing_attendee_set
+    ]
+    if extra_claimant_ids:
+        attending_ids = attending_ids + extra_claimant_ids
 
     items_as_dicts = [
         {"name": it["name"], "price": float(it["price"]), "assigned_to": it.get("assigned_to") or []}
@@ -1125,7 +1228,7 @@ async def finalize_claims(
     payer_name = _display_name(payer_profile)
     payer_email = payer_profile.get("email") or ""
 
-    event = await _fetch_event(split["event_id"], split["paid_by_user_id"])
+    event = await _fetch_event(split["event_id"], authorization)
     event_name = (event.get("title") or event.get("name") or f"Event {split['event_id']}") if event else f"Event {split['event_id']}"
     event_date = str(event.get("date") or event.get("event_date") or "") if event else ""
 

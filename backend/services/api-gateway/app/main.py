@@ -16,6 +16,7 @@ from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import asyncio
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 from app.models import (
     UserCreate, UserLogin, UserResponse, SessionResponse,
@@ -38,7 +39,7 @@ from app.database import (
     get_all_users, admin_update_user, deactivate_user, get_admin_emails,
     get_all_integrations, set_integration, delete_integration, log_admin_action,
     get_notification_prefs, set_notification_prefs,
-    upsert_push_token, get_push_tokens_for_users,
+    upsert_push_token, get_push_tokens_for_users, delete_push_token,
     create_notification, get_notifications_for_user,
     mark_notification_read, mark_all_notifications_read,
     get_user_preferences, upsert_user_preferences,
@@ -47,12 +48,14 @@ from app.database import (
     get_saved_items, get_saved_item, save_item, delete_saved_item,
     search_users_by_username,
     log_invite_send, count_recent_domain_invites,
+    get_inactive_users,
 )
 from app.email_service import email_service
 from app import storage
 
 limiter = Limiter(key_func=get_remote_address)
 _IS_PRODUCTION = os.environ.get("APP_ENV", "development") == "production"
+scheduler = AsyncIOScheduler()
 
 
 def _apply_session_cookie(response: Response, token: str) -> None:
@@ -212,6 +215,37 @@ async def _session_cleanup_loop():
             pass
 
 
+async def _send_reengagement_notifications():
+    """Weekly job: push + email users who haven't logged in for 14-60 days."""
+    print("[REENGAGEMENT] Starting re-engagement job")
+    try:
+        inactive = get_inactive_users(days_min=14, days_max=60)
+    except Exception as e:
+        print(f"[REENGAGEMENT] Failed to fetch inactive users: {e}")
+        return
+
+    print(f"[REENGAGEMENT] Found {len(inactive)} inactive user(s)")
+    for user in inactive:
+        user_id = user["id"]
+        username = user.get("full_name") or user["username"]
+        try:
+            prefs = get_notification_prefs(user_id)
+            # Respect push_enabled preference; always attempt email
+            tokens = get_push_tokens_for_users([user_id])
+            if tokens and prefs.get("push_enabled", True):
+                await _send_push(
+                    tokens,
+                    title="We miss you! 👋",
+                    body="Your clubs have new activity — come check what you've missed.",
+                    data={"link_type": "home"},
+                )
+            email_service.send_reengagement(user["email"], username)
+        except Exception as e:
+            print(f"[REENGAGEMENT] Error notifying user {user_id}: {e}")
+
+    print(f"[REENGAGEMENT] Job complete — notified {len(inactive)} user(s)")
+
+
 @app.on_event("startup")
 async def startup():
     """Initialize database on startup."""
@@ -222,6 +256,9 @@ async def startup():
         import sys
         print("CRITICAL: INTERNAL_API_SECRET is not set — /internal/* endpoints are UNPROTECTED", file=sys.stderr)
     asyncio.create_task(_session_cleanup_loop())
+    scheduler.add_job(_send_reengagement_notifications, 'cron', day_of_week='mon', hour=10, minute=0,
+                      id='reengagement', replace_existing=True)
+    scheduler.start()
     _MINIO_DEFAULT_PAIRS = {("clubpal", "clubpalpassword"), ("minioadmin", "minioadmin"), ("minio", "minio")}
     if _IS_PRODUCTION and (os.getenv("MINIO_ACCESS_KEY", ""), os.getenv("MINIO_SECRET_KEY", "")) in _MINIO_DEFAULT_PAIRS:
         import sys
@@ -1421,25 +1458,38 @@ async def mark_all_notifs_read(user_id: int, current_user: dict = Depends(get_cu
 
 
 async def _send_push(tokens: list, title: str, body: str, data: dict = None):
-    """Fire Expo push notifications — best effort, no raise on failure."""
+    """Fire Expo push notifications — best effort, no raise on failure.
+
+    Parses the Expo response to remove DeviceNotRegistered tokens so stale
+    tokens (from reinstalled apps) don't accumulate indefinitely.
+    """
     if not tokens:
+        return
+    valid_tokens = [t for t in tokens if t.startswith("ExponentPushToken")]
+    if not valid_tokens:
         return
     messages = [
         {"to": t, "title": title, "body": body, "sound": "default",
          "data": data or {}, "channelId": "default"}
-        for t in tokens if t.startswith("ExponentPushToken")
+        for t in valid_tokens
     ]
-    if not messages:
-        return
     try:
         async with httpx.AsyncClient(timeout=8.0) as client:
-            await client.post(
+            resp = await client.post(
                 "https://exp.host/--/api/v2/push/send",
                 json=messages,
                 headers={"Accept": "application/json", "Content-Type": "application/json"},
             )
-    except Exception:
-        pass
+        results = resp.json().get("data", [])
+        for i, result in enumerate(results):
+            if result.get("status") == "error":
+                details = result.get("details", {})
+                error_type = details.get("error", "")
+                print(f"[PUSH] token={valid_tokens[i]!r} error={error_type}: {result.get('message', '')}")
+                if error_type == "DeviceNotRegistered" and i < len(valid_tokens):
+                    delete_push_token(valid_tokens[i])
+    except Exception as e:
+        print(f"[PUSH] Failed to deliver notifications: {e}")
 
 
 # ===== Internal Notification Trigger =====

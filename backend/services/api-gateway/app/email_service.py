@@ -115,8 +115,8 @@ class EmailService:
 
     def _send(self, to_email: str, subject: str, html: str) -> bool:
         if not self.enabled:
-            print(f"[EMAIL DISABLED] To: {to_email} | Subject: {subject}")
-            return True
+            print(f"[EMAIL DISABLED – NOT SENT] To: {to_email} | Subject: {subject}")
+            return False
         try:
             msg = MIMEMultipart("alternative")
             msg["From"]    = f"{self.from_name} <{self.from_email}>"
@@ -450,6 +450,21 @@ class EmailService:
             + _note("You're receiving this because you're a member of "
                     f"<strong>{group_name}</strong>. Update preferences in "
                     f'<a href="{self.app_url}/settings" style="color:#f43f5e;">settings</a>.')
+        )
+        return self._send(to_email, subject, _base(subject, content, self.app_url))
+
+    def send_reengagement(self, to_email: str, username: str) -> bool:
+        """Re-engagement email for users who haven't visited in a while."""
+        url = self.app_url
+        subject = "We miss you — what's happening in your clubs?"
+        content = (
+            _h1("It's been a while! 👋")
+            + _p(f"Hey <strong>{username}</strong>,")
+            + _p("Your clubs might have new events, polls, or activity waiting for you. "
+                 "Come check in and see what you've missed.")
+            + _btn("Open clubPal", url, "#f43f5e")
+            + _note(f'To stop receiving these emails, update your preferences in '
+                    f'<a href="{self.app_url}/settings" style="color:#f43f5e;">account settings</a>.')
         )
         return self._send(to_email, subject, _base(subject, content, self.app_url))
 

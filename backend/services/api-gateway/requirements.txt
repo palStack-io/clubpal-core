@@ -35,3 +35,6 @@ cachetools==5.5.0
 
 # Rate limiting
 slowapi==0.1.9
+
+# Scheduled jobs (re-engagement, cleanup)
+apscheduler==3.10.4

@@ -4,10 +4,12 @@ import Button from '../ui/Button'
 import Avatar from '../ui/Avatar'
 import Card from '../ui/Card'
 
-export default function ClaimingStatus({ splitId, claimUrl, currentUser, onFinalize }) {
+export default function ClaimingStatus({ splitId, claimUrl, currentUser, onFinalize, onCancel }) {
   const [status, setStatus] = useState(null)
   const [loading, setLoading] = useState(true)
   const [finalizing, setFinalizing] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false)
 
   const refresh = useCallback(() => {
     billSplitApi.getClaimingStatus(splitId)
@@ -35,6 +37,19 @@ export default function ClaimingStatus({ splitId, claimUrl, currentUser, onFinal
       alert(e.response?.data?.detail || 'Failed to finalize')
     } finally {
       setFinalizing(false)
+    }
+  }
+
+  const handleCancel = async () => {
+    setCancelling(true)
+    try {
+      await billSplitApi.cancelClaiming(splitId)
+      setShowCancelConfirm(false)
+      onCancel?.()
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Failed to cancel. Try again.')
+    } finally {
+      setCancelling(false)
     }
   }
 
@@ -95,7 +110,7 @@ export default function ClaimingStatus({ splitId, claimUrl, currentUser, onFinal
         <Button
           variant="primary"
           onClick={handleFinalize}
-          disabled={finalizing}
+          disabled={finalizing || cancelling}
           style={{ width: '100%' }}
         >
           {finalizing ? 'Finalizing…' : 'Finalize & Send Bill Split'}
@@ -103,6 +118,38 @@ export default function ClaimingStatus({ splitId, claimUrl, currentUser, onFinal
         <p style={{ fontSize: 12, color: 'var(--t3)', textAlign: 'center', marginTop: 8 }}>
           You can finalize anytime — unsubmitted members will get equal shares.
         </p>
+
+        {showCancelConfirm ? (
+          <div style={{ marginTop: 12, background: 'var(--s3)', borderRadius: 12, padding: '14px', border: '1px solid var(--rose-border)' }}>
+            <p style={{ fontSize: 13, fontWeight: 600, color: 'var(--t1)', margin: '0 0 4px' }}>Cancel claiming?</p>
+            <p style={{ fontSize: 12, color: 'var(--t3)', margin: '0 0 12px', lineHeight: 1.4 }}>
+              All submitted claims will be wiped and the link invalidated. You can start a fresh split after.
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setShowCancelConfirm(false)}
+                style={{ flex: 1, padding: '8px', borderRadius: 8, background: 'var(--s4)', border: '1px solid var(--glass)', color: 'var(--t2)', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}
+              >
+                Keep Waiting
+              </button>
+              <button
+                onClick={handleCancel}
+                disabled={cancelling}
+                style={{ flex: 1, padding: '8px', borderRadius: 8, background: 'var(--rose)', border: 'none', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer', opacity: cancelling ? 0.7 : 1 }}
+              >
+                {cancelling ? 'Cancelling…' : 'Yes, Cancel'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowCancelConfirm(true)}
+            disabled={finalizing || cancelling}
+            style={{ display: 'block', width: '100%', marginTop: 10, background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600, color: 'var(--t3)', padding: '6px 0' }}
+          >
+            Cancel Claiming
+          </button>
+        )}
       </Card.Body>
     </Card>
   )

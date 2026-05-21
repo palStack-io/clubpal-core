@@ -259,6 +259,7 @@ export default function BillSplitSection({ event, attendees, currentUser }) {
             await loadSplits()
             setStep('settled')
           }}
+          onCancel={handleAddAnother}
         />
         {pastSplits.length > 0 && (
           <PastBillsAccordion splits={pastSplits} currentUser={currentUser} />

@@ -36,4 +36,6 @@ export const billSplitApi = {
     billSplitClient.get(`/${splitId}/claiming-status`).then(r => r.data),
   finalizeClaims: (splitId) =>
     billSplitClient.post(`/${splitId}/finalize`).then(r => r.data),
+  cancelClaiming: (splitId) =>
+    billSplitClient.delete(`/${splitId}/claiming`).then(r => r.data),
 }

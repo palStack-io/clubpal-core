@@ -11,6 +11,7 @@ import EditEventModal from '../../components/modals/EditEventModal'
 import RateEventModal from '../../components/events/RateEventModal'
 import AnimatedBackground from '../../components/ui/AnimatedBackground'
 import BillSplitModal from '../../components/modals/BillSplitModal'
+import BillSplitStatusCard from '../../components/events/BillSplitStatusCard'
 import { eventsApi } from '../../api/events'
 import { ratingsClient, gatewayClient } from '../../api/client'
 import { useAuth } from '../../contexts/AuthContext'
@@ -322,6 +323,13 @@ export default function EventDetail() {
 
           {/* Right column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {event.bill_split_enabled && (
+              <BillSplitStatusCard
+                event={event}
+                currentUser={user}
+                onOpenModal={() => setShowBillSplit(true)}
+              />
+            )}
             <AttendanceCard
               attendees={attendees}
               currentUser={user}

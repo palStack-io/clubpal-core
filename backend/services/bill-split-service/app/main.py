@@ -40,6 +40,7 @@ from app.database import (
     delete_shares_by_split,
     get_unpaid_shares_for_reminder,
     mark_unpaid_reminder_sent,
+    cancel_claiming,
 )
 from app.models import (
     CreateBillSplitRequest,
@@ -867,6 +868,24 @@ async def start_claiming(
         logger.warning(f"Failed to send claiming notifications for split {split_id}: {e}")
 
     return StartClaimingResponse(claim_token=token, claim_url=claim_url)
+
+
+@app.delete("/{split_id}/claiming")
+async def cancel_claiming_endpoint(
+    split_id: int,
+    current_user: dict = Depends(verify_session),
+):
+    """Payer cancels the active claiming round: all claims are wiped, link invalidated, status reset to 'sent'."""
+    split = get_split_by_id(split_id)
+    if not split:
+        raise HTTPException(status_code=404, detail="Bill split not found")
+    if current_user["id"] != split["paid_by_user_id"]:
+        raise HTTPException(status_code=403, detail="Only the payer can cancel claiming")
+    if split["status"] != "claiming":
+        raise HTTPException(status_code=409, detail="Split is not currently in claiming state")
+
+    cancel_claiming(split_id)
+    return {"ok": True}
 
 
 @app.get("/claim/{claim_token}", response_model=ClaimViewResponse)

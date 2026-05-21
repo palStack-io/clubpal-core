@@ -628,6 +628,20 @@ def get_unpaid_shares_for_reminder() -> list:
     return [dict(r) for r in rows]
 
 
+def cancel_claiming(split_id: int) -> None:
+    """Delete all claims, clear claim token, and reset status to 'sent' atomically."""
+    conn = get_conn()
+    cur = conn.cursor()
+    cur.execute("DELETE FROM bill_claims WHERE split_id = %s", (split_id,))
+    cur.execute(
+        "UPDATE bill_splits SET claim_token = NULL, status = 'sent', updated_at = NOW() WHERE id = %s",
+        (split_id,),
+    )
+    conn.commit()
+    cur.close()
+    conn.close()
+
+
 def mark_unpaid_reminder_sent(share_id: int) -> None:
     conn = get_conn()
     cur = conn.cursor()

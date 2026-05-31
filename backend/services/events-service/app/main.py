@@ -234,6 +234,7 @@ async def send_rsvp_deadline_reminders():
         WHERE rsvp_deadline BETWEEN NOW() AND NOW() + INTERVAL '25 hours'
           AND rsvp_deadline > NOW()
           AND status = 'scheduled'
+          AND (rsvp_reminder_sent IS NULL OR rsvp_reminder_sent = FALSE)
     """)
     events = [dict(r) for r in cursor.fetchall()]
     conn.close()
@@ -252,6 +253,11 @@ async def send_rsvp_deadline_reminders():
                 event_type='rsvp_reminder',
                 deadline=deadline_str,
             )
+            conn2 = get_db()
+            cur2 = conn2.cursor()
+            cur2.execute("UPDATE events SET rsvp_reminder_sent = TRUE WHERE id = %s", (event['id'],))
+            conn2.commit()
+            conn2.close()
         except Exception as e:
             logger.error(f"Failed to send RSVP reminder for event {event['id']}: {e}")
 

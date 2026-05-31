@@ -158,6 +158,11 @@ def init_db():
     except Exception:
         pass
 
+    try:
+        cursor.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS rsvp_reminder_sent BOOLEAN DEFAULT FALSE")
+    except Exception:
+        pass
+
     # Background personalization migrations
     for col, defn in [
         ("bg_type", "TEXT DEFAULT 'default'"),

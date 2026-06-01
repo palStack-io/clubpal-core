@@ -8,6 +8,7 @@ import PhotoGalleryCard from '../../components/events/PhotoGalleryCard'
 import CommentsCard from '../../components/events/CommentsCard'
 import EventMetaCard from '../../components/events/EventMetaCard'
 import EditEventModal from '../../components/modals/EditEventModal'
+import AddEventAttendeesModal from '../../components/modals/AddEventAttendeesModal'
 import RateEventModal from '../../components/events/RateEventModal'
 import AnimatedBackground from '../../components/ui/AnimatedBackground'
 import BillSplitModal from '../../components/modals/BillSplitModal'
@@ -46,6 +47,7 @@ export default function EventDetail() {
   const [showEditEvent, setShowEditEvent] = useState(false)
   const [showRateModal, setShowRateModal] = useState(false)
   const [showBillSplit, setShowBillSplit] = useState(false)
+  const [showAddAttendees, setShowAddAttendees] = useState(false)
   const [isBookmarked, setIsBookmarked] = useState(false)
   const [showEndConfirm, setShowEndConfirm] = useState(false)
   const [remindToast, setRemindToast] = useState(null)
@@ -249,6 +251,7 @@ export default function EventDetail() {
 
   const heroActions = [
     ...(event.status === 'scheduled' && isHost ? [{ label: '✏️ Edit', onClick: () => setShowEditEvent(true) }] : []),
+    ...(isScheduled && (isHost || isCreator) ? [{ label: '➕ Add Attendees', onClick: () => setShowAddAttendees(true) }] : []),
     ...(isScheduled && (isHost || isCreator) ? [{ label: '🏁 End Event', onClick: () => setShowEndConfirm(true) }] : []),
     ...(isScheduled && isCreator && !!event.rsvp_deadline ? [{ label: '📣 Send Reminder', onClick: handleRsvpReminder }] : []),
     ...(event.ratings_enabled !== false && (event.status === 'completed' || (event.scheduled_date && new Date(event.scheduled_date) < new Date())) ? [{ label: '⭐ Rate', onClick: () => setShowRateModal(true) }] : []),
@@ -362,6 +365,14 @@ export default function EventDetail() {
         event={event}
         onSaved={(updatedFields) => { setShowEditEvent(false); if (updatedFields) setEvent(prev => ({ ...prev, ...updatedFields })); fetchAll() }}
         onCancel={handleCancelEvent}
+      />
+      <AddEventAttendeesModal
+        isOpen={showAddAttendees}
+        onClose={() => setShowAddAttendees(false)}
+        eventId={id}
+        groupId={event.group_id}
+        attendeeIds={attendees.map((a) => a.user_id)}
+        onAdded={fetchAll}
       />
       <RateEventModal
         isOpen={showRateModal && event.ratings_enabled !== false}

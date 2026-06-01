@@ -173,6 +173,24 @@ async def _is_group_member(group_id: int, user_id: int) -> bool:
         pass
     return False
 
+async def _sync_event_attendees_with_group_members(event_id: int, group_id: int) -> None:
+    """Best-effort sync: ensure all current group members exist in event_attendees."""
+    try:
+        existing = {a["user_id"] for a in get_attendees(event_id)}
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(f"{GROUPS_SERVICE_URL}/groups/{group_id}/members")
+            if r.status_code != 200:
+                return
+            for member in r.json():
+                uid = member.get("user_id")
+                if uid and uid not in existing:
+                    try:
+                        upsert_attendee(event_id, uid, "pending")
+                    except Exception:
+                        pass
+    except Exception:
+        pass
+
 
 def _next_occurrence(rule: str, day_of_week: Optional[int], from_date: date) -> date:
     """Calculate the next occurrence date from a given date."""
@@ -757,6 +775,8 @@ async def get_event_endpoint(event_id: int, user_id: int = Depends(get_current_u
     if not await _is_group_member(event["group_id"], user_id):
         raise HTTPException(status_code=403, detail="You are not a member of this group")
 
+    await _sync_event_attendees_with_group_members(event_id, event["group_id"])
+
     # Get attendees
     attendees = get_attendees(event_id)
     attendee_responses = [AttendeeResponse(**attendee) for attendee in attendees]
@@ -1137,6 +1157,8 @@ async def get_attendees_endpoint(event_id: int):
     if not get_event(event_id):
         raise HTTPException(status_code=404, detail="Event not found")
 
+    event = get_event(event_id)
+    await _sync_event_attendees_with_group_members(event_id, event["group_id"])
     attendees = get_attendees(event_id)
     return [AttendeeResponse(**attendee) for attendee in attendees]
 

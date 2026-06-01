@@ -25,6 +25,9 @@ export const eventsApi = {
   getAttendees: (eventId) =>
     eventsClient.get(`/events/${eventId}/attendees`).then(r => r.data),
 
+  addAttendee: (eventId, userId) =>
+    eventsClient.post(`/events/${eventId}/attendees`, { user_id: userId }).then(r => r.data),
+
   rsvp: (eventId, userId, status) =>
     eventsClient.post(`/events/${eventId}/rsvp`, { user_id: userId, status }).then(r => r.data),
 

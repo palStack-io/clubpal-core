@@ -1032,6 +1032,89 @@ def auto_close_expired_polls() -> int:
     return count
 
 
+def update_poll(poll_id: int, *, activity_name: str = None, note: str = None, deadline=None) -> bool:
+    """Update editable fields on an open poll (note, deadline, activity_name). Options are untouched to preserve vote integrity."""
+    fields, values = [], []
+    if activity_name is not None:
+        fields.append("activity_name = %s")
+        values.append(activity_name)
+    if note is not None:
+        fields.append("note = %s")
+        values.append(note)
+    if deadline is not None:
+        fields.append("deadline = %s")
+        values.append(deadline)
+    if not fields:
+        return False
+    values.append(poll_id)
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        f"UPDATE group_polls SET {', '.join(fields)} WHERE id = %s AND status = 'open'",
+        values,
+    )
+    success = cursor.rowcount > 0
+    conn.commit()
+    conn.close()
+    return success
+
+
+def add_poll_option(poll_id: int, label: str, emoji: str = '⭐') -> Optional[list]:
+    """Append a new write-in option to an open poll that uses custom_options.
+    Returns the updated options list, or None if the poll has no custom options."""
+    import json
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT custom_options FROM group_polls WHERE id = %s AND status = 'open'",
+        (poll_id,),
+    )
+    row = cursor.fetchone()
+    if not row or not row['custom_options']:
+        conn.close()
+        return None  # Default-response polls don't support write-ins
+
+    opts = row['custom_options'] if isinstance(row['custom_options'], list) else json.loads(row['custom_options'])
+
+    # Assign a non-colliding opt_N key
+    existing_nums = [int(o['value'][4:]) for o in opts if o.get('value', '').startswith('opt_') and o['value'][4:].isdigit()]
+    next_idx = max(existing_nums, default=-1) + 1
+    opts.append({'label': label, 'emoji': emoji, 'value': f'opt_{next_idx}'})
+
+    cursor.execute("UPDATE group_polls SET custom_options = %s WHERE id = %s", (json.dumps(opts), poll_id))
+    conn.commit()
+    conn.close()
+    return opts
+
+
+def get_group_member_ids(group_id: int) -> List[int]:
+    """Return a list of user_ids for all active members of a group."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("SELECT user_id FROM group_members WHERE group_id = %s", (group_id,))
+    rows = cursor.fetchall()
+    conn.close()
+    return [row['user_id'] for row in rows]
+
+
+def get_poll_non_responders(poll_id: int, group_id: int) -> List[int]:
+    """Return user_ids of group members who haven't responded to a poll yet."""
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        """SELECT gm.user_id FROM group_members gm
+           WHERE gm.group_id = %s
+             AND NOT EXISTS (
+               SELECT 1 FROM group_poll_responses gpr
+               WHERE gpr.poll_id = %s AND gpr.user_id = gm.user_id
+             )""",
+        (group_id, poll_id),
+    )
+    rows = cursor.fetchall()
+    conn.close()
+    return [row['user_id'] for row in rows]
+
+
 # ===== Invite Code Utilities =====
 
 import re as _re

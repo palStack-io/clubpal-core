@@ -148,6 +148,18 @@ class PollRespond(BaseModel):
     response: str = Field(..., min_length=1, max_length=200)
 
 
+class PollUpdate(BaseModel):
+    activity_name: Optional[str] = Field(None, min_length=1, max_length=200)
+    note: Optional[str] = Field(None, max_length=500)
+    deadline: Optional[datetime] = None
+
+
+class PollAddOption(BaseModel):
+    user_id: int
+    label: str = Field(..., min_length=1, max_length=120)
+    emoji: str = Field('⭐', max_length=10)
+
+
 class PollConvert(BaseModel):
     user_id: int
     scheduled_date: Optional[datetime] = None

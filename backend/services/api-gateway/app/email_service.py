@@ -455,7 +455,7 @@ class EmailService:
 
     def send_reengagement(self, to_email: str, username: str) -> bool:
         """Re-engagement email for users who haven't visited in a while."""
-        url = self.app_url
+        url = f"{self.app_url}/groups"
         subject = "We miss you — what's happening in your clubs?"
         content = (
             _h1("It's been a while! 👋")

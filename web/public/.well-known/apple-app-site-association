@@ -10,7 +10,8 @@
           { "/": "/pay/*",     "comment": "Bill payment confirmation" },
           { "/": "/events/*",  "comment": "Event detail" },
           { "/": "/groups/*",  "comment": "Group detail" },
-          { "/": "/reset-password/*", "comment": "Password reset" }
+          { "/": "/reset-password/*", "comment": "Password reset" },
+          { "/": "/notifications",   "comment": "In-app notification history" }
         ]
       }
     ]

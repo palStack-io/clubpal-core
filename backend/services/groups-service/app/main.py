@@ -15,7 +15,7 @@ from app.models import (
     RotationSetTurnRequest, RotationSkipRequest, RotationReorderRequest, CompleteTurnRequest,
     BannerUploadRequest, UploadUrlResponse,
     GroupCommentCreate, GroupCommentResponse,
-    PollCreate, PollRespond, PollConvert, PollResponseModel,
+    PollCreate, PollUpdate, PollAddOption, PollRespond, PollConvert, PollResponseModel,
     InviteCodeCreate, InviteCodeResponse, InviteCodePreview,
     JoinRequestResponse, JoinRequestAction,
 )
@@ -29,6 +29,7 @@ from app.database import (
     create_poll, get_poll, get_polls_for_group, get_pending_polls_for_user, get_my_active_polls,
     upsert_poll_response, get_poll_responses, get_poll_response,
     close_poll, convert_poll, auto_close_expired_polls,
+    update_poll, add_poll_option, get_poll_non_responders,
     create_invite_code, get_active_invite_code, get_invite_code_by_code,
     validate_invite_code, increment_invite_used_count,
     create_join_request, get_pending_join_requests, get_join_request,
@@ -741,7 +742,8 @@ def _build_poll_summary(poll_id: int, user_id: int, member_count: int) -> dict:
     else:
         counts = {'in': 0, 'done_loved': 0, 'done_pass': 0, 'cant_make_it': 0}
 
-    if has_responded or poll_is_closed:
+    is_creator = poll is not None and poll['created_by'] == user_id
+    if has_responded or poll_is_closed or is_creator:
         for r in responses:
             key = r['response']
             counts[key] = counts.get(key, 0) + 1
@@ -958,6 +960,92 @@ async def get_my_polls(user_id: int):
         summary = _build_poll_summary(p['id'], user_id, member_count)
         result.append(_poll_to_model(p, summary))
     return result
+
+
+@app.patch("/polls/{poll_id}", response_model=PollResponseModel)
+async def edit_poll_endpoint(poll_id: int, data: PollUpdate, user: dict = Depends(get_current_user)):
+    """Edit an open poll's title, note, or deadline (creator only). Options are immutable to preserve vote integrity."""
+    user_id = user["id"]
+    poll = get_poll(poll_id)
+    if not poll:
+        raise HTTPException(status_code=404, detail="Poll not found")
+    if poll['created_by'] != user_id:
+        raise HTTPException(status_code=403, detail="Only the creator can edit this poll")
+    if poll['status'] != 'open':
+        raise HTTPException(status_code=400, detail="Only open polls can be edited")
+
+    update_poll(
+        poll_id,
+        activity_name=data.activity_name,
+        note=data.note,
+        deadline=data.deadline,
+    )
+
+    poll = get_poll(poll_id)
+    group = get_group(poll['group_id'])
+    member_count = group['member_count'] if group else 0
+    summary = _build_poll_summary(poll_id, user_id, member_count)
+    return _poll_to_model(poll, summary)
+
+
+@app.post("/polls/{poll_id}/options", response_model=PollResponseModel)
+async def add_poll_option_endpoint(poll_id: int, data: PollAddOption, user_id: int = Depends(get_current_user_id)):
+    """Add a write-in option to an open poll. Only works on polls created with custom options."""
+    poll = get_poll(poll_id)
+    if not poll:
+        raise HTTPException(status_code=404, detail="Poll not found")
+    if poll['status'] != 'open':
+        raise HTTPException(status_code=400, detail="Poll is not open")
+    if not is_member(poll['group_id'], user_id):
+        raise HTTPException(status_code=403, detail="Only group members can add options")
+
+    updated_opts = add_poll_option(poll_id, data.label.strip(), data.emoji)
+    if updated_opts is None:
+        raise HTTPException(status_code=400, detail="Write-in options can only be added to polls with custom options")
+
+    poll = get_poll(poll_id)
+    group = get_group(poll['group_id'])
+    member_count = group['member_count'] if group else 0
+    summary = _build_poll_summary(poll_id, user_id, member_count)
+    return _poll_to_model(poll, summary)
+
+
+@app.post("/polls/{poll_id}/notify", status_code=202)
+async def notify_poll_endpoint(poll_id: int, user: dict = Depends(get_current_user)):
+    """Send a push reminder to members who haven't responded yet (creator only)."""
+    user_id = user["id"]
+    poll = get_poll(poll_id)
+    if not poll:
+        raise HTTPException(status_code=404, detail="Poll not found")
+    if poll['created_by'] != user_id:
+        raise HTTPException(status_code=403, detail="Only the creator can send reminders")
+    if poll['status'] != 'open':
+        raise HTTPException(status_code=400, detail="Poll is already closed")
+
+    non_responders = get_poll_non_responders(poll_id, poll['group_id'])
+    if not non_responders:
+        return {"notified": 0}
+
+    creator_username = user.get("username") or user.get("full_name") or f"#{user_id}"
+    async with httpx.AsyncClient() as client:
+        try:
+            await client.post(
+                f"{GATEWAY_SERVICE_URL}/internal/notify/event",
+                json={
+                    "user_ids": non_responders,
+                    "group_id": poll['group_id'],
+                    "type": "poll",
+                    "event_title": poll['activity_name'],
+                    "event_id": poll_id,
+                    "creator_id": user_id,
+                    "creator_name": creator_username,
+                },
+                headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
+                timeout=5.0,
+            )
+        except Exception:
+            pass
+    return {"notified": len(non_responders)}
 
 
 # ===== Invite Code Endpoints =====

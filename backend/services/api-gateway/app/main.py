@@ -164,14 +164,14 @@ async def _verify_id_token(id_token: str, provider: dict) -> dict:
     except Exception as exc:
         raise HTTPException(status_code=401, detail=f"Malformed ID token: {exc}")
     kid = header.get("kid")
-    alg = header.get("alg", "RS256")
+    # Pin to RS256 — never trust the algorithm from the untrusted JWT header.
     matching = next((k for k in keys if not kid or k.get("kid") == kid), None)
     if not matching:
         raise HTTPException(status_code=401, detail="No matching JWKS key found for token")
     try:
         public_key = pyjwt.algorithms.RSAAlgorithm.from_jwk(json.dumps(matching))
         claims = pyjwt.decode(
-            id_token, public_key, algorithms=[alg], audience=provider["client_id"]
+            id_token, public_key, algorithms=["RS256"], audience=provider["client_id"]
         )
     except Exception as exc:
         raise HTTPException(status_code=401, detail=f"ID token verification failed: {exc}")
@@ -1591,8 +1591,8 @@ async def notify_mention(req: MentionNotifyRequest, current_user: dict = Depends
 
 class PushNotifyRequest(BaseModel):
     user_id: int
-    title: str
-    body: str
+    title: str = Field(..., max_length=200)
+    body: str = Field(..., max_length=500)
     link_type: Optional[str] = None
     link_id: Optional[int] = None
 
@@ -1956,9 +1956,9 @@ async def internal_get_user_profile(
 # ===== Saved Items (Wishlist) =====
 
 class SaveItemRequest(BaseModel):
-    item_type: str
-    item_id: str
-    item_name: str
+    item_type: str = Field(..., max_length=50)
+    item_id: str = Field(..., max_length=100)
+    item_name: str = Field(..., max_length=500)
     item_meta: Optional[dict] = None
 
 

@@ -86,6 +86,15 @@ export const groupsApi = {
   getMyActivePolls: (userId) =>
     groupsClient.get(`/users/${userId}/polls/created`).then(r => r.data),
 
+  editPoll: (pollId, data) =>
+    groupsClient.patch(`/polls/${pollId}`, data).then(r => r.data),
+
+  addPollOption: (pollId, userId, label, emoji = '⭐') =>
+    groupsClient.post(`/polls/${pollId}/options`, { user_id: userId, label, emoji }).then(r => r.data),
+
+  notifyPoll: (pollId) =>
+    groupsClient.post(`/polls/${pollId}/notify`).then(r => r.data),
+
   // Invite codes
   generateInviteCode: (groupId, data) =>
     groupsClient.post(`/groups/${groupId}/invite-codes`, data).then(r => r.data),

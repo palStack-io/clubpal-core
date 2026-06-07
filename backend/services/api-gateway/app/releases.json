@@ -1,10 +1,12 @@
 {
-  "version": "1.1.6",
-  "title": "What's New",
-  "date": "2026-04-20",
+  "version": "1.1.7",
+  "title": "Polls Got a Big Upgrade",
+  "date": "2026-06-07",
   "items": [
-    { "emoji": "💬", "text": "@mentions in comments — tag group members directly" },
-    { "emoji": "📧", "text": "Branded email notifications with mobile deep links" },
-    { "emoji": "🎉", "text": "What's New banner — see release notes on every update" }
+    { "emoji": "✏️", "text": "Edit polls — update the title, note, or deadline after posting" },
+    { "emoji": "➕", "text": "Suggest options — members can add write-in choices to any custom poll" },
+    { "emoji": "🔔", "text": "Remind members — send a push notification to anyone who hasn't voted yet" },
+    { "emoji": "📊", "text": "Live results — vote bars refresh automatically every 30 seconds" },
+    { "emoji": "😍", "text": "60+ emoji options for poll choices" }
   ]
 }

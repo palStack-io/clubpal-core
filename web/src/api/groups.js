@@ -71,8 +71,13 @@ export const groupsApi = {
   getPoll: (pollId, userId) =>
     groupsClient.get(`/polls/${pollId}`, { params: { user_id: userId } }).then(r => r.data),
 
-  respondToPoll: (pollId, userId, response) =>
-    groupsClient.post(`/polls/${pollId}/respond`, { user_id: userId, response }).then(r => r.data),
+  respondToPoll: (pollId, userId, responseOrResponses) => {
+    const isMulti = Array.isArray(responseOrResponses)
+    const body = isMulti
+      ? { user_id: userId, responses: responseOrResponses }
+      : { user_id: userId, response: responseOrResponses }
+    return groupsClient.post(`/polls/${pollId}/respond`, body).then(r => r.data)
+  },
 
   closePoll: (pollId, userId) =>
     groupsClient.put(`/polls/${pollId}/close`, {}, { params: { user_id: userId } }).then(r => r.data),

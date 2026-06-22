@@ -81,7 +81,7 @@ async def create_rating_endpoint(
     user_id: int = Depends(get_current_user_id),
 ):
     """Create a new rating."""
-    # Verify event exists via events service — forward caller's auth token
+    # Verify event exists and is rateable via events service
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(
@@ -90,6 +90,11 @@ async def create_rating_endpoint(
             )
             if response.status_code != 200:
                 raise HTTPException(status_code=404, detail="Event not found")
+            event = response.json()
+            if event.get("status") != "completed":
+                raise HTTPException(status_code=403, detail="Ratings are only allowed after an event has ended")
+            if not event.get("ratings_enabled", False):
+                raise HTTPException(status_code=403, detail="Ratings are not enabled for this event")
         except httpx.RequestError:
             raise HTTPException(status_code=503, detail="Events service unavailable")
 

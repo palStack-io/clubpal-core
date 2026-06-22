@@ -1,6 +1,8 @@
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 import os
+import threading
 from datetime import datetime, timedelta
 import secrets
 import hashlib
@@ -15,6 +17,33 @@ def _hash_session_token(token: str) -> str:
 
 # Database URL
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://clubpal:clubpal@db:5432/clubpal_gateway")
+
+_pool = None
+_pool_lock = threading.Lock()
+
+
+def _get_pool():
+    global _pool
+    if _pool is None:
+        with _pool_lock:
+            if _pool is None:
+                _pool = psycopg2.pool.ThreadedConnectionPool(2, 10, dsn=DATABASE_URL)
+    return _pool
+
+
+class _PooledConn:
+    def __init__(self, conn):
+        self._conn = conn
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def close(self):
+        try:
+            self._conn.rollback()
+        except Exception:
+            pass
+        _get_pool().putconn(self._conn)
 
 
 def init_db():
@@ -315,9 +344,10 @@ def delete_integration(key: str):
 
 
 def get_db():
-    """Get database connection with dict cursor."""
-    conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
-    return conn
+    """Get a pooled database connection with dict cursor."""
+    conn = _get_pool().getconn()
+    conn.cursor_factory = psycopg2.extras.RealDictCursor
+    return _PooledConn(conn)
 
 
 # User functions
@@ -770,7 +800,7 @@ def delete_session_by_token_for_user(token: str, user_id: int) -> bool:
 
     cursor.execute(
         "DELETE FROM sessions WHERE session_token = %s AND user_id = %s",
-        (token, user_id)
+        (_hash_session_token(token), user_id)
     )
 
     success = cursor.rowcount > 0

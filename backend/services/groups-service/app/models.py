@@ -141,11 +141,14 @@ class PollCreate(BaseModel):
     note: Optional[str] = Field(None, max_length=500)
     deadline: datetime
     custom_options: Optional[List[dict]] = None
+    allow_multi_select: bool = False
+    allow_custom_response: bool = False
 
 
 class PollRespond(BaseModel):
     user_id: int
-    response: str = Field(..., min_length=1, max_length=200)
+    response: Optional[str] = Field(None, min_length=1, max_length=200)
+    responses: Optional[List[str]] = None
 
 
 class PollUpdate(BaseModel):
@@ -183,6 +186,8 @@ class PollResponseModel(BaseModel):
     created_at: datetime
     summary: Optional[dict] = None
     custom_options: Optional[List[dict]] = None
+    allow_multi_select: Optional[bool] = False
+    allow_custom_response: Optional[bool] = False
 
 
 # Invite code models

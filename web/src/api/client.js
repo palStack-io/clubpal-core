@@ -34,7 +34,10 @@ function createClient(baseURL, { injectUserId = false } = {}) {
         localStorage.removeItem('user')
         const pub = ['/login', '/register', '/forgot-password', '/reset-password', '/invite']
         const onPublic = pub.some(p => window.location.pathname.startsWith(p))
-        if (!onPublic) window.location.href = '/login'
+        if (!onPublic) {
+          const next = window.location.pathname + window.location.search
+          window.location.href = `/login?next=${encodeURIComponent(next)}`
+        }
       }
       return Promise.reject(error)
     }

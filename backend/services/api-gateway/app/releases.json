@@ -1,12 +1,10 @@
 {
-  "version": "1.1.7",
-  "title": "Polls Got a Big Upgrade",
-  "date": "2026-06-07",
+  "version": "1.2.0",
+  "title": "Polls: Multi-Select & Write-ins",
+  "date": "2026-06-22",
   "items": [
-    { "emoji": "✏️", "text": "Edit polls — update the title, note, or deadline after posting" },
-    { "emoji": "➕", "text": "Suggest options — members can add write-in choices to any custom poll" },
-    { "emoji": "🔔", "text": "Remind members — send a push notification to anyone who hasn't voted yet" },
-    { "emoji": "📊", "text": "Live results — vote bars refresh automatically every 30 seconds" },
-    { "emoji": "😍", "text": "60+ emoji options for poll choices" }
+    { "emoji": "☑️", "text": "Multi-select polls — let members vote for more than one option at once" },
+    { "emoji": "✍️", "text": "Write-in control — creators can now toggle whether members can suggest new options" },
+    { "emoji": "⚙️", "text": "Edit response settings — change multi-select and write-in rules on an existing poll" }
   ]
 }

@@ -72,6 +72,8 @@ function EditPollForm({ poll, onSaved, onCancel }) {
   const [customDeadline, setCustomDeadline] = useState(
     new Date(poll.deadline).toISOString().slice(0, 16)
   )
+  const [allowMultiSelect, setAllowMultiSelect] = useState(!!poll.allow_multi_select)
+  const [allowCustomResponse, setAllowCustomResponse] = useState(!!poll.allow_custom_response)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
@@ -92,6 +94,8 @@ function EditPollForm({ poll, onSaved, onCancel }) {
         activity_name: title.trim(),
         note: note.trim() || null,
         deadline: computeDeadline(),
+        allow_multi_select: allowMultiSelect,
+        allow_custom_response: allowCustomResponse,
       })
       onSaved(updated)
     } catch {
@@ -136,6 +140,25 @@ function EditPollForm({ poll, onSaved, onCancel }) {
           onChange={e => { setCustomDeadline(e.target.value); setDeadlinePreset(null) }}
           style={{ ...inputStyle, fontSize: '12px' }} />
       </div>
+      <div>
+        <div style={{ fontSize: '10px', fontWeight: 600, color: 'var(--t3)', marginBottom: '6px' }}>RESPONSE SETTINGS</div>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {[
+            { key: 'multi', label: 'Allow multiple selections', sub: 'Members can vote for more than one option', val: allowMultiSelect, set: setAllowMultiSelect },
+            { key: 'write', label: 'Allow write-in options', sub: 'Members can suggest their own options', val: allowCustomResponse, set: setAllowCustomResponse },
+          ].map(({ key, label, sub, val, set }) => (
+            <div key={key} onClick={() => set(v => !v)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', padding: '8px 10px', borderRadius: '8px', background: val ? 'var(--rose-glow)' : 'var(--s3)', border: `1px solid ${val ? 'var(--rose-border)' : 'var(--glass)'}`, transition: 'all 0.15s' }}>
+              <div>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--t1)' }}>{label}</div>
+                <div style={{ fontSize: '10px', color: 'var(--t3)', marginTop: '1px' }}>{sub}</div>
+              </div>
+              <div style={{ width: '32px', height: '18px', borderRadius: '99px', background: val ? 'var(--rose)' : 'var(--t4)', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
+                <div style={{ position: 'absolute', top: '2px', left: val ? '16px' : '2px', width: '14px', height: '14px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
       {error && <div style={{ fontSize: '11px', color: 'var(--rose-soft)' }}>{error}</div>}
       <div style={{ display: 'flex', gap: '6px' }}>
         <Button variant="primary" loading={saving} onClick={handleSave} style={{ flex: 1 }}>Save</Button>
@@ -154,7 +177,7 @@ function AddOptionRow({ poll, currentUserId, onUpdated }) {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
 
-  if (!poll.custom_options) return null // Only custom polls support write-ins
+  if (!poll.allow_custom_response) return null
 
   const handleAdd = async () => {
     if (!label.trim()) return
@@ -280,6 +303,7 @@ export default function PollCard({ poll: initialPoll, currentUserId, onUpdated, 
   const [editing, setEditing] = useState(false)
   const [notifyLoading, setNotifyLoading] = useState(false)
   const [notifyMsg, setNotifyMsg] = useState('')
+  const [multiSelections, setMultiSelections] = useState([])
 
   // Keep in sync when parent updates the poll (e.g. after a list refresh)
   useEffect(() => { setPoll(initialPoll) }, [initialPoll])
@@ -288,11 +312,18 @@ export default function PollCard({ poll: initialPoll, currentUserId, onUpdated, 
   const hasResponded = summary.has_responded
   const isPollClosed = poll.status !== 'open'
   const isCreator = poll.created_by === currentUserId
+  const allowMultiSelect = !!poll.allow_multi_select
   // Creators always see the breakdown so they can track responses live
   const showBreakdown = hasResponded || isPollClosed || isCreator
   const totalResponded = summary.responded || 0
   const totalMembers = summary.total_members || 0
   const userResponse = summary.user_response?.response
+  const userResponses = (() => {
+    const raw = summary.user_response?.responses
+    if (Array.isArray(raw)) return raw
+    if (typeof raw === 'string') { try { return JSON.parse(raw) } catch { return [] } }
+    return userResponse ? [userResponse] : []
+  })()
 
   const activityEmoji = TYPE_EMOJI[poll.activity_type] || '📋'
   const deadlineExpired = new Date(poll.deadline) <= Date.now()
@@ -312,12 +343,30 @@ export default function PollCard({ poll: initialPoll, currentUserId, onUpdated, 
     return () => clearInterval(interval)
   }, [poll.id, currentUserId, isPollClosed, showBreakdown])
 
+  const toggleMultiSelection = (value) => {
+    setMultiSelections(prev =>
+      prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]
+    )
+  }
+
   const handleRespond = async (responseValue) => {
     setResponding(true)
     try {
       const updated = await groupsApi.respondToPoll(poll.id, currentUserId, responseValue)
       setPoll(updated)
       onUpdated?.(updated)
+    } catch {}
+    finally { setResponding(false) }
+  }
+
+  const handleMultiSubmit = async () => {
+    if (!multiSelections.length) return
+    setResponding(true)
+    try {
+      const updated = await groupsApi.respondToPoll(poll.id, currentUserId, multiSelections)
+      setPoll(updated)
+      onUpdated?.(updated)
+      setMultiSelections([])
     } catch {}
     finally { setResponding(false) }
   }
@@ -412,30 +461,70 @@ export default function PollCard({ poll: initialPoll, currentUserId, onUpdated, 
 
       {/* Voting buttons (non-creator who hasn't responded yet) */}
       {!showBreakdown && !isPollClosed && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
-          {options.map(r => (
-            <button
-              key={r.value}
-              disabled={responding}
-              onClick={() => handleRespond(r.value)}
-              style={{
-                background: 'var(--s3)', border: `1px solid var(--glass)`, borderRadius: '12px',
-                padding: '12px 8px', cursor: 'pointer', textAlign: 'center',
-                transition: 'all 0.15s', opacity: responding ? 0.6 : 1,
-              }}
-              onMouseEnter={e => { e.currentTarget.style.borderColor = r.color; e.currentTarget.style.background = `${r.color}14` }}
-              onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--glass)'; e.currentTarget.style.background = 'var(--s3)' }}
-            >
-              <div style={{ fontSize: '20px', marginBottom: '4px' }}>{r.emoji}</div>
-              <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t2)' }}>{r.label}</div>
-            </button>
-          ))}
-        </div>
+        allowMultiSelect ? (
+          <div style={{ marginBottom: '12px' }}>
+            <div style={{ fontSize: '11px', color: 'var(--t3)', marginBottom: '8px', fontWeight: 600 }}>
+              Select all that apply
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '10px' }}>
+              {options.map(r => {
+                const checked = multiSelections.includes(r.value)
+                return (
+                  <button
+                    key={r.value}
+                    onClick={() => toggleMultiSelection(r.value)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '10px',
+                      background: checked ? `${r.color}14` : 'var(--s3)',
+                      border: `1px solid ${checked ? r.color : 'var(--glass)'}`,
+                      borderRadius: '10px', padding: '10px 12px', cursor: 'pointer',
+                      textAlign: 'left', transition: 'all 0.12s',
+                    }}
+                  >
+                    <div style={{ width: '18px', height: '18px', borderRadius: '5px', border: `2px solid ${checked ? 'var(--rose)' : 'var(--t4)'}`, background: checked ? 'var(--rose)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      {checked && <span style={{ color: '#fff', fontSize: '11px', fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                    </div>
+                    <span style={{ fontSize: '18px' }}>{r.emoji}</span>
+                    <span style={{ fontSize: '12px', fontWeight: 700, color: checked ? 'var(--t1)' : 'var(--t2)' }}>{r.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+            <Button variant="primary" loading={responding} onClick={handleMultiSubmit} style={{ width: '100%' }} disabled={!multiSelections.length}>
+              Submit votes {multiSelections.length > 0 ? `(${multiSelections.length})` : ''}
+            </Button>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '12px' }}>
+            {options.map(r => (
+              <button
+                key={r.value}
+                disabled={responding}
+                onClick={() => handleRespond(r.value)}
+                style={{
+                  background: 'var(--s3)', border: `1px solid var(--glass)`, borderRadius: '12px',
+                  padding: '12px 8px', cursor: 'pointer', textAlign: 'center',
+                  transition: 'all 0.15s', opacity: responding ? 0.6 : 1,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = r.color; e.currentTarget.style.background = `${r.color}14` }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--glass)'; e.currentTarget.style.background = 'var(--s3)' }}
+              >
+                <div style={{ fontSize: '20px', marginBottom: '4px' }}>{r.emoji}</div>
+                <div style={{ fontSize: '11px', fontWeight: 700, color: 'var(--t2)' }}>{r.label}</div>
+              </button>
+            ))}
+          </div>
+        )
       )}
 
       {/* Breakdown bars */}
       {showBreakdown && (
         <div style={{ marginBottom: '12px' }}>
+          {allowMultiSelect && hasResponded && (
+            <div style={{ fontSize: '11px', color: 'var(--t3)', marginBottom: '6px', fontWeight: 600 }}>
+              Your picks: {userResponses.map(v => options.find(o => o.value === v)?.emoji || v).join(' ')}
+            </div>
+          )}
           {options.map(r => (
             <ResponseBar
               key={r.value}
@@ -443,29 +532,64 @@ export default function PollCard({ poll: initialPoll, currentUserId, onUpdated, 
               label={r.label}
               count={summary.counts?.[r.value] || 0}
               total={totalResponded}
-              highlighted={userResponse === r.value}
+              highlighted={allowMultiSelect ? userResponses.includes(r.value) : userResponse === r.value}
             />
           ))}
           {/* Allow non-creator members who've responded to change their vote */}
           {hasResponded && !isCreator && !isPollClosed && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '10px' }}>
-              {options.map(r => (
-                <button
-                  key={r.value}
-                  disabled={responding}
-                  onClick={() => handleRespond(r.value)}
-                  style={{
-                    background: userResponse === r.value ? `${r.color}14` : 'var(--s3)',
-                    border: `1px solid ${userResponse === r.value ? r.color : 'var(--glass)'}`,
-                    borderRadius: '8px', padding: '6px 8px', cursor: 'pointer',
-                    fontSize: '11px', fontWeight: 700, color: userResponse === r.value ? 'var(--t1)' : 'var(--t3)',
-                    opacity: responding ? 0.6 : 1, transition: 'all 0.12s',
-                  }}
-                >
-                  {r.emoji} {r.label}
-                </button>
-              ))}
-            </div>
+            allowMultiSelect ? (
+              <div style={{ marginTop: '10px' }}>
+                <div style={{ fontSize: '11px', color: 'var(--t3)', marginBottom: '6px', fontWeight: 600 }}>Change your picks</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '8px' }}>
+                  {options.map(r => {
+                    const checked = multiSelections.length ? multiSelections.includes(r.value) : userResponses.includes(r.value)
+                    return (
+                      <button
+                        key={r.value}
+                        onClick={() => {
+                          const current = multiSelections.length ? multiSelections : [...userResponses]
+                          setMultiSelections(current.includes(r.value) ? current.filter(v => v !== r.value) : [...current, r.value])
+                        }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '8px',
+                          background: checked ? 'var(--rose-glow)' : 'var(--s3)',
+                          border: `1px solid ${checked ? 'var(--rose-border)' : 'var(--glass)'}`,
+                          borderRadius: '8px', padding: '7px 10px', cursor: 'pointer', textAlign: 'left',
+                        }}
+                      >
+                        <div style={{ width: '16px', height: '16px', borderRadius: '4px', border: `2px solid ${checked ? 'var(--rose)' : 'var(--t4)'}`, background: checked ? 'var(--rose)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          {checked && <span style={{ color: '#fff', fontSize: '10px', fontWeight: 900, lineHeight: 1 }}>✓</span>}
+                        </div>
+                        <span style={{ fontSize: '14px' }}>{r.emoji}</span>
+                        <span style={{ fontSize: '11px', fontWeight: 700, color: checked ? 'var(--rose-soft)' : 'var(--t3)' }}>{r.label}</span>
+                      </button>
+                    )
+                  })}
+                </div>
+                <Button variant="ghost" loading={responding} onClick={handleMultiSubmit} style={{ width: '100%' }}>
+                  Update picks {multiSelections.length > 0 ? `(${multiSelections.length})` : ''}
+                </Button>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px', marginTop: '10px' }}>
+                {options.map(r => (
+                  <button
+                    key={r.value}
+                    disabled={responding}
+                    onClick={() => handleRespond(r.value)}
+                    style={{
+                      background: userResponse === r.value ? `${r.color}14` : 'var(--s3)',
+                      border: `1px solid ${userResponse === r.value ? r.color : 'var(--glass)'}`,
+                      borderRadius: '8px', padding: '6px 8px', cursor: 'pointer',
+                      fontSize: '11px', fontWeight: 700, color: userResponse === r.value ? 'var(--t1)' : 'var(--t3)',
+                      opacity: responding ? 0.6 : 1, transition: 'all 0.12s',
+                    }}
+                  >
+                    {r.emoji} {r.label}
+                  </button>
+                ))}
+              </div>
+            )
           )}
         </div>
       )}

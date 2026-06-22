@@ -13,6 +13,9 @@
 #
 # Log in to GHCR first (only needed if packages are private):
 #   echo $GITHUB_TOKEN | docker login ghcr.io -u palstack-io --password-stdin
+#
+# Required .env variables:
+#   POSTGRES_PASSWORD, GARAGE_RPC_SECRET, GARAGE_SECRET_KEY, INTERNAL_API_SECRET, STORAGE_PUBLIC_URL
 
 services:
 
@@ -39,51 +42,99 @@ services:
       retries: 5
 
   # ===========================================
-  # MinIO — Object Storage
-  # API: internal via nginx /storage/
-  # Console: host port 9001
+  # Garage — S3-compatible Object Storage
+  # S3 API: internal via nginx /storage/
   # ===========================================
-  minio:
-    image: minio/minio:latest
-    container_name: clubpal-minio
-    command: server /data --console-address ":9001"
+  garage:
+    image: dxflrs/garage:v1.0.0
+    container_name: clubpal-garage
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-clubpal}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?Set GARAGE_RPC_SECRET in .env}
+      GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY:-clubpal}
+      GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY:?Set GARAGE_SECRET_KEY in .env}
+    entrypoint: >
+      /bin/sh -c "
+      cat > /etc/garage.toml << 'TOML'
+      metadata_dir = \"/var/lib/garage/meta\"
+      data_dir = \"/var/lib/garage/data\"
+      replication_factor = 1
+
+      [rpc]
+      secret = \"PLACEHOLDER_RPC\"
+      bind_addr = \"0.0.0.0:3901\"
+      public_addr = \"garage:3901\"
+
+      [s3_api]
+      s3_region = \"garage\"
+      api_bind_addr = \"0.0.0.0:3900\"
+      root_domain = \".s3.localhost\"
+
+      [s3_web]
+      bind_addr = \"0.0.0.0:3902\"
+      root_domain = \".web.localhost\"
+      index = \"index.html\"
+
+      [admin]
+      api_bind_addr = \"0.0.0.0:3903\"
+      TOML
+      sed -i \"s/PLACEHOLDER_RPC/$$GARAGE_RPC_SECRET/\" /etc/garage.toml &&
+      exec /garage server"
     volumes:
-      - minio_data:/data
+      - garage_meta:/var/lib/garage/meta
+      - garage_data:/var/lib/garage/data
     networks:
       - clubpal-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      test: ["CMD", "curl", "-f", "http://localhost:3903/health"]
       interval: 30s
       timeout: 10s
-      retries: 3
-      start_period: 10s
+      retries: 5
+      start_period: 30s
 
-  # Init container — creates buckets after MinIO is healthy
-  createbuckets:
-    image: minio/mc:latest
-    container_name: clubpal-createbuckets
+  garage-setup:
+    image: python:3.12-alpine
+    container_name: clubpal-garage-setup
     depends_on:
-      minio:
+      garage:
         condition: service_healthy
     networks:
       - clubpal-network
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-clubpal}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Set MINIO_ROOT_PASSWORD in .env}
+      GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY:-clubpal}
+      GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY}
     entrypoint: >
       /bin/sh -c "
-      /usr/bin/mc config host add clubpal http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD;
-      /usr/bin/mc mb --ignore-existing clubpal/clubpal-avatars;
-      /usr/bin/mc mb --ignore-existing clubpal/clubpal-events;
-      /usr/bin/mc mb --ignore-existing clubpal/clubpal-cache;
-      /usr/bin/mc anonymous set download clubpal/clubpal-avatars;
-      /usr/bin/mc anonymous set download clubpal/clubpal-events;
-      /usr/bin/mc anonymous set download clubpal/clubpal-cache;
-      exit 0;"
+      pip install requests -q &&
+      python3 -c \"
+      import os, time, requests, sys
+      ADMIN = 'http://garage:3903'
+      KEY = os.environ['GARAGE_ACCESS_KEY']
+      SECRET = os.environ['GARAGE_SECRET_KEY']
+      for i in range(30):
+          try:
+              if requests.get(f'{ADMIN}/health', timeout=2).status_code == 200: break
+          except: pass
+          time.sleep(2)
+      else:
+          print('Garage not ready', file=sys.stderr); sys.exit(1)
+      status = requests.get(f'{ADMIN}/v1/status').json()
+      node_id = next(iter(status.get('nodes', {})))
+      print(f'Node: {node_id}')
+      requests.post(f'{ADMIN}/v1/layout', json={node_id: {'zone': 'dc1', 'capacity': 10000000000}})
+      layout = requests.get(f'{ADMIN}/v1/layout').json()
+      version = layout.get('version', 0) + 1
+      requests.post(f'{ADMIN}/v1/layout/apply', json={'version': version})
+      print(f'Layout v{version} applied')
+      r = requests.post(f'{ADMIN}/v1/key', json={'name': 'main', 'importKeyId': KEY, 'importSecretKey': SECRET})
+      print(f'Key: {r.status_code}')
+      for name in ['clubpal-avatars', 'clubpal-events', 'clubpal-cache']:
+          r = requests.post(f'{ADMIN}/v1/bucket', json={'globalAlias': name})
+          bid = r.json().get('id') or requests.get(f'{ADMIN}/v1/bucket', params={'globalAlias': name}).json()['id']
+          requests.post(f'{ADMIN}/v1/bucket/allow', json={'bucketId': bid, 'accessKeyId': KEY, 'read': True, 'write': True, 'owner': True})
+          print(f'Bucket {name} ready')
+      print('Done')
+      \""
     restart: on-failure
 
   # ===========================================
@@ -107,7 +158,7 @@ services:
       - activities-service
       - enrichment-service
       - bill-split-service
-      - minio
+      - garage
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
@@ -126,6 +177,7 @@ services:
       - "8001"
     environment:
       - DATABASE_URL=postgresql://clubpal:${POSTGRES_PASSWORD}@db:5432/clubpal_gateway
+      - APP_ENV=production
       - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER:-}
@@ -134,19 +186,20 @@ services:
       - FROM_NAME=${FROM_NAME:-clubPal}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:9000}
-      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio:9000}
-      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-clubpal}
-      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
-      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-http://localhost:9000/storage}
-      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-}
+      - MINIO_ENDPOINT=${GARAGE_ENDPOINT:-garage:3900}
+      - MINIO_ACCESS_KEY=${GARAGE_ACCESS_KEY:-clubpal}
+      - MINIO_SECRET_KEY=${GARAGE_SECRET_KEY}
+      - MINIO_PUBLIC_URL=${STORAGE_PUBLIC_URL:?Set STORAGE_PUBLIC_URL in .env}
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:?Set INTERNAL_API_SECRET in .env}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - OIDC_PROVIDERS=${OIDC_PROVIDERS:-}
+      - CORS_ORIGINS=${CORS_ORIGINS:-https://clubapp.palstack.io}
     networks:
       - clubpal-network
     depends_on:
       db:
         condition: service_healthy
-      minio:
+      garage:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -166,19 +219,19 @@ services:
       - "8002"
     environment:
       - DATABASE_URL=postgresql://clubpal:${POSTGRES_PASSWORD}@db:5432/clubpal_groups
-      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio:9000}
-      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-clubpal}
-      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
-      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-http://localhost:9000/storage}
+      - MINIO_ENDPOINT=${GARAGE_ENDPOINT:-garage:3900}
+      - MINIO_ACCESS_KEY=${GARAGE_ACCESS_KEY:-clubpal}
+      - MINIO_SECRET_KEY=${GARAGE_SECRET_KEY}
+      - MINIO_PUBLIC_URL=${STORAGE_PUBLIC_URL:?Set STORAGE_PUBLIC_URL in .env}
       - GATEWAY_SERVICE_URL=http://api-gateway:8001
       - EVENTS_SERVICE_URL=http://events-service:8003
-      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-}
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:?Set INTERNAL_API_SECRET in .env}
     networks:
       - clubpal-network
     depends_on:
       db:
         condition: service_healthy
-      minio:
+      garage:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -198,14 +251,14 @@ services:
       - "8003"
     environment:
       - DATABASE_URL=postgresql://clubpal:${POSTGRES_PASSWORD}@db:5432/clubpal_events
-      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio:9000}
-      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-clubpal}
-      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
-      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-http://localhost:9000/storage}
+      - MINIO_ENDPOINT=${GARAGE_ENDPOINT:-garage:3900}
+      - MINIO_ACCESS_KEY=${GARAGE_ACCESS_KEY:-clubpal}
+      - MINIO_SECRET_KEY=${GARAGE_SECRET_KEY}
+      - MINIO_PUBLIC_URL=${STORAGE_PUBLIC_URL:?Set STORAGE_PUBLIC_URL in .env}
       - GROUPS_SERVICE_URL=http://groups-service:8002
       - ACTIVITIES_SERVICE_URL=http://activities-service:8005
       - GATEWAY_URL=http://api-gateway:8001
-      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-}
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:?Set INTERNAL_API_SECRET in .env}
     networks:
       - clubpal-network
     depends_on:
@@ -215,7 +268,7 @@ services:
         condition: service_healthy
       activities-service:
         condition: service_healthy
-      minio:
+      garage:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -289,14 +342,14 @@ services:
       - TMDB_API_KEY=${TMDB_API_KEY:-}
       - IGDB_CLIENT_ID=${IGDB_CLIENT_ID:-}
       - IGDB_CLIENT_SECRET=${IGDB_CLIENT_SECRET:-}
-      - MINIO_ENDPOINT=${MINIO_ENDPOINT:-minio:9000}
-      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-clubpal}
-      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD}
-      - MINIO_PUBLIC_URL=${MINIO_PUBLIC_URL:-http://localhost:9000/storage}
+      - MINIO_ENDPOINT=${GARAGE_ENDPOINT:-garage:3900}
+      - MINIO_ACCESS_KEY=${GARAGE_ACCESS_KEY:-clubpal}
+      - MINIO_SECRET_KEY=${GARAGE_SECRET_KEY}
+      - MINIO_PUBLIC_URL=${STORAGE_PUBLIC_URL:?Set STORAGE_PUBLIC_URL in .env}
       - CACHE_TTL_SEARCH=${CACHE_TTL_SEARCH:-86400}
       - CACHE_TTL_DETAIL=${CACHE_TTL_DETAIL:-604800}
       - CACHE_TTL_GEOCODE=${CACHE_TTL_GEOCODE:-2592000}
-      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-}
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:?Set INTERNAL_API_SECRET in .env}
       - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER:-}
@@ -310,7 +363,7 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      minio:
+      garage:
         condition: service_healthy
       api-gateway:
         condition: service_healthy
@@ -334,7 +387,7 @@ services:
       - DATABASE_URL=postgresql://clubpal:${POSTGRES_PASSWORD}@db:5432/clubpal_billsplit
       - API_GATEWAY_URL=http://api-gateway:8001
       - EVENTS_SERVICE_URL=http://events-service:8003
-      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:-}
+      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:?Set INTERNAL_API_SECRET in .env}
       - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
       - SMTP_PORT=${SMTP_PORT:-587}
       - SMTP_USER=${SMTP_USER:-}
@@ -365,4 +418,5 @@ networks:
 
 volumes:
   pgdata:
-  minio_data:
+  garage_meta:
+  garage_data:

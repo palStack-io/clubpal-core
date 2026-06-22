@@ -77,6 +77,8 @@ export default function CreatePollModal({ isOpen, onClose, groupId: preGroupId, 
   const [deadlinePreset, setDeadlinePreset] = useState(24)
   const [customDeadline, setCustomDeadline] = useState('')
   const [useCustom, setUseCustom] = useState(false)
+  const [allowMultiSelect, setAllowMultiSelect] = useState(false)
+  const [allowCustomResponse, setAllowCustomResponse] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
@@ -91,6 +93,8 @@ export default function CreatePollModal({ isOpen, onClose, groupId: preGroupId, 
     setOptions([makeOption(preActivityName || '', '⭐'), makeOption('', '⭐')])
     setGroupId(preGroupId ? String(preGroupId) : '')
     setNote('')
+    setAllowMultiSelect(false)
+    setAllowCustomResponse(false)
     setError('')
     setEmojiPickerFor(null)
   }, [isOpen])
@@ -128,6 +132,8 @@ export default function CreatePollModal({ isOpen, onClose, groupId: preGroupId, 
         note: note.trim() || null,
         deadline: computeDeadline(),
         custom_options: filled.map(o => ({ label: o.label.trim(), emoji: o.emoji })),
+        allow_multi_select: allowMultiSelect,
+        allow_custom_response: allowCustomResponse,
       })
       onCreated?.(poll)
       onClose()
@@ -277,6 +283,40 @@ export default function CreatePollModal({ isOpen, onClose, groupId: preGroupId, 
         )}
       </div>
 
+
+      {/* Poll settings */}
+      <div style={sectionStyle}>
+        <label style={labelStyle}>Response settings</label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+          {/* Multi-select toggle */}
+          <div
+            onClick={() => setAllowMultiSelect(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', padding: '10px 12px', borderRadius: '10px', background: allowMultiSelect ? 'var(--rose-glow)' : 'var(--s2)', border: `1px solid ${allowMultiSelect ? 'var(--rose-border)' : 'var(--glass)'}`, transition: 'all 0.15s' }}
+          >
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)' }}>Allow multiple selections</div>
+              <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>Members can vote for more than one option</div>
+            </div>
+            <div style={{ width: '36px', height: '20px', borderRadius: '99px', background: allowMultiSelect ? 'var(--rose)' : 'var(--t4)', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
+              <div style={{ position: 'absolute', top: '2px', left: allowMultiSelect ? '18px' : '2px', width: '16px', height: '16px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
+            </div>
+          </div>
+
+          {/* Allow write-in toggle */}
+          <div
+            onClick={() => setAllowCustomResponse(v => !v)}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', padding: '10px 12px', borderRadius: '10px', background: allowCustomResponse ? 'var(--rose-glow)' : 'var(--s2)', border: `1px solid ${allowCustomResponse ? 'var(--rose-border)' : 'var(--glass)'}`, transition: 'all 0.15s' }}
+          >
+            <div>
+              <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t1)' }}>Allow write-in options</div>
+              <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>Members can suggest their own options</div>
+            </div>
+            <div style={{ width: '36px', height: '20px', borderRadius: '99px', background: allowCustomResponse ? 'var(--rose)' : 'var(--t4)', position: 'relative', flexShrink: 0, transition: 'background 0.2s' }}>
+              <div style={{ position: 'absolute', top: '2px', left: allowCustomResponse ? '18px' : '2px', width: '16px', height: '16px', borderRadius: '50%', background: '#fff', transition: 'left 0.2s' }} />
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Deadline */}
       <div style={sectionStyle}>

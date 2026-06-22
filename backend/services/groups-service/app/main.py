@@ -300,9 +300,8 @@ async def add_member_endpoint(group_id: int, member_data: MemberAdd):
 
 
 @app.get("/groups/{group_id}/members", response_model=List[MemberResponse])
-async def get_members_endpoint(group_id: int):
+async def get_members_endpoint(group_id: int, requester_id: int = Depends(get_current_user_id)):
     """Get all members of a group."""
-    # Check if group exists
     if not get_group(group_id):
         raise HTTPException(status_code=404, detail="Group not found")
 
@@ -728,12 +727,14 @@ async def delete_comment_endpoint(group_id: int, comment_id: int, user_id: int =
 
 def _build_poll_summary(poll_id: int, user_id: int, member_count: int) -> dict:
     """Build response summary for a poll."""
+    import json as _json
     poll = get_poll(poll_id)
     responses = get_poll_responses(poll_id)
     my_response = get_poll_response(poll_id, user_id)
     responded_count = len(responses)
     has_responded = my_response is not None
     poll_is_closed = poll and poll['status'] != 'open'
+    allow_multi_select = bool(poll.get('allow_multi_select')) if poll else False
 
     # Build counts keyed by option value — dynamic for custom options, fixed for default
     custom_opts = poll.get('custom_options') if poll else None
@@ -745,8 +746,19 @@ def _build_poll_summary(poll_id: int, user_id: int, member_count: int) -> dict:
     is_creator = poll is not None and poll['created_by'] == user_id
     if has_responded or poll_is_closed or is_creator:
         for r in responses:
-            key = r['response']
-            counts[key] = counts.get(key, 0) + 1
+            if allow_multi_select:
+                # Multi-select: each response row has a 'responses' JSON array
+                raw = r.get('responses')
+                if isinstance(raw, str):
+                    raw = _json.loads(raw)
+                if isinstance(raw, list):
+                    for key in raw:
+                        counts[key] = counts.get(key, 0) + 1
+                elif r.get('response'):
+                    counts[r['response']] = counts.get(r['response'], 0) + 1
+            else:
+                key = r['response']
+                counts[key] = counts.get(key, 0) + 1
 
     return {
         'total_members': member_count,
@@ -773,6 +785,8 @@ def _poll_to_model(poll: dict, summary: dict) -> PollResponseModel:
         created_at=poll['created_at'],
         summary=summary,
         custom_options=poll.get('custom_options'),
+        allow_multi_select=bool(poll.get('allow_multi_select')),
+        allow_custom_response=bool(poll.get('allow_custom_response')),
     )
 
 
@@ -805,6 +819,8 @@ async def create_poll_endpoint(group_id: int, data: PollCreate, user: dict = Dep
         deadline=data.deadline,
         custom_options=opts,
         creator_username=creator_username,
+        allow_multi_select=data.allow_multi_select,
+        allow_custom_response=data.allow_custom_response,
     )
 
     # Notify group via gateway (best-effort)
@@ -863,7 +879,17 @@ async def respond_to_poll(poll_id: int, data: PollRespond, user_id: int = Depend
     if poll['status'] != 'open':
         raise HTTPException(status_code=400, detail="Poll is not open")
 
-    upsert_poll_response(poll_id, user_id, data.response)
+    allow_multi = bool(poll.get('allow_multi_select'))
+
+    if allow_multi:
+        if not data.responses:
+            raise HTTPException(status_code=400, detail="Multi-select poll requires 'responses' list")
+        primary = data.responses[0]
+        upsert_poll_response(poll_id, user_id, primary, responses=data.responses)
+    else:
+        if not data.response:
+            raise HTTPException(status_code=400, detail="Single-select poll requires 'response'")
+        upsert_poll_response(poll_id, user_id, data.response)
 
     group = get_group(poll['group_id'])
     member_count = group['member_count'] if group else 0

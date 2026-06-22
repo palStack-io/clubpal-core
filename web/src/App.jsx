@@ -5,6 +5,7 @@ import { ThemeProvider } from './contexts/ThemeContext'
 import { MobileNavProvider } from './contexts/MobileNavContext'
 import { ToastProvider } from './components/ui/Toast'
 import OnboardingWizard from './components/onboarding/OnboardingWizard'
+import ErrorBoundary from './components/ui/ErrorBoundary'
 
 // Eager-loaded (small, always needed)
 import Login from './pages/auth/Login'
@@ -155,16 +156,18 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <ThemeProvider>
-        <ToastProvider>
-          <MobileNavProvider>
-            <AuthProvider>
-              <AppRoutes />
-            </AuthProvider>
-          </MobileNavProvider>
-        </ToastProvider>
-      </ThemeProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <ThemeProvider>
+          <ToastProvider>
+            <MobileNavProvider>
+              <AuthProvider>
+                <AppRoutes />
+              </AuthProvider>
+            </MobileNavProvider>
+          </ToastProvider>
+        </ThemeProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   )
 }

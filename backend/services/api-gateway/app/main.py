@@ -70,7 +70,12 @@ def _apply_session_cookie(response: Response, token: str) -> None:
     )
 
 
-app = FastAPI(title="ClubPal API Gateway", version="1.0.0")
+app = FastAPI(
+    title="ClubPal API Gateway",
+    version="1.0.0",
+    docs_url=None if _IS_PRODUCTION else "/docs",
+    redoc_url=None if _IS_PRODUCTION else "/redoc",
+)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 

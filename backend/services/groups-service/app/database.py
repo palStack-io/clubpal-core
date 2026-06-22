@@ -1,6 +1,8 @@
 import psycopg2
 import psycopg2.extras
+import psycopg2.pool
 import os
+import threading
 from typing import Optional, List
 from datetime import datetime
 import random
@@ -8,6 +10,33 @@ import string
 
 # Database URL
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://clubpal:clubpal@db:5432/clubpal_groups")
+
+_pool = None
+_pool_lock = threading.Lock()
+
+
+def _get_pool():
+    global _pool
+    if _pool is None:
+        with _pool_lock:
+            if _pool is None:
+                _pool = psycopg2.pool.ThreadedConnectionPool(2, 10, dsn=DATABASE_URL)
+    return _pool
+
+
+class _PooledConn:
+    def __init__(self, conn):
+        self._conn = conn
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+    def close(self):
+        try:
+            self._conn.rollback()
+        except Exception:
+            pass
+        _get_pool().putconn(self._conn)
 
 
 def init_db():
@@ -115,6 +144,22 @@ def init_db():
     except Exception:
         pass
 
+    # allow_multi_select / allow_custom_response on polls
+    try:
+        cursor.execute("ALTER TABLE group_polls ADD COLUMN IF NOT EXISTS allow_multi_select BOOLEAN DEFAULT FALSE")
+    except Exception:
+        pass
+    try:
+        cursor.execute("ALTER TABLE group_polls ADD COLUMN IF NOT EXISTS allow_custom_response BOOLEAN DEFAULT FALSE")
+    except Exception:
+        pass
+
+    # multi-select responses array on poll responses
+    try:
+        cursor.execute("ALTER TABLE group_poll_responses ADD COLUMN IF NOT EXISTS responses JSONB")
+    except Exception:
+        pass
+
     # Polls tables
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS group_polls (
@@ -198,9 +243,10 @@ def init_db():
 
 
 def get_db():
-    """Get database connection with dict cursor."""
-    conn = psycopg2.connect(DATABASE_URL, cursor_factory=psycopg2.extras.RealDictCursor)
-    return conn
+    """Get a pooled database connection with dict cursor."""
+    conn = _get_pool().getconn()
+    conn.cursor_factory = psycopg2.extras.RealDictCursor
+    return _PooledConn(conn)
 
 
 # ===== Group CRUD =====
@@ -864,7 +910,9 @@ def delete_group_comment(comment_id: int, deleted_by: int = None) -> bool:
 def create_poll(group_id: int, created_by: int, activity_name: str,
                 activity_type: str = None, activity_id: int = None,
                 note: str = None, deadline: datetime = None,
-                custom_options: list = None, creator_username: str = None) -> int:
+                custom_options: list = None, creator_username: str = None,
+                allow_multi_select: bool = False,
+                allow_custom_response: bool = False) -> int:
     """Create a new group poll."""
     import json
     conn = get_db()
@@ -872,10 +920,12 @@ def create_poll(group_id: int, created_by: int, activity_name: str,
 
     cursor.execute(
         """INSERT INTO group_polls (group_id, created_by, activity_name, activity_type,
-           activity_id, note, deadline, custom_options, creator_username)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+           activity_id, note, deadline, custom_options, creator_username,
+           allow_multi_select, allow_custom_response)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
         (group_id, created_by, activity_name, activity_type, activity_id, note, deadline,
-         json.dumps(custom_options) if custom_options else None, creator_username)
+         json.dumps(custom_options) if custom_options else None, creator_username,
+         allow_multi_select, allow_custom_response)
     )
     poll_id = cursor.fetchone()['id']
     conn.commit()
@@ -950,17 +1000,20 @@ def get_pending_polls_for_user(user_id: int) -> List[dict]:
     return [dict(row) for row in rows]
 
 
-def upsert_poll_response(poll_id: int, user_id: int, response: str) -> dict:
-    """Insert or update a poll response."""
+def upsert_poll_response(poll_id: int, user_id: int, response: str, responses: list = None) -> dict:
+    """Insert or update a poll response. `responses` is used for multi-select polls."""
+    import json
     conn = get_db()
     cursor = conn.cursor()
+    responses_json = json.dumps(responses) if responses else None
     cursor.execute(
-        """INSERT INTO group_poll_responses (poll_id, user_id, response)
-           VALUES (%s, %s, %s)
+        """INSERT INTO group_poll_responses (poll_id, user_id, response, responses)
+           VALUES (%s, %s, %s, %s)
            ON CONFLICT (poll_id, user_id) DO UPDATE SET response = EXCLUDED.response,
+           responses = EXCLUDED.responses,
            responded_at = CURRENT_TIMESTAMP
            RETURNING *""",
-        (poll_id, user_id, response)
+        (poll_id, user_id, response, responses_json)
     )
     row = cursor.fetchone()
     conn.commit()

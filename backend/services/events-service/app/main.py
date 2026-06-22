@@ -1151,7 +1151,7 @@ async def add_attendee_endpoint(event_id: int, attendee_data: AttendeeAdd):
 
 
 @app.get("/events/{event_id}/attendees", response_model=List[AttendeeResponse])
-async def get_attendees_endpoint(event_id: int):
+async def get_attendees_endpoint(event_id: int, _user_id: int = Depends(get_current_user_id)):
     """Get all attendees for an event."""
     # Check if event exists
     if not get_event(event_id):
@@ -1176,7 +1176,7 @@ async def get_attendee_endpoint(event_id: int, user_id: int):
 
 @app.patch("/events/{event_id}/attendees/{user_id}", response_model=AttendeeResponse)
 async def update_attendee_status_endpoint(event_id: int, user_id: int,
-                                         status_data: AttendeeUpdateStatus):
+                                         status_data: AttendeeUpdateStatus, requester_id: int = Depends(get_current_user_id)):
     """Update an attendee's status."""
     # Check if attendee exists
     if not get_attendee(event_id, user_id):
@@ -1193,7 +1193,7 @@ async def update_attendee_status_endpoint(event_id: int, user_id: int,
 
 
 @app.delete("/events/{event_id}/attendees/{user_id}", status_code=204)
-async def remove_attendee_endpoint(event_id: int, user_id: int):
+async def remove_attendee_endpoint(event_id: int, user_id: int, requester_id: int = Depends(get_current_user_id)):
     """Remove an attendee from an event."""
     success = remove_attendee(event_id, user_id)
 
@@ -1218,7 +1218,7 @@ async def add_comment_endpoint(event_id: int, comment_data: CommentCreate, user_
 
 
 @app.get("/events/{event_id}/comments", response_model=List[CommentResponse])
-async def get_comments_endpoint(event_id: int):
+async def get_comments_endpoint(event_id: int, _user_id: int = Depends(get_current_user_id)):
     """Get all comments for an event."""
     # Check if event exists
     if not get_event(event_id):
@@ -1338,7 +1338,7 @@ async def confirm_photo_upload(event_id: int, body: PhotoConfirmRequest, user_id
 
 
 @app.get("/events/{event_id}/photos", response_model=List[PhotoResponse])
-async def list_photos(event_id: int):
+async def list_photos(event_id: int, _user_id: int = Depends(get_current_user_id)):
     """List all photos for an event."""
     if not get_event(event_id):
         raise HTTPException(status_code=404, detail="Event not found")
@@ -1398,7 +1398,7 @@ async def create_recurring_schedule_endpoint(data: RecurringScheduleCreate, user
 
 
 @app.get("/groups/{group_id}/recurring-schedules", response_model=List[RecurringScheduleResponse])
-async def list_recurring_schedules(group_id: int):
+async def list_recurring_schedules(group_id: int, _user_id: int = Depends(get_current_user_id)):
     """List all recurring schedules for a group."""
     rows = get_recurring_schedules_for_group(group_id)
     result = []
@@ -1419,7 +1419,7 @@ async def cancel_recurring_schedule(schedule_id: int, user_id: int = Depends(get
 # ===== History Endpoint =====
 
 @app.get("/events/{event_id}/history", response_model=List[EventHistoryResponse])
-async def get_event_history_endpoint(event_id: int):
+async def get_event_history_endpoint(event_id: int, _user_id: int = Depends(get_current_user_id)):
     """Get event history/audit log."""
     # Check if event exists
     if not get_event(event_id):

@@ -48,6 +48,3 @@ backend/data/
 # Documentation (not needed in image)
 **/*.md
 docs/
-
-# Backup snapshots
-backup/

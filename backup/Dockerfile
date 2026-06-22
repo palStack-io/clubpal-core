@@ -32,7 +32,7 @@ RUN ARCH="$(uname -m)" && \
 
 COPY backup/entrypoint.sh   /scripts/entrypoint.sh
 COPY backup/backup-pg.sh    /scripts/backup-pg.sh
-COPY backup/backup-minio.sh /scripts/backup-minio.sh
+COPY backup/backup-storage.sh /scripts/backup-storage.sh
 RUN chmod +x /scripts/*.sh
 
 VOLUME ["/backups"]

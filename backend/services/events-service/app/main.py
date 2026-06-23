@@ -166,7 +166,10 @@ async def _is_group_member(group_id: int, user_id: int) -> bool:
     """Return True if user_id is a member of group_id (calls groups-service)."""
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get(f"{GROUPS_SERVICE_URL}/groups/{group_id}/members")
+            r = await client.get(
+                f"{GROUPS_SERVICE_URL}/internal/groups/{group_id}/members",
+                headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
+            )
             if r.status_code == 200:
                 return any(m["user_id"] == user_id for m in r.json())
     except Exception:
@@ -178,7 +181,10 @@ async def _sync_event_attendees_with_group_members(event_id: int, group_id: int)
     try:
         existing = {a["user_id"] for a in get_attendees(event_id)}
         async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get(f"{GROUPS_SERVICE_URL}/groups/{group_id}/members")
+            r = await client.get(
+                f"{GROUPS_SERVICE_URL}/internal/groups/{group_id}/members",
+                headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
+            )
             if r.status_code != 200:
                 return
             for member in r.json():
@@ -717,7 +723,10 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(
     # Add all other group members as "pending" so the event appears on their dashboards
     try:
         async with httpx.AsyncClient(timeout=5) as client:
-            r = await client.get(f"{GROUPS_SERVICE_URL}/groups/{event_data.group_id}/members")
+            r = await client.get(
+                f"{GROUPS_SERVICE_URL}/internal/groups/{event_data.group_id}/members",
+                headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
+            )
             if r.status_code == 200:
                 for member in r.json():
                     uid = member.get("user_id")
@@ -1008,7 +1017,10 @@ async def send_rsvp_reminder(event_id: int, user_id: int = Depends(get_current_u
     group_member_ids: List[int] = []
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            r = await client.get(f"{GROUPS_SERVICE_URL}/groups/{event['group_id']}/members")
+            r = await client.get(
+                f"{GROUPS_SERVICE_URL}/internal/groups/{event['group_id']}/members",
+                headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
+            )
             if r.status_code == 200:
                 group_member_ids = [m["user_id"] for m in r.json()]
     except Exception:
@@ -1085,7 +1097,10 @@ async def rsvp_event(event_id: int, rsvp_data: AttendeeRSVP, user_id: int = Depe
             group_member_count = 0
             try:
                 async with httpx.AsyncClient(timeout=3.0) as client:
-                    r = await client.get(f"{GROUPS_SERVICE_URL}/groups/{event['group_id']}/members")
+                    r = await client.get(
+                        f"{GROUPS_SERVICE_URL}/internal/groups/{event['group_id']}/members",
+                        headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
+                    )
                     if r.status_code == 200:
                         group_member_count = len(r.json())
             except Exception:

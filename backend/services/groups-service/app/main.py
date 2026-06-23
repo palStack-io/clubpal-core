@@ -363,6 +363,16 @@ async def remove_member_endpoint(group_id: int, user_id: int, requester_id: int 
 
 # ===== Internal / Admin Endpoints =====
 
+@app.get("/internal/groups/{group_id}/members")
+async def get_members_internal_endpoint(group_id: int, x_internal_secret: str = Header(None)):
+    """Internal: fetch group members without user Bearer auth (used by events-service)."""
+    internal_secret = os.getenv("INTERNAL_API_SECRET", "")
+    if not internal_secret or x_internal_secret != internal_secret:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    members = get_members(group_id)
+    return [MemberResponse(**member) for member in members]
+
+
 @app.delete("/users/{user_id}/memberships", status_code=200)
 async def remove_user_from_all_groups_endpoint(user_id: int, x_internal_secret: str = Header(None)):
     """Internal: remove a deleted user from all groups (called by gateway on account deletion)."""

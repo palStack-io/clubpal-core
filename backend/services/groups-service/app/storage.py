@@ -10,6 +10,7 @@ MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "clubpal")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "clubpalpassword")
 MINIO_PUBLIC_URL = os.getenv("MINIO_PUBLIC_URL", "/storage")
 MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
+MINIO_REGION = os.getenv("MINIO_REGION", "us-east-1")
 
 BUCKET_EVENTS = "clubpal-events"
 
@@ -18,6 +19,7 @@ client = Minio(
     access_key=MINIO_ACCESS_KEY,
     secret_key=MINIO_SECRET_KEY,
     secure=MINIO_SECURE,
+    region=MINIO_REGION,
 )
 
 _PUBLIC_READ_POLICY = json.dumps({

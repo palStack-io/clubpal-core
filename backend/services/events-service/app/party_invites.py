@@ -3,6 +3,7 @@ Party Invite module — host management routes and public /p/ routes.
 Both routers are registered in main.py via app.include_router().
 """
 import os
+import hmac
 import secrets
 import hashlib
 import time
@@ -198,6 +199,7 @@ class GuestRsvpPatch(BaseModel):
     status: Optional[str] = Field(None, pattern="^(going|maybe|not_going)$")
     bring_note: Optional[str] = Field(None, max_length=500)
     claim_item_id: Optional[int] = None
+    edit_token: Optional[str] = None
 
 
 # ── Simple in-memory rate limiter ─────────────────────────────────────────────
@@ -212,6 +214,16 @@ def _check_rate_limit(ip: str) -> None:
     _rsvp_timestamps[ip] = [t for t in _rsvp_timestamps[ip] if now - t < _RSVP_WINDOW]
     if len(_rsvp_timestamps[ip]) >= _RSVP_LIMIT:
         raise HTTPException(status_code=429, detail="Too many RSVPs — try again in a minute")
+
+
+_ALLOWED_IMG_EXT  = {"jpg", "jpeg", "png", "webp", "gif"}
+_ALLOWED_IMG_MIME = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+
+
+def _guest_edit_token(guest_id: int, invite_token: str) -> str:
+    secret = os.getenv("INTERNAL_API_SECRET", "dev-secret")
+    msg = f"{guest_id}:{invite_token}".encode()
+    return hmac.new(secret.encode(), msg, hashlib.sha256).hexdigest()[:32]
     _rsvp_timestamps[ip].append(now)
 
 
@@ -428,6 +440,10 @@ async def cover_upload_url(
     if invite["host_user_id"] != user_id:
         raise HTTPException(status_code=403, detail="Not your invite")
     ext = body.filename.rsplit(".", 1)[-1].lower() if "." in body.filename else "jpg"
+    if ext not in _ALLOWED_IMG_EXT:
+        raise HTTPException(status_code=400, detail="Invalid file extension")
+    if body.content_type not in _ALLOWED_IMG_MIME:
+        raise HTTPException(status_code=400, detail="Invalid content type")
     object_name = f"party-invites/{token}/cover.{ext}"
     upload_url = storage.presigned_upload_url(storage.BUCKET_EVENTS, object_name, body.content_type)
     public_url = storage.public_object_url(storage.BUCKET_EVENTS, object_name)
@@ -565,19 +581,22 @@ async def get_public_invite(token: str, request: Request):
             break
 
     # Per-group going counts (clubPal members)
-    conn = get_db()
-    cursor = conn.cursor()
     group_counts = []
     for g in groups:
-        cursor.execute(
-            """SELECT COUNT(*) AS cnt FROM event_attendees ea
-               JOIN group_members gm ON gm.user_id = ea.user_id AND gm.group_id = %s
-               WHERE ea.event_id = %s AND ea.status = 'going'""",
-            (g["group_id"], invite["event_id"])
-        )
-        row = cursor.fetchone()
-        group_counts.append({"group_id": g["group_id"], "going_count": int(row["cnt"] or 0)})
-    conn.close()
+        members = await _get_group_members(g["group_id"])
+        member_ids = [m["user_id"] for m in members]
+        if member_ids:
+            with get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """SELECT COUNT(*) AS cnt FROM event_attendees
+                       WHERE event_id = %s AND status = 'going' AND user_id = ANY(%s)""",
+                    (invite["event_id"], member_ids)
+                )
+                row = cursor.fetchone()
+                group_counts.append({"group_id": g["group_id"], "going_count": int(row["cnt"] or 0)})
+        else:
+            group_counts.append({"group_id": g["group_id"], "going_count": 0})
 
     # Strip internal id from public response
     public_invite = {k: v for k, v in invite.items() if k != "id"}
@@ -632,7 +651,7 @@ async def public_rsvp(token: str, body: GuestRsvpCreate, request: Request):
     except Exception:
         pass
 
-    return {"guest_id": guest["id"], "nudge_signup": True}
+    return {"guest_id": guest["id"], "edit_token": _guest_edit_token(guest["id"], token), "nudge_signup": True}
 
 
 @public_router.patch("/{token}/rsvp/{guest_id}")
@@ -643,7 +662,11 @@ async def update_public_rsvp(token: str, guest_id: int, body: GuestRsvpPatch):
     guest = get_guest_rsvp(guest_id)
     if not guest or guest["party_invite_id"] != invite["id"]:
         raise HTTPException(status_code=404, detail="RSVP not found")
-    kwargs = {k: v for k, v in body.dict().items() if v is not None}
+    if not body.edit_token or not hmac.compare_digest(
+        body.edit_token, _guest_edit_token(guest_id, token)
+    ):
+        raise HTTPException(status_code=403, detail="Invalid edit token")
+    kwargs = {k: v for k, v in body.dict().items() if v is not None and k != "edit_token"}
     updated = update_guest_rsvp(guest_id, **kwargs)
     return {
         "ok": True,
@@ -667,20 +690,23 @@ async def get_public_guests(token: str):
     ]
 
     # ClubPal members going per group
-    conn = get_db()
-    cursor = conn.cursor()
     member_groups = []
     for g in groups:
-        cursor.execute(
-            """SELECT ea.user_id, ea.status FROM event_attendees ea
-               JOIN group_members gm ON gm.user_id = ea.user_id AND gm.group_id = %s
-               WHERE ea.event_id = %s AND ea.status = 'going'""",
-            (g["group_id"], invite["event_id"])
-        )
-        member_groups.append({
-            "group_id": g["group_id"],
-            "members": [dict(r) for r in cursor.fetchall()],
-        })
-    conn.close()
+        members = await _get_group_members(g["group_id"])
+        member_ids = [m["user_id"] for m in members]
+        if member_ids:
+            with get_db() as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """SELECT user_id, status FROM event_attendees
+                       WHERE event_id = %s AND status = 'going' AND user_id = ANY(%s)""",
+                    (invite["event_id"], member_ids)
+                )
+                member_groups.append({
+                    "group_id": g["group_id"],
+                    "members": [dict(r) for r in cursor.fetchall()],
+                })
+        else:
+            member_groups.append({"group_id": g["group_id"], "members": []})
 
     return {"guests": guests_safe, "member_groups": member_groups}

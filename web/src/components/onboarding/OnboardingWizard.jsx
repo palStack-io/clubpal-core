@@ -156,8 +156,7 @@ export default function OnboardingWizard() {
   const handleSkip = async () => {
     updateUser({ onboarding_complete: true })
     navigate('/dashboard')
-    // Persist to backend so it sticks across sessions
-    try { await gatewayClient.patch('/users/me', { onboarding_complete: true }) } catch {}
+    try { await gatewayClient.post('/users/me/onboarding/complete') } catch {}
   }
 
   const needsLocation = activities.some(a => LOCATION_ACTIVITIES.has(a))

@@ -17,23 +17,37 @@ def _get_pool():
     if _pool is None:
         with _pool_lock:
             if _pool is None:
-                _pool = psycopg2.pool.ThreadedConnectionPool(2, 10, dsn=DATABASE_URL)
+                _pool = psycopg2.pool.ThreadedConnectionPool(2, 20, dsn=DATABASE_URL)
     return _pool
 
 
 class _PooledConn:
     def __init__(self, conn):
         self._conn = conn
+        self._closed = False
 
     def __getattr__(self, name):
         return getattr(self._conn, name)
 
     def close(self):
+        if self._closed:
+            return
+        self._closed = True
         try:
             self._conn.rollback()
         except Exception:
             pass
         _get_pool().putconn(self._conn)
+
+    def __del__(self):
+        if not self._closed:
+            self.close()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
 
 
 def init_db():

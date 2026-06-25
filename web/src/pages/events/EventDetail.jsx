@@ -14,7 +14,7 @@ import AnimatedBackground from '../../components/ui/AnimatedBackground'
 import BillSplitModal from '../../components/modals/BillSplitModal'
 import BillSplitStatusCard from '../../components/events/BillSplitStatusCard'
 import { eventsApi } from '../../api/events'
-import { ratingsClient, gatewayClient } from '../../api/client'
+import { ratingsClient, gatewayClient, eventsClient } from '../../api/client'
 import { useAuth } from '../../contexts/AuthContext'
 
 async function enrichWithProfiles(items, uidField) {
@@ -43,6 +43,7 @@ export default function EventDetail() {
   const [photos, setPhotos] = useState([])
   const [comments, setComments] = useState([])
   const [loading, setLoading] = useState(true)
+  const [partyInviteToken, setPartyInviteToken] = useState(null)
   const [rsvpLoading, setRsvpLoading] = useState(false)
   const [showEditEvent, setShowEditEvent] = useState(false)
   const [showRateModal, setShowRateModal] = useState(false)
@@ -90,6 +91,9 @@ export default function EventDetail() {
     gatewayClient.get('/users/me/saved', { params: { item_type: 'event' } })
       .then(r => setIsBookmarked((r.data || []).some(s => String(s.item_id) === String(id))))
       .catch(() => setIsBookmarked(false))
+    eventsClient.get(`/party-invites/by-event/${id}`)
+      .then(r => setPartyInviteToken(r.data.token))
+      .catch(() => {})
   }, [id])
 
   const toggleBookmark = async () => {
@@ -251,10 +255,12 @@ export default function EventDetail() {
 
   const heroActions = [
     ...(event.status === 'scheduled' && isHost ? [{ label: '✏️ Edit', onClick: () => setShowEditEvent(true) }] : []),
+    ...(partyInviteToken ? [{ label: '✨ Manage Invite', onClick: () => navigate(`/party-invites/${partyInviteToken}/manage`) }] : []),
+    ...((isHost || isCreator) && !partyInviteToken ? [{ label: '✨ Create Invite', onClick: () => navigate('/events/new/invite') }] : []),
     ...(isScheduled && (isHost || isCreator) ? [{ label: '➕ Add Attendees', onClick: () => setShowAddAttendees(true) }] : []),
     ...(isScheduled && (isHost || isCreator) ? [{ label: '🏁 End Event', onClick: () => setShowEndConfirm(true) }] : []),
     ...(isScheduled && isCreator && !!event.rsvp_deadline ? [{ label: '📣 Send Reminder', onClick: handleRsvpReminder }] : []),
-    ...(event.ratings_enabled !== false && (event.status === 'completed' || (event.scheduled_date && new Date(event.scheduled_date) < new Date())) ? [{ label: '⭐ Rate', onClick: () => setShowRateModal(true) }] : []),
+    ...(event.ratings_enabled !== false && (event.status === 'completed' || event.status === 'in_progress' || (event.scheduled_date && new Date(event.scheduled_date) < new Date())) ? [{ label: '⭐ Rate', onClick: () => setShowRateModal(true) }] : []),
     ...(event.bill_split_enabled ? [{ label: '💳 Split Bill', onClick: () => setShowBillSplit(true) }] : []),
     ...(isScheduled && myAttendee?.status !== 'going' ? [{ label: '✓ RSVP Going', onClick: () => handleRsvp('going'), loading: rsvpLoading }] : []),
     { label: isBookmarked ? '🔖 Bookmarked' : '🔖 Bookmark', onClick: toggleBookmark },

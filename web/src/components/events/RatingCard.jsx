@@ -160,7 +160,7 @@ export default function RatingCard({
   onAddRating,
 }) {
   const isPast = scheduledDate && new Date(toUTC(scheduledDate)) < new Date()
-  const isCompleted = eventStatus === 'completed' || (eventStatus !== 'cancelled' && isPast)
+  const isCompleted = eventStatus === 'completed' || eventStatus === 'in_progress' || (eventStatus !== 'cancelled' && isPast)
   const myRating = ratings.find(
     (r) => String(r.rater_user_id || r.reviewer_id || r.rater_id || r.user_id) === String(currentUserId)
   )

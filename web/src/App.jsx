@@ -36,6 +36,9 @@ const Settings = lazy(() => import('./pages/profile/Settings'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 const PayConfirm = lazy(() => import('./pages/PayConfirm'))
 const ClaimItems = lazy(() => import('./pages/ClaimItems'))
+const PartyInvitePage   = lazy(() => import('./pages/party/PartyInvitePage'))
+const CreatePartyInvite = lazy(() => import('./pages/party/CreatePartyInvite'))
+const ManagePartyInvite = lazy(() => import('./pages/party/ManagePartyInvite'))
 
 // Unified discover page
 const DiscoverExplore = lazy(() => import('./pages/discover/DiscoverExplore'))
@@ -122,7 +125,11 @@ function AppRoutes() {
       <Route path="/groups/:id/members" element={<ProtectedRoute><ManageMembers /></ProtectedRoute>} />
       <Route path="/events" element={<ProtectedRoute><EventsList /></ProtectedRoute>} />
       <Route path="/events/new" element={<ProtectedRoute><CreateEvent /></ProtectedRoute>} />
+      <Route path="/events/new/invite" element={<ProtectedRoute><CreatePartyInvite /></ProtectedRoute>} />
       <Route path="/events/:id" element={<ProtectedRoute><EventDetail /></ProtectedRoute>} />
+      <Route path="/party-invites/:token/manage" element={<ProtectedRoute><ManagePartyInvite /></ProtectedRoute>} />
+      {/* Public — no auth */}
+      <Route path="/p/:token" element={<PartyInvitePage />} />
       <Route path="/events/:id/rate" element={<ProtectedRoute><RateEvent /></ProtectedRoute>} />
       <Route path="/stats" element={<ProtectedRoute><Stats /></ProtectedRoute>} />
       <Route path="/leaderboard" element={<ProtectedRoute><Leaderboard /></ProtectedRoute>} />

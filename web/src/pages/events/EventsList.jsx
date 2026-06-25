@@ -299,7 +299,10 @@ export default function EventsList() {
         subtitle="Your upcoming and past outings"
         hasStats
       >
-        <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>+ New</Button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>+ New</Button>
+          <Button variant="ghost" size="sm" onClick={() => navigate('/events/new/invite')}>Party Invite ✨</Button>
+        </div>
       </PageHero>
 
       {/* Floating stats */}

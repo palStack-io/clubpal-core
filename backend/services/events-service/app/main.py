@@ -19,6 +19,8 @@ from app.models import (
     PhotoConfirmRequest, PhotoResponse,
     RecurringScheduleCreate, RecurringScheduleResponse,
 )
+from app.party_invites_db import init_party_invite_tables
+from app.party_invites import host_router as _party_host_router, public_router as _party_public_router
 from app.database import (
     init_db, get_db, create_event, get_event, get_events_by_group, get_events_by_user,
     get_events_by_host, update_event, delete_event,
@@ -137,6 +139,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(_party_host_router)
+app.include_router(_party_public_router)
 
 # Service URLs
 GROUPS_SERVICE_URL     = "http://groups-service:8002"
@@ -558,6 +563,21 @@ async def spawn_recurring_instances():
 async def startup():
     """Initialize database on startup."""
     init_db()
+    init_party_invite_tables()
+    # Party invite columns on existing tables
+    _conn = get_db()
+    _cur = _conn.cursor()
+    for stmt in [
+        "ALTER TABLE events ADD COLUMN IF NOT EXISTS party_invite_id INTEGER",
+        "ALTER TABLE event_attendees ADD COLUMN IF NOT EXISTS bring_note TEXT",
+        "ALTER TABLE event_attendees ADD COLUMN IF NOT EXISTS claim_item_id INTEGER",
+    ]:
+        try:
+            _cur.execute(stmt)
+        except Exception:
+            pass
+    _conn.commit()
+    _conn.close()
     storage.ensure_buckets()
     # Schedule daily recurring event generation at 07:00
     scheduler.add_job(spawn_recurring_instances, 'cron', hour=7, minute=0,

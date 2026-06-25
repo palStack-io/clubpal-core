@@ -301,7 +301,17 @@ export default function EventsList() {
       >
         <div style={{ display: 'flex', gap: 8 }}>
           <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>+ New</Button>
-          <Button variant="ghost" size="sm" onClick={() => navigate('/events/new/invite')}>Party Invite ✨</Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => navigate('/events/new/invite')}
+            style={{
+              background: 'var(--rose-glow)',
+              border: '1px solid var(--rose-border)',
+              color: 'var(--rose-soft)',
+              fontWeight: 600,
+            }}
+          >Party Invite ✨</Button>
         </div>
       </PageHero>
 

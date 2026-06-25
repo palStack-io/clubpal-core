@@ -13,6 +13,7 @@ import RateEventModal from '../../components/events/RateEventModal'
 import AnimatedBackground from '../../components/ui/AnimatedBackground'
 import BillSplitModal from '../../components/modals/BillSplitModal'
 import BillSplitStatusCard from '../../components/events/BillSplitStatusCard'
+import PartyInviteAdminCard from '../../components/events/PartyInviteAdminCard'
 import { eventsApi } from '../../api/events'
 import { ratingsClient, gatewayClient, eventsClient } from '../../api/client'
 import { useAuth } from '../../contexts/AuthContext'
@@ -255,8 +256,6 @@ export default function EventDetail() {
 
   const heroActions = [
     ...(event.status === 'scheduled' && isHost ? [{ label: '✏️ Edit', onClick: () => setShowEditEvent(true) }] : []),
-    ...(partyInviteToken ? [{ label: '✨ Manage Invite', onClick: () => navigate(`/party-invites/${partyInviteToken}/manage`) }] : []),
-    ...((isHost || isCreator) && !partyInviteToken ? [{ label: '✨ Create Invite', onClick: () => navigate('/events/new/invite') }] : []),
     ...(isScheduled && (isHost || isCreator) ? [{ label: '➕ Add Attendees', onClick: () => setShowAddAttendees(true) }] : []),
     ...(isScheduled && (isHost || isCreator) ? [{ label: '🏁 End Event', onClick: () => setShowEndConfirm(true) }] : []),
     ...(isScheduled && isCreator && !!event.rsvp_deadline ? [{ label: '📣 Send Reminder', onClick: handleRsvpReminder }] : []),
@@ -332,6 +331,9 @@ export default function EventDetail() {
 
           {/* Right column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {(isHost || isCreator) && partyInviteToken && (
+              <PartyInviteAdminCard token={partyInviteToken} eventId={id} />
+            )}
             {event.bill_split_enabled && (
               <BillSplitStatusCard
                 event={event}

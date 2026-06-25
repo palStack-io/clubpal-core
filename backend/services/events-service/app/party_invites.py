@@ -14,13 +14,14 @@ from fastapi import APIRouter, HTTPException, Header, Depends, Request
 from pydantic import BaseModel, Field
 
 from app import storage
-from app.database import get_db, get_event
+from app.database import get_db, get_event, update_event
 from app.party_invites_db import (
     create_party_invite, get_party_invite_by_token, get_party_invite_by_event_id,
     update_party_invite, add_group_to_invite, get_invite_groups,
     create_guest_rsvp, get_guest_rsvp, update_guest_rsvp, get_all_guests,
     create_invite_item, delete_invite_item, get_invite_items,
     claim_item, increment_view_count,
+    add_member_invite, get_member_invites,
 )
 
 GROUPS_SERVICE_URL = "http://groups-service:8002"
@@ -147,6 +148,8 @@ class PartyInviteCreate(BaseModel):
     accent_color: Optional[str] = None
     bring_list_enabled: bool = False
     bring_list_type: str = "freeform"
+    style: str = "glass"
+    cover_image_url: Optional[str] = None
     items: List[dict] = Field(default_factory=list)
 
 
@@ -159,6 +162,12 @@ class PartyInvitePatch(BaseModel):
     sticker_data: Optional[list] = None
     bring_list_enabled: Optional[bool] = None
     bring_list_type: Optional[str] = None
+    style: Optional[str] = None
+
+
+class InviteUsersRequest(BaseModel):
+    user_ids: List[int] = Field(default_factory=list)
+    emails: List[str] = Field(default_factory=list)
 
 
 class InviteItemCreate(BaseModel):
@@ -240,8 +249,32 @@ async def create_party_invite_endpoint(
         accent_color=body.accent_color or defaults["accent_color"],
         bring_list_enabled=bring_enabled,
         bring_list_type=body.bring_list_type,
+        style=body.style,
         group_ids=body.group_ids,
     )
+
+    # Sync cover image between event and party invite
+    event_cover = event.get("cover_url")
+    body_cover  = getattr(body, "cover_image_url", None)
+    if body_cover:
+        # Caller explicitly set a cover — write it back to the event too
+        update_event(body.event_id, cover_url=body_cover)
+        conn = get_db()
+        cur  = conn.cursor()
+        cur.execute("UPDATE party_invites SET cover_image_url = %s WHERE id = %s",
+                    (body_cover, invite["id"]))
+        conn.commit()
+        conn.close()
+        invite["cover_image_url"] = body_cover
+    elif event_cover and not invite.get("cover_image_url"):
+        # Event already has a cover — copy it onto the invite
+        conn = get_db()
+        cur  = conn.cursor()
+        cur.execute("UPDATE party_invites SET cover_image_url = %s WHERE id = %s",
+                    (event_cover, invite["id"]))
+        conn.commit()
+        conn.close()
+        invite["cover_image_url"] = event_cover
 
     for i, item in enumerate(body.items):
         create_invite_item(
@@ -276,6 +309,34 @@ async def get_invite_by_event(
     return invite
 
 
+@host_router.get("/pending-for-group")
+async def get_pending_for_group(
+    group_id: int,
+    user_id: int = Depends(_get_current_user_id),
+):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT pi.token, pi.accent_color, pi.style, pi.cover_image_url,
+               pi.host_user_id, pi.event_id,
+               e.title, e.scheduled_date, e.location, e.max_attendees,
+               e.activity_type,
+               (SELECT COUNT(*) FROM event_attendees
+                WHERE event_id = pi.event_id AND status = 'going') AS going_count
+        FROM party_invites pi
+        JOIN party_invite_groups pig ON pig.party_invite_id = pi.id
+        JOIN events e ON e.id = pi.event_id
+        JOIN event_attendees ea ON ea.event_id = pi.event_id AND ea.user_id = %s
+        WHERE pig.group_id = %s AND ea.status = 'pending'
+        ORDER BY pi.created_at DESC
+    """, (user_id, group_id))
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    for row in rows:
+        row["host"] = await _get_host_profile(row["host_user_id"])
+    return rows
+
+
 @host_router.get("/{token}/manage")
 async def get_manage_view(
     token: str, user_id: int = Depends(_get_current_user_id)
@@ -306,7 +367,10 @@ async def patch_party_invite(
     kwargs = {k: v for k, v in body.dict().items() if v is not None}
     if kwargs.get("theme_activity_type") == "dining":
         kwargs.setdefault("bring_list_enabled", False)
-    return update_party_invite(token, **kwargs)
+    updated = update_party_invite(token, **kwargs)
+    if "cover_image_url" in kwargs and kwargs["cover_image_url"]:
+        update_event(invite["event_id"], cover_url=kwargs["cover_image_url"])
+    return updated
 
 
 @host_router.post("/{token}/items")
@@ -368,6 +432,108 @@ async def cover_upload_url(
     upload_url = storage.presigned_upload_url(storage.BUCKET_EVENTS, object_name, body.content_type)
     public_url = storage.public_object_url(storage.BUCKET_EVENTS, object_name)
     return {"upload_url": upload_url, "public_url": public_url, "object_name": object_name}
+
+
+@host_router.post("/{token}/invite-users")
+async def invite_users(
+    token: str, body: InviteUsersRequest,
+    user_id: int = Depends(_get_current_user_id),
+):
+    invite = get_party_invite_by_token(token)
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    if invite["host_user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Not your invite")
+    event = get_event(invite["event_id"])
+    internal = os.getenv("INTERNAL_API_SECRET", "")
+    added = []
+
+    async with httpx.AsyncClient(timeout=5.0) as client:
+        for uid in body.user_ids:
+            try:
+                prof_r = await client.get(
+                    f"{GATEWAY_URL}/internal/users/{uid}/profile",
+                    headers={"x-internal-secret": internal},
+                )
+                if prof_r.status_code != 200:
+                    continue
+                profile = prof_r.json()
+                email = profile.get("email", "")
+                if not email:
+                    continue
+                add_member_invite(invite["id"], email=email, user_id=uid)
+                _add_pending_attendees(invite["event_id"], [{"user_id": uid}])
+                await client.post(
+                    f"{GATEWAY_URL}/internal/notify/push",
+                    json={
+                        "user_id": uid,
+                        "title": f"You're invited: {event['title']}",
+                        "body": f"From {profile.get('full_name', 'a friend')} — tap to RSVP",
+                        "link_type": "party_invite",
+                        "link_id": token,
+                    },
+                    headers={"x-internal-secret": internal},
+                )
+                added.append({"type": "user", "user_id": uid, "email": email})
+            except Exception:
+                pass
+
+        app_url = os.getenv("APP_URL", "http://localhost:3000")
+        for email in body.emails:
+            email = email.strip().lower()
+            if not email:
+                continue
+            try:
+                add_member_invite(invite["id"], email=email, user_id=None)
+                await client.post(
+                    f"{GATEWAY_URL}/internal/notify/party-invite-email",
+                    json={
+                        "to_email": email,
+                        "event_title": event["title"],
+                        "host_name": "",
+                        "scheduled_date": str(event.get("scheduled_date") or ""),
+                        "location": event.get("location") or "",
+                        "accent_color": invite.get("accent_color") or "#f43f5e",
+                        "rsvp_url": f"{app_url}/p/{token}",
+                    },
+                    headers={"x-internal-secret": internal},
+                )
+                added.append({"type": "email", "email": email})
+            except Exception:
+                pass
+
+    return {"added": added}
+
+
+@host_router.get("/{token}/member-invites")
+async def get_member_invites_endpoint(
+    token: str, user_id: int = Depends(_get_current_user_id)
+):
+    invite = get_party_invite_by_token(token)
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    if invite["host_user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Not your invite")
+    members = get_member_invites(invite["id"])
+    conn = get_db()
+    cursor = conn.cursor()
+    for m in members:
+        if m.get("user_id"):
+            cursor.execute(
+                "SELECT status FROM event_attendees WHERE event_id = %s AND user_id = %s",
+                (invite["event_id"], m["user_id"])
+            )
+            ea = cursor.fetchone()
+            m["rsvp_status"] = ea["status"] if ea else "pending"
+        else:
+            cursor.execute(
+                "SELECT rsvp_status FROM party_invite_guests WHERE party_invite_id = %s AND email = %s",
+                (invite["id"], m["email"])
+            )
+            g = cursor.fetchone()
+            m["rsvp_status"] = g["rsvp_status"] if g else "pending"
+    conn.close()
+    return members
 
 
 # ── Public routes ─────────────────────────────────────────────────────────────

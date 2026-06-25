@@ -81,10 +81,31 @@ def init_party_invite_tables():
         )
     """)
 
+    # Migrations — safe to re-run
+    cursor.execute(
+        "ALTER TABLE party_invites ADD COLUMN IF NOT EXISTS style VARCHAR(20) DEFAULT 'glass'"
+    )
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS party_invite_members (
+            id               SERIAL PRIMARY KEY,
+            party_invite_id  INTEGER NOT NULL REFERENCES party_invites(id) ON DELETE CASCADE,
+            user_id          INTEGER,
+            email            VARCHAR(255) NOT NULL,
+            status           VARCHAR(20) DEFAULT 'pending',
+            notified_at      TIMESTAMPTZ,
+            created_at       TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(party_invite_id, email)
+        )
+    """)
+
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_pi_token ON party_invites(token)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_pi_event ON party_invites(event_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_pig_invite ON party_invite_groups(party_invite_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_piguests_invite ON party_invite_guests(party_invite_id)")
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pim_invite ON party_invite_members(party_invite_id)"
+    )
 
     conn.commit()
     conn.close()
@@ -94,17 +115,17 @@ def create_party_invite(event_id: int, host_user_id: int, token: str,
                         theme_activity_type: str = "other", theme_variant: str = "default",
                         bg_animation: str = "confetti", accent_color: str = None,
                         bring_list_enabled: bool = False, bring_list_type: str = "freeform",
-                        group_ids: list = None) -> dict:
+                        style: str = "glass", group_ids: list = None) -> dict:
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO party_invites
             (event_id, host_user_id, token, theme_activity_type, theme_variant,
-             bg_animation, accent_color, bring_list_enabled, bring_list_type)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+             bg_animation, accent_color, bring_list_enabled, bring_list_type, style)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
         RETURNING *
     """, (event_id, host_user_id, token, theme_activity_type, theme_variant,
-          bg_animation, accent_color, bring_list_enabled, bring_list_type))
+          bg_animation, accent_color, bring_list_enabled, bring_list_type, style))
     invite = dict(cursor.fetchone())
     if group_ids:
         for gid in group_ids:
@@ -141,7 +162,7 @@ def get_party_invite_by_event_id(event_id: int) -> Optional[dict]:
 def update_party_invite(token: str, **kwargs) -> Optional[dict]:
     allowed = {
         "theme_activity_type", "theme_variant", "bg_animation", "accent_color",
-        "cover_image_url", "sticker_data", "bring_list_enabled", "bring_list_type",
+        "cover_image_url", "sticker_data", "bring_list_enabled", "bring_list_type", "style",
     }
     updates = {k: v for k, v in kwargs.items() if k in allowed and v is not None}
     if not updates:
@@ -335,3 +356,32 @@ def increment_view_count(party_invite_id: int, fingerprint: str) -> None:
         pass
     finally:
         conn.close()
+
+
+def add_member_invite(party_invite_id: int, email: str,
+                      user_id: int = None) -> dict:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        INSERT INTO party_invite_members (party_invite_id, user_id, email, notified_at)
+        VALUES (%s, %s, %s, NOW())
+        ON CONFLICT (party_invite_id, email) DO UPDATE
+            SET notified_at = NOW()
+        RETURNING *
+    """, (party_invite_id, user_id, email.strip().lower()))
+    row = dict(cursor.fetchone())
+    conn.commit()
+    conn.close()
+    return row
+
+
+def get_member_invites(party_invite_id: int) -> list:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT * FROM party_invite_members WHERE party_invite_id = %s ORDER BY created_at ASC",
+        (party_invite_id,)
+    )
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows

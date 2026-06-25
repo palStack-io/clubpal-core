@@ -7,6 +7,7 @@ import { useAuth } from '../../contexts/AuthContext'
 import { enrichClient } from '../../api/client'
 import ToggleRow from '../ui/ToggleRow'
 import { resolveActivity, ACTIVITY_LIST } from '../../constants/activities'
+import PartyModeSection from '../party/PartyModeSection'
 
 const inputStyle = {
   background: 'var(--s2)',
@@ -100,6 +101,13 @@ export default function CreateEventModal({
   // Recurring
   const [isRecurring, setIsRecurring] = useState(false)
   const [recurrence, setRecurrence] = useState({ rule: 'weekly', day_of_week: 4, time_of_day: '18:00', end_date: '' })
+  // Party mode
+  const [partyMode, setPartyMode]                 = useState(false)
+  const [partyAccentColor, setPartyAccentColor]   = useState('#f43f5e')
+  const [partyStyle, setPartyStyle]               = useState('glass')
+  const [partyBringEnabled, setPartyBringEnabled] = useState(false)
+  const [partyItems, setPartyItems]               = useState([])
+  const [partyToken, setPartyToken]               = useState(null)
 
   // Fetch user's groups when no groupId prop is provided
   useEffect(() => {
@@ -204,6 +212,21 @@ export default function CreateEventModal({
         groupsApi.completeTurn(resolvedGroupId, event.id).catch(() => {})
       }
       onCreated && onCreated(event.id)
+      if (partyMode) {
+        try {
+          const invite = await eventsApi.createPartyInvite({
+            event_id: event.id,
+            group_ids: resolvedGroupId ? [resolvedGroupId] : [],
+            theme_activity_type: resolvedActivity || 'other',
+            accent_color: partyAccentColor,
+            style: partyStyle,
+            bring_list_enabled: partyBringEnabled,
+            bring_list_type: 'freeform',
+            items: partyItems,
+          })
+          setPartyToken(invite.token)
+        } catch { /* non-fatal — event created */ }
+      }
     } catch (err) {
       const detail = err?.response?.data?.detail
       setError(typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map(d => d.msg || String(d)).join('; ') : 'Failed to create event. Please try again.')
@@ -606,6 +629,67 @@ export default function CreateEventModal({
           onBlur={blurBorder}
         />
       </div>
+
+      {/* Party Mode toggle */}
+      <div style={{ borderTop: '1px solid var(--s3)', paddingTop: 18, marginBottom: 12 }}>
+        <div
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}
+          onClick={() => setPartyMode(v => !v)}
+        >
+          <div>
+            <p style={{ margin: 0, color: 'var(--t1)', fontWeight: 600, fontSize: '0.95rem' }}>🎟 Make it public</p>
+            <p style={{ margin: '2px 0 0', color: 'var(--t3)', fontSize: '0.78rem' }}>Shareable invite page for external guests</p>
+          </div>
+          <div style={{
+            width: 44, height: 24, borderRadius: 12, position: 'relative', flexShrink: 0,
+            background: partyMode ? 'var(--rose)' : 'var(--s3)', transition: 'background 0.15s',
+          }}>
+            <span style={{
+              position: 'absolute', top: 3, left: partyMode ? 22 : 3, width: 18, height: 18,
+              borderRadius: '50%', background: '#fff', transition: 'left 0.15s',
+            }} />
+          </div>
+        </div>
+
+        {partyMode && (
+          <div style={{ marginTop: 16 }}>
+            <PartyModeSection
+              accentColor={partyAccentColor}
+              onAccentChange={setPartyAccentColor}
+              style={partyStyle}
+              onStyleChange={setPartyStyle}
+              bringListEnabled={partyBringEnabled}
+              onBringListToggle={() => setPartyBringEnabled(v => !v)}
+              items={partyItems}
+              onItemsChange={setPartyItems}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Party invite link — shown after creation if party mode was on */}
+      {partyToken && (
+        <div style={{
+          background: 'rgba(244,63,94,0.06)', border: '1px solid var(--rose-border)',
+          borderRadius: 12, padding: '14px 16px', marginBottom: 12,
+        }}>
+          <p style={{ margin: '0 0 6px', color: 'var(--rose-soft)', fontSize: '0.75rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Public invite link ready
+          </p>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <code style={{ flex: 1, color: 'var(--t1)', fontSize: '0.8rem', wordBreak: 'break-all' }}>
+              {window.location.origin}/p/{partyToken}
+            </code>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard.writeText(`${window.location.origin}/p/${partyToken}`)}
+              style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: 'var(--rose)', color: '#fff', cursor: 'pointer', fontSize: '0.8rem', fontWeight: 600, whiteSpace: 'nowrap' }}
+            >
+              Copy
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Error */}
       {error && (

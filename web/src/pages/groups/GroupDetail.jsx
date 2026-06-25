@@ -19,6 +19,7 @@ import { groupsApi } from '../../api/groups'
 import { eventsApi } from '../../api/events'
 import { ratingsApi } from '../../api/ratings'
 import { gatewayClient } from '../../api/client'
+import PartyInviteCarousel from '../../components/party/PartyInviteCarousel'
 
 async function enrichWithProfiles(items, uidField) {
   if (!items?.length) return items || []
@@ -71,6 +72,7 @@ export default function GroupDetail() {
   const [pendingRequests, setPendingRequests] = useState([])
   const [inviteSuccess, setInviteSuccess] = useState(null)
   const [inviteCode, setInviteCode] = useState(null)
+  const [pendingPartyInvites, setPendingPartyInvites] = useState([])
 
   const fetchAll = async () => {
     try {
@@ -98,6 +100,8 @@ export default function GroupDetail() {
     finally { setLoading(false) }
 
     groupsApi.getActiveInviteCode(id).then(ic => setInviteCode(ic?.code || null)).catch(() => {})
+
+    eventsApi.getPendingPartyInvites(id).then(setPendingPartyInvites).catch(() => {})
 
     groupsApi.getComments(id).then(async c => {
       const arr = Array.isArray(c) ? c : []
@@ -261,6 +265,20 @@ export default function GroupDetail() {
       <div style={{ padding: '0 24px 24px', position: 'relative' }}>
         {group.bg_scope === 'full' && group.bg_type && group.bg_type !== 'default' && (
           <AnimatedBackground bgType={group.bg_type} bgValue={group.bg_value} style={{ borderRadius: 0 }} />
+        )}
+
+        {/* Pending party invites carousel */}
+        {pendingPartyInvites.length > 0 && (
+          <div style={{ position: 'relative', zIndex: 1, marginBottom: 14 }}>
+            <PartyInviteCarousel
+              invites={pendingPartyInvites}
+              userId={user?.id}
+              onRsvp={(eventId) => {
+                setPendingPartyInvites(prev => prev.filter(i => i.event_id !== eventId))
+                eventsApi.getGroupEvents(id, 'scheduled').then(setUpcoming).catch(() => {})
+              }}
+            />
+          </div>
         )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: '14px', position: 'relative', zIndex: 1 }}>

@@ -91,8 +91,14 @@ async def create_rating_endpoint(
             if response.status_code != 200:
                 raise HTTPException(status_code=404, detail="Event not found")
             event = response.json()
-            if event.get("status") != "completed":
-                raise HTTPException(status_code=403, detail="Ratings are only allowed after an event has ended")
+            status = event.get("status")
+            scheduled = event.get("scheduled_date")
+            started = (
+                status in ("completed", "in_progress")
+                or (status == "scheduled" and scheduled and scheduled < datetime.utcnow().isoformat())
+            )
+            if not started:
+                raise HTTPException(status_code=403, detail="Ratings open once the event starts")
             if not event.get("ratings_enabled", False):
                 raise HTTPException(status_code=403, detail="Ratings are not enabled for this event")
         except httpx.RequestError:

@@ -11,7 +11,14 @@ export default function ManagePartyInvite() {
   useEffect(() => {
     eventsClient.get(`/party-invites/${token}/manage`)
       .then(r => navigate(`/events/${r.data.event_id}`, { replace: true }))
-      .catch(() => navigate('/', { replace: true }))
+      .catch(err => {
+        // Non-hosts get 403 — send them to the public RSVP page
+        if (err?.response?.status === 403) {
+          navigate(`/p/${token}`, { replace: true })
+        } else {
+          navigate(-1)
+        }
+      })
   }, [token])
 
   return null

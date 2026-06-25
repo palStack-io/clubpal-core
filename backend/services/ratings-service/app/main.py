@@ -279,8 +279,10 @@ async def get_group_leaderboard_endpoint(group_id: int, event_ids: Optional[str]
     async with httpx.AsyncClient() as client:
         try:
             response = await client.get(f"{GROUPS_SERVICE_URL}/groups/{group_id}/members")
-            if response.status_code != 200:
+            if response.status_code == 404:
                 raise HTTPException(status_code=404, detail="Group not found")
+            if response.status_code != 200:
+                raise HTTPException(status_code=503, detail="Groups service unavailable")
             members = response.json()
             member_ids = [member["user_id"] for member in members]
         except httpx.RequestError:

@@ -268,80 +268,75 @@ def get_db():
 def create_group(name: str, created_by: int, description: str = None,
                 rotation_type: str = "round_robin", activity_type: str = None) -> int:
     """Create a new group and add creator as owner."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    try:
-        # Create group
-        cursor.execute(
-            """INSERT INTO groups (name, description, rotation_type, activity_type, created_by)
-               VALUES (%s, %s, %s, %s, %s) RETURNING id""",
-            (name, description, rotation_type, activity_type, created_by)
-        )
-        group_id = cursor.fetchone()['id']
+        try:
+            # Create group
+            cursor.execute(
+                """INSERT INTO groups (name, description, rotation_type, activity_type, created_by)
+                   VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+                (name, description, rotation_type, activity_type, created_by)
+            )
+            group_id = cursor.fetchone()['id']
 
-        # Add creator as owner
-        cursor.execute(
-            """INSERT INTO group_members (group_id, user_id, role)
-               VALUES (%s, %s, 'owner')""",
-            (group_id, created_by)
-        )
+            # Add creator as owner
+            cursor.execute(
+                """INSERT INTO group_members (group_id, user_id, role)
+                   VALUES (%s, %s, 'owner')""",
+                (group_id, created_by)
+            )
 
-        # Initialize rotation state
-        cursor.execute(
-            """INSERT INTO rotation_state (group_id, current_user_id, current_turn_index)
-               VALUES (%s, %s, 0)""",
-            (group_id, created_by)
-        )
+            # Initialize rotation state
+            cursor.execute(
+                """INSERT INTO rotation_state (group_id, current_user_id, current_turn_index)
+                   VALUES (%s, %s, 0)""",
+                (group_id, created_by)
+            )
 
-        conn.commit()
-        return group_id
-    except psycopg2.IntegrityError as e:
-        conn.rollback()
-        raise ValueError(f"Failed to create group: {str(e)}")
-    finally:
-        conn.close()
+            conn.commit()
+            return group_id
+        except psycopg2.IntegrityError as e:
+            conn.rollback()
+            raise ValueError(f"Failed to create group: {str(e)}")
 
 
 def get_group(group_id: int) -> Optional[dict]:
     """Get group by ID."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM groups WHERE id = %s", (group_id,))
-    row = cursor.fetchone()
+        cursor.execute("SELECT * FROM groups WHERE id = %s", (group_id,))
+        row = cursor.fetchone()
 
-    if row:
-        group = dict(row)
-        # Get member count
-        cursor.execute("SELECT COUNT(*) FROM group_members WHERE group_id = %s", (group_id,))
-        group["member_count"] = cursor.fetchone()['count']
-        conn.close()
-        return group
+        if row:
+            group = dict(row)
+            # Get member count
+            cursor.execute("SELECT COUNT(*) FROM group_members WHERE group_id = %s", (group_id,))
+            group["member_count"] = cursor.fetchone()['count']
+            return group
 
-    conn.close()
-    return None
+        return None
 
 
 def get_groups_by_user(user_id: int) -> List[dict]:
     """Get all groups a user is a member of."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT g.*, COUNT(gm2.id) as member_count
-        FROM groups g
-        JOIN group_members gm ON g.id = gm.group_id
-        LEFT JOIN group_members gm2 ON g.id = gm2.group_id
-        WHERE gm.user_id = %s
-        GROUP BY g.id
-        ORDER BY g.created_at DESC
-    """, (user_id,))
+        cursor.execute("""
+            SELECT g.*, COUNT(gm2.id) as member_count
+            FROM groups g
+            JOIN group_members gm ON g.id = gm.group_id
+            LEFT JOIN group_members gm2 ON g.id = gm2.group_id
+            WHERE gm.user_id = %s
+            GROUP BY g.id
+            ORDER BY g.created_at DESC
+        """, (user_id,))
 
-    rows = cursor.fetchall()
-    conn.close()
+        rows = cursor.fetchall()
 
-    return [dict(row) for row in rows]
+        return [dict(row) for row in rows]
 
 
 def update_group(group_id: int, name: str = None, description: str = None,
@@ -349,472 +344,446 @@ def update_group(group_id: int, name: str = None, description: str = None,
                 bg_type: str = None, bg_value: str = None, bg_scope: str = None,
                 activity_type: str = None, join_behavior: str = None) -> bool:
     """Update group details."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    updates = []
-    params = []
+        updates = []
+        params = []
 
-    if name is not None:
-        updates.append("name = %s")
-        params.append(name)
-    if description is not None:
-        updates.append("description = %s")
-        params.append(description)
-    if rotation_type is not None:
-        updates.append("rotation_type = %s")
-        params.append(rotation_type)
-    if banner_url is not None:
-        updates.append("banner_url = %s")
-        params.append(banner_url)
-    if bg_type is not None:
-        updates.append("bg_type = %s")
-        params.append(bg_type)
-    if bg_value is not None:
-        updates.append("bg_value = %s")
-        params.append(bg_value)
-    if bg_scope is not None:
-        updates.append("bg_scope = %s")
-        params.append(bg_scope)
-    if activity_type is not None:
-        updates.append("activity_type = %s")
-        params.append(activity_type)
-    if join_behavior is not None:
-        updates.append("join_behavior = %s")
-        params.append(join_behavior)
+        if name is not None:
+            updates.append("name = %s")
+            params.append(name)
+        if description is not None:
+            updates.append("description = %s")
+            params.append(description)
+        if rotation_type is not None:
+            updates.append("rotation_type = %s")
+            params.append(rotation_type)
+        if banner_url is not None:
+            updates.append("banner_url = %s")
+            params.append(banner_url)
+        if bg_type is not None:
+            updates.append("bg_type = %s")
+            params.append(bg_type)
+        if bg_value is not None:
+            updates.append("bg_value = %s")
+            params.append(bg_value)
+        if bg_scope is not None:
+            updates.append("bg_scope = %s")
+            params.append(bg_scope)
+        if activity_type is not None:
+            updates.append("activity_type = %s")
+            params.append(activity_type)
+        if join_behavior is not None:
+            updates.append("join_behavior = %s")
+            params.append(join_behavior)
 
-    if not updates:
-        conn.close()
-        return True
+        if not updates:
+            return True
 
-    updates.append("updated_at = CURRENT_TIMESTAMP")
-    params.append(group_id)
+        updates.append("updated_at = CURRENT_TIMESTAMP")
+        params.append(group_id)
 
-    cursor.execute(
-        f"UPDATE groups SET {', '.join(updates)} WHERE id = %s",
-        params
-    )
+        cursor.execute(
+            f"UPDATE groups SET {', '.join(updates)} WHERE id = %s",
+            params
+        )
 
-    success = cursor.rowcount > 0
-    conn.commit()
-    conn.close()
+        success = cursor.rowcount > 0
+        conn.commit()
 
-    return success
+        return success
 
 
 def delete_group(group_id: int) -> bool:
     """Delete a group."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("DELETE FROM groups WHERE id = %s", (group_id,))
+        cursor.execute("DELETE FROM groups WHERE id = %s", (group_id,))
 
-    success = cursor.rowcount > 0
-    conn.commit()
-    conn.close()
+        success = cursor.rowcount > 0
+        conn.commit()
 
-    return success
+        return success
 
 
 # ===== Member Management =====
 
 def add_member(group_id: int, user_id: int, role: str = "member") -> bool:
     """Add a member to a group."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    try:
-        cursor.execute(
-            """INSERT INTO group_members (group_id, user_id, role)
-               VALUES (%s, %s, %s)""",
-            (group_id, user_id, role)
-        )
-        conn.commit()
-        conn.close()
-        return True
-    except psycopg2.IntegrityError:
-        conn.rollback()
-        conn.close()
-        return False
+        try:
+            cursor.execute(
+                """INSERT INTO group_members (group_id, user_id, role)
+                   VALUES (%s, %s, %s)""",
+                (group_id, user_id, role)
+            )
+            conn.commit()
+            return True
+        except psycopg2.IntegrityError:
+            conn.rollback()
+            return False
 
 
 def get_member(group_id: int, user_id: int) -> Optional[dict]:
     """Get a specific member."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        "SELECT * FROM group_members WHERE group_id = %s AND user_id = %s",
-        (group_id, user_id)
-    )
+        cursor.execute(
+            "SELECT * FROM group_members WHERE group_id = %s AND user_id = %s",
+            (group_id, user_id)
+        )
 
-    row = cursor.fetchone()
-    conn.close()
+        row = cursor.fetchone()
 
-    return dict(row) if row else None
+        return dict(row) if row else None
 
 
 def get_members(group_id: int) -> List[dict]:
     """Get all members of a group."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        "SELECT * FROM group_members WHERE group_id = %s ORDER BY rotation_order ASC NULLS LAST, joined_at ASC",
-        (group_id,)
-    )
+        cursor.execute(
+            "SELECT * FROM group_members WHERE group_id = %s ORDER BY rotation_order ASC NULLS LAST, joined_at ASC",
+            (group_id,)
+        )
 
-    rows = cursor.fetchall()
-    conn.close()
+        rows = cursor.fetchall()
 
-    return [dict(row) for row in rows]
+        return [dict(row) for row in rows]
 
 
 def update_member_role(group_id: int, user_id: int, role: str) -> bool:
     """Update a member's role."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        "UPDATE group_members SET role = %s WHERE group_id = %s AND user_id = %s",
-        (role, group_id, user_id)
-    )
+        cursor.execute(
+            "UPDATE group_members SET role = %s WHERE group_id = %s AND user_id = %s",
+            (role, group_id, user_id)
+        )
 
-    success = cursor.rowcount > 0
-    conn.commit()
-    conn.close()
+        success = cursor.rowcount > 0
+        conn.commit()
 
-    return success
+        return success
 
 
 def remove_member(group_id: int, user_id: int) -> bool:
     """Remove a member from a group and adjust rotation state if they were on turn."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    # Snapshot rotation state and member order before removal
-    cursor.execute(
-        "SELECT current_user_id, current_turn_index FROM rotation_state WHERE group_id = %s",
-        (group_id,)
-    )
-    rotation = cursor.fetchone()
+        # Snapshot rotation state and member order before removal
+        cursor.execute(
+            "SELECT current_user_id, current_turn_index FROM rotation_state WHERE group_id = %s",
+            (group_id,)
+        )
+        rotation = cursor.fetchone()
 
-    cursor.execute(
-        """SELECT user_id FROM group_members WHERE group_id = %s
-           ORDER BY rotation_order ASC NULLS LAST, joined_at ASC""",
-        (group_id,)
-    )
-    members_before = [row['user_id'] for row in cursor.fetchall()]
-
-    # Delete the member
-    cursor.execute(
-        "DELETE FROM group_members WHERE group_id = %s AND user_id = %s",
-        (group_id, user_id)
-    )
-    success = cursor.rowcount > 0
-
-    if success and rotation:
-        current_user_id = rotation['current_user_id']
-        current_turn_index = rotation['current_turn_index']
-
-        # Get remaining members after removal
         cursor.execute(
             """SELECT user_id FROM group_members WHERE group_id = %s
                ORDER BY rotation_order ASC NULLS LAST, joined_at ASC""",
             (group_id,)
         )
-        members_after = [row['user_id'] for row in cursor.fetchall()]
+        members_before = [row['user_id'] for row in cursor.fetchall()]
 
-        if members_after:
-            if current_user_id == user_id:
-                # Removed user was on turn — pass turn to whoever is now at that position
-                removed_pos = members_before.index(user_id) if user_id in members_before else 0
-                new_index = removed_pos % len(members_after)
-                new_user_id = members_after[new_index]
-            elif current_user_id in members_after:
-                # Current user still exists — recalculate their index
-                new_index = members_after.index(current_user_id)
-                new_user_id = current_user_id
-            else:
-                new_index = 0
-                new_user_id = members_after[0]
+        # Delete the member
+        cursor.execute(
+            "DELETE FROM group_members WHERE group_id = %s AND user_id = %s",
+            (group_id, user_id)
+        )
+        success = cursor.rowcount > 0
 
+        if success and rotation:
+            current_user_id = rotation['current_user_id']
+            current_turn_index = rotation['current_turn_index']
+
+            # Get remaining members after removal
             cursor.execute(
-                """UPDATE rotation_state SET current_user_id = %s, current_turn_index = %s,
-                   last_rotation_at = CURRENT_TIMESTAMP WHERE group_id = %s""",
-                (new_user_id, new_index, group_id)
+                """SELECT user_id FROM group_members WHERE group_id = %s
+                   ORDER BY rotation_order ASC NULLS LAST, joined_at ASC""",
+                (group_id,)
             )
+            members_after = [row['user_id'] for row in cursor.fetchall()]
 
-    conn.commit()
-    conn.close()
+            if members_after:
+                if current_user_id == user_id:
+                    # Removed user was on turn — pass turn to whoever is now at that position
+                    removed_pos = members_before.index(user_id) if user_id in members_before else 0
+                    new_index = removed_pos % len(members_after)
+                    new_user_id = members_after[new_index]
+                elif current_user_id in members_after:
+                    # Current user still exists — recalculate their index
+                    new_index = members_after.index(current_user_id)
+                    new_user_id = current_user_id
+                else:
+                    new_index = 0
+                    new_user_id = members_after[0]
 
-    return success
+                cursor.execute(
+                    """UPDATE rotation_state SET current_user_id = %s, current_turn_index = %s,
+                       last_rotation_at = CURRENT_TIMESTAMP WHERE group_id = %s""",
+                    (new_user_id, new_index, group_id)
+                )
+
+        conn.commit()
+
+        return success
 
 
 def remove_user_from_all_groups(user_id: int) -> int:
     """Remove a user from every group they belong to, adjusting rotation state for each."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT group_id FROM group_members WHERE user_id = %s", (user_id,))
-    group_ids = [row['group_id'] for row in cursor.fetchall()]
-    conn.close()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT group_id FROM group_members WHERE user_id = %s", (user_id,))
+        group_ids = [row['group_id'] for row in cursor.fetchall()]
 
-    for gid in group_ids:
-        remove_member(gid, user_id)
+        for gid in group_ids:
+            remove_member(gid, user_id)
 
-    return len(group_ids)
+        return len(group_ids)
 
 
 def is_member(group_id: int, user_id: int) -> bool:
     """Check if user is a member of group."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        "SELECT 1 FROM group_members WHERE group_id = %s AND user_id = %s",
-        (group_id, user_id)
-    )
+        cursor.execute(
+            "SELECT 1 FROM group_members WHERE group_id = %s AND user_id = %s",
+            (group_id, user_id)
+        )
 
-    result = cursor.fetchone() is not None
-    conn.close()
+        result = cursor.fetchone() is not None
 
-    return result
+        return result
 
 
 def is_admin_or_owner(group_id: int, user_id: int) -> bool:
     """Check if user is admin or owner of group."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        "SELECT role FROM group_members WHERE group_id = %s AND user_id = %s",
-        (group_id, user_id)
-    )
+        cursor.execute(
+            "SELECT role FROM group_members WHERE group_id = %s AND user_id = %s",
+            (group_id, user_id)
+        )
 
-    row = cursor.fetchone()
-    conn.close()
+        row = cursor.fetchone()
 
-    if row:
-        role = row['role']
-        return role in ["owner", "admin"]
+        if row:
+            role = row['role']
+            return role in ["owner", "admin"]
 
-    return False
+        return False
 
 
 # ===== Rotation Management =====
 
 def get_rotation_state(group_id: int) -> Optional[dict]:
     """Get current rotation state for a group."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM rotation_state WHERE group_id = %s", (group_id,))
+        cursor.execute("SELECT * FROM rotation_state WHERE group_id = %s", (group_id,))
 
-    row = cursor.fetchone()
-    conn.close()
+        row = cursor.fetchone()
 
-    return dict(row) if row else None
+        return dict(row) if row else None
 
 
 def set_picked_event(group_id: int, event_id: int) -> bool:
     """Store the picked event ID on the rotation state without advancing the turn."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "UPDATE rotation_state SET picked_event_id = %s WHERE group_id = %s",
-        (event_id, group_id)
-    )
-    updated = cursor.rowcount > 0
-    conn.commit()
-    conn.close()
-    return updated
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE rotation_state SET picked_event_id = %s WHERE group_id = %s",
+            (event_id, group_id)
+        )
+        updated = cursor.rowcount > 0
+        conn.commit()
+        return updated
 
 
 def get_group_id_by_picked_event(event_id: int) -> Optional[int]:
     """Return the group_id whose rotation is waiting on the given picked_event_id."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT group_id FROM rotation_state WHERE picked_event_id = %s",
-        (event_id,)
-    )
-    row = cursor.fetchone()
-    conn.close()
-    return row['group_id'] if row else None
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT group_id FROM rotation_state WHERE picked_event_id = %s",
+            (event_id,)
+        )
+        row = cursor.fetchone()
+        return row['group_id'] if row else None
 
 
 def advance_rotation(group_id: int) -> Optional[dict]:
     """Advance to the next person in rotation."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    # Get group rotation type
-    cursor.execute("SELECT rotation_type FROM groups WHERE id = %s", (group_id,))
-    group_row = cursor.fetchone()
+        # Get group rotation type
+        cursor.execute("SELECT rotation_type FROM groups WHERE id = %s", (group_id,))
+        group_row = cursor.fetchone()
 
-    if not group_row:
-        conn.close()
-        return None
+        if not group_row:
+            return None
 
-    rotation_type = group_row['rotation_type']
+        rotation_type = group_row['rotation_type']
 
-    # Get all members — custom rotation_order first, then join date
-    cursor.execute(
-        """SELECT user_id FROM group_members WHERE group_id = %s
-           ORDER BY rotation_order ASC NULLS LAST, joined_at ASC""",
-        (group_id,)
-    )
-    members = [row['user_id'] for row in cursor.fetchall()]
+        # Get all members — custom rotation_order first, then join date
+        cursor.execute(
+            """SELECT user_id FROM group_members WHERE group_id = %s
+               ORDER BY rotation_order ASC NULLS LAST, joined_at ASC""",
+            (group_id,)
+        )
+        members = [row['user_id'] for row in cursor.fetchall()]
 
-    if not members:
-        conn.close()
-        return None
+        if not members:
+            return None
 
-    # Get current state
-    cursor.execute("SELECT current_turn_index FROM rotation_state WHERE group_id = %s", (group_id,))
-    state_row = cursor.fetchone()
+        # Get current state
+        cursor.execute("SELECT current_turn_index FROM rotation_state WHERE group_id = %s", (group_id,))
+        state_row = cursor.fetchone()
 
-    if not state_row:
-        conn.close()
-        return None
+        if not state_row:
+            return None
 
-    current_index = state_row['current_turn_index']
+        current_index = state_row['current_turn_index']
 
-    # Calculate next user
-    if rotation_type == "round_robin":
-        next_index = (current_index + 1) % len(members)
-        next_user_id = members[next_index]
-    elif rotation_type == "random":
-        next_index = random.randint(0, len(members) - 1)
-        next_user_id = members[next_index]
-    else:  # none
-        next_index = current_index
-        next_user_id = members[next_index] if members else None
+        # Calculate next user
+        if rotation_type == "round_robin":
+            next_index = (current_index + 1) % len(members)
+            next_user_id = members[next_index]
+        elif rotation_type == "random":
+            next_index = random.randint(0, len(members) - 1)
+            next_user_id = members[next_index]
+        else:  # none
+            next_index = current_index
+            next_user_id = members[next_index] if members else None
 
-    # Update rotation state, clearing any pending picked_event_id
-    cursor.execute(
-        """UPDATE rotation_state
-           SET current_user_id = %s, current_turn_index = %s, last_rotation_at = CURRENT_TIMESTAMP,
-               picked_event_id = NULL
-           WHERE group_id = %s""",
-        (next_user_id, next_index, group_id)
-    )
+        # Update rotation state, clearing any pending picked_event_id
+        cursor.execute(
+            """UPDATE rotation_state
+               SET current_user_id = %s, current_turn_index = %s, last_rotation_at = CURRENT_TIMESTAMP,
+                   picked_event_id = NULL
+               WHERE group_id = %s""",
+            (next_user_id, next_index, group_id)
+        )
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
-    return {
-        "group_id": group_id,
-        "user_id": next_user_id,
-        "turn_index": next_index,
-        "rotation_type": rotation_type
-    }
+        return {
+            "group_id": group_id,
+            "user_id": next_user_id,
+            "turn_index": next_index,
+            "rotation_type": rotation_type
+        }
 
 
 def reset_rotation(group_id: int) -> Optional[dict]:
     """Reset rotation to the first member."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    # Get group rotation type
-    cursor.execute("SELECT rotation_type FROM groups WHERE id = %s", (group_id,))
-    group_row = cursor.fetchone()
+        # Get group rotation type
+        cursor.execute("SELECT rotation_type FROM groups WHERE id = %s", (group_id,))
+        group_row = cursor.fetchone()
 
-    if not group_row:
-        conn.close()
-        return None
+        if not group_row:
+            return None
 
-    rotation_type = group_row['rotation_type']
+        rotation_type = group_row['rotation_type']
 
-    # Get first member (respect rotation_order)
-    cursor.execute(
-        """SELECT user_id FROM group_members WHERE group_id = %s
-           ORDER BY rotation_order ASC NULLS LAST, joined_at ASC LIMIT 1""",
-        (group_id,)
-    )
-    member_row = cursor.fetchone()
+        # Get first member (respect rotation_order)
+        cursor.execute(
+            """SELECT user_id FROM group_members WHERE group_id = %s
+               ORDER BY rotation_order ASC NULLS LAST, joined_at ASC LIMIT 1""",
+            (group_id,)
+        )
+        member_row = cursor.fetchone()
 
-    if not member_row:
-        conn.close()
-        return None
+        if not member_row:
+            return None
 
-    first_user_id = member_row['user_id']
+        first_user_id = member_row['user_id']
 
-    # Update rotation state
-    cursor.execute(
-        """UPDATE rotation_state
-           SET current_user_id = %s, current_turn_index = 0, last_rotation_at = CURRENT_TIMESTAMP
-           WHERE group_id = %s""",
-        (first_user_id, group_id)
-    )
+        # Update rotation state
+        cursor.execute(
+            """UPDATE rotation_state
+               SET current_user_id = %s, current_turn_index = 0, last_rotation_at = CURRENT_TIMESTAMP
+               WHERE group_id = %s""",
+            (first_user_id, group_id)
+        )
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
-    return {
-        "group_id": group_id,
-        "user_id": first_user_id,
-        "turn_index": 0,
-        "rotation_type": rotation_type
-    }
+        return {
+            "group_id": group_id,
+            "user_id": first_user_id,
+            "turn_index": 0,
+            "rotation_type": rotation_type
+        }
 
 
 def set_rotation_turn(group_id: int, user_id: int) -> Optional[dict]:
     """Set rotation to a specific user."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    # Verify user is a member
-    cursor.execute(
-        "SELECT 1 FROM group_members WHERE group_id = %s AND user_id = %s",
-        (group_id, user_id)
-    )
+        # Verify user is a member
+        cursor.execute(
+            "SELECT 1 FROM group_members WHERE group_id = %s AND user_id = %s",
+            (group_id, user_id)
+        )
 
-    if not cursor.fetchone():
-        conn.close()
-        return None
+        if not cursor.fetchone():
+            return None
 
-    # Get group rotation type
-    cursor.execute("SELECT rotation_type FROM groups WHERE id = %s", (group_id,))
-    group_row = cursor.fetchone()
+        # Get group rotation type
+        cursor.execute("SELECT rotation_type FROM groups WHERE id = %s", (group_id,))
+        group_row = cursor.fetchone()
 
-    if not group_row:
-        conn.close()
-        return None
+        if not group_row:
+            return None
 
-    rotation_type = group_row['rotation_type']
+        rotation_type = group_row['rotation_type']
 
-    # Get user's index (respect rotation_order)
-    cursor.execute(
-        """SELECT user_id FROM group_members WHERE group_id = %s
-           ORDER BY rotation_order ASC NULLS LAST, joined_at ASC""",
-        (group_id,)
-    )
-    members = [row['user_id'] for row in cursor.fetchall()]
+        # Get user's index (respect rotation_order)
+        cursor.execute(
+            """SELECT user_id FROM group_members WHERE group_id = %s
+               ORDER BY rotation_order ASC NULLS LAST, joined_at ASC""",
+            (group_id,)
+        )
+        members = [row['user_id'] for row in cursor.fetchall()]
 
-    if user_id not in members:
-        conn.close()
-        return None
+        if user_id not in members:
+            return None
 
-    turn_index = members.index(user_id)
+        turn_index = members.index(user_id)
 
-    # Update rotation state
-    cursor.execute(
-        """UPDATE rotation_state
-           SET current_user_id = %s, current_turn_index = %s, last_rotation_at = CURRENT_TIMESTAMP
-           WHERE group_id = %s""",
-        (user_id, turn_index, group_id)
-    )
+        # Update rotation state
+        cursor.execute(
+            """UPDATE rotation_state
+               SET current_user_id = %s, current_turn_index = %s, last_rotation_at = CURRENT_TIMESTAMP
+               WHERE group_id = %s""",
+            (user_id, turn_index, group_id)
+        )
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
-    return {
-        "group_id": group_id,
-        "user_id": user_id,
-        "turn_index": turn_index,
-        "rotation_type": rotation_type
-    }
+        return {
+            "group_id": group_id,
+            "user_id": user_id,
+            "turn_index": turn_index,
+            "rotation_type": rotation_type
+        }
 
 
 def skip_rotation(group_id: int, reason: str = None) -> Optional[dict]:
@@ -824,99 +793,93 @@ def skip_rotation(group_id: int, reason: str = None) -> Optional[dict]:
 
 def reorder_rotation(group_id: int, user_ids: List[int]) -> bool:
     """Set a custom rotation order by assigning rotation_order indexes."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    try:
-        for index, user_id in enumerate(user_ids):
+        try:
+            for index, user_id in enumerate(user_ids):
+                cursor.execute(
+                    """UPDATE group_members SET rotation_order = %s
+                       WHERE group_id = %s AND user_id = %s""",
+                    (index, group_id, user_id)
+                )
+
+            # Update current_turn_index to reflect new order of current user
             cursor.execute(
-                """UPDATE group_members SET rotation_order = %s
-                   WHERE group_id = %s AND user_id = %s""",
-                (index, group_id, user_id)
+                "SELECT current_user_id FROM rotation_state WHERE group_id = %s",
+                (group_id,)
             )
+            state = cursor.fetchone()
 
-        # Update current_turn_index to reflect new order of current user
-        cursor.execute(
-            "SELECT current_user_id FROM rotation_state WHERE group_id = %s",
-            (group_id,)
-        )
-        state = cursor.fetchone()
+            if state and state['current_user_id'] in user_ids:
+                new_index = user_ids.index(state['current_user_id'])
+                cursor.execute(
+                    "UPDATE rotation_state SET current_turn_index = %s WHERE group_id = %s",
+                    (new_index, group_id)
+                )
 
-        if state and state['current_user_id'] in user_ids:
-            new_index = user_ids.index(state['current_user_id'])
-            cursor.execute(
-                "UPDATE rotation_state SET current_turn_index = %s WHERE group_id = %s",
-                (new_index, group_id)
-            )
-
-        conn.commit()
-        return True
-    except Exception:
-        conn.rollback()
-        return False
-    finally:
-        conn.close()
+            conn.commit()
+            return True
+        except Exception:
+            conn.rollback()
+            return False
 
 
 # ===== Group Comments =====
 
 def add_group_comment(group_id: int, user_id: int, content: str) -> int:
     """Add a comment to a group."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        "INSERT INTO group_comments (group_id, user_id, content) VALUES (%s, %s, %s) RETURNING id",
-        (group_id, user_id, content)
-    )
+        cursor.execute(
+            "INSERT INTO group_comments (group_id, user_id, content) VALUES (%s, %s, %s) RETURNING id",
+            (group_id, user_id, content)
+        )
 
-    comment_id = cursor.fetchone()['id']
-    conn.commit()
-    conn.close()
+        comment_id = cursor.fetchone()['id']
+        conn.commit()
 
-    return comment_id
+        return comment_id
 
 
 def get_group_comments(group_id: int) -> List[dict]:
     """Get all comments for a group."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        "SELECT * FROM group_comments WHERE group_id = %s ORDER BY created_at ASC",
-        (group_id,)
-    )
+        cursor.execute(
+            "SELECT * FROM group_comments WHERE group_id = %s ORDER BY created_at ASC",
+            (group_id,)
+        )
 
-    rows = cursor.fetchall()
-    conn.close()
+        rows = cursor.fetchall()
 
-    return [dict(row) for row in rows]
+        return [dict(row) for row in rows]
 
 
 def get_group_comment(comment_id: int) -> Optional[dict]:
     """Get a comment by ID."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM group_comments WHERE id = %s", (comment_id,))
-    row = cursor.fetchone()
-    conn.close()
+        cursor.execute("SELECT * FROM group_comments WHERE id = %s", (comment_id,))
+        row = cursor.fetchone()
 
-    return dict(row) if row else None
+        return dict(row) if row else None
 
 
 def delete_group_comment(comment_id: int, deleted_by: int = None) -> bool:
     """Delete a group comment."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("DELETE FROM group_comments WHERE id = %s", (comment_id,))
+        cursor.execute("DELETE FROM group_comments WHERE id = %s", (comment_id,))
 
-    success = cursor.rowcount > 0
-    conn.commit()
-    conn.close()
+        success = cursor.rowcount > 0
+        conn.commit()
 
-    return success
+        return success
 
 
 # ===== Poll CRUD =====
@@ -929,174 +892,163 @@ def create_poll(group_id: int, created_by: int, activity_name: str,
                 allow_custom_response: bool = False) -> int:
     """Create a new group poll."""
     import json
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        """INSERT INTO group_polls (group_id, created_by, activity_name, activity_type,
-           activity_id, note, deadline, custom_options, creator_username,
-           allow_multi_select, allow_custom_response)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-        (group_id, created_by, activity_name, activity_type, activity_id, note, deadline,
-         json.dumps(custom_options) if custom_options else None, creator_username,
-         allow_multi_select, allow_custom_response)
-    )
-    poll_id = cursor.fetchone()['id']
-    conn.commit()
-    conn.close()
-    return poll_id
+        cursor.execute(
+            """INSERT INTO group_polls (group_id, created_by, activity_name, activity_type,
+               activity_id, note, deadline, custom_options, creator_username,
+               allow_multi_select, allow_custom_response)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+            (group_id, created_by, activity_name, activity_type, activity_id, note, deadline,
+             json.dumps(custom_options) if custom_options else None, creator_username,
+             allow_multi_select, allow_custom_response)
+        )
+        poll_id = cursor.fetchone()['id']
+        conn.commit()
+        return poll_id
 
 
 def get_poll(poll_id: int) -> Optional[dict]:
     """Get a poll by ID."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM group_polls WHERE id = %s", (poll_id,))
-    row = cursor.fetchone()
-    conn.close()
-    return dict(row) if row else None
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM group_polls WHERE id = %s", (poll_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
 
 
 def get_polls_for_group(group_id: int) -> List[dict]:
     """Get all polls for a group — open first, then closed/converted, newest first."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        """SELECT * FROM group_polls WHERE group_id = %s
-           ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, created_at DESC""",
-        (group_id,)
-    )
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT * FROM group_polls WHERE group_id = %s
+               ORDER BY CASE status WHEN 'open' THEN 0 ELSE 1 END, created_at DESC""",
+            (group_id,)
+        )
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
 
 
 def get_my_active_polls(user_id: int) -> List[dict]:
     """Get open polls created by the user, with response counts."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        """SELECT gp.*,
-                  COUNT(gpr.id) AS responded_count,
-                  COUNT(gm.user_id) AS member_count
-           FROM group_polls gp
-           JOIN group_members gm ON gp.group_id = gm.group_id
-           LEFT JOIN group_poll_responses gpr ON gpr.poll_id = gp.id
-           WHERE gp.created_by = %s AND gp.status = 'open'
-           GROUP BY gp.id
-           ORDER BY gp.created_at DESC""",
-        (user_id,)
-    )
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT gp.*,
+                      COUNT(gpr.id) AS responded_count,
+                      COUNT(gm.user_id) AS member_count
+               FROM group_polls gp
+               JOIN group_members gm ON gp.group_id = gm.group_id
+               LEFT JOIN group_poll_responses gpr ON gpr.poll_id = gp.id
+               WHERE gp.created_by = %s AND gp.status = 'open'
+               GROUP BY gp.id
+               ORDER BY gp.created_at DESC""",
+            (user_id,)
+        )
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
 
 
 def get_pending_polls_for_user(user_id: int) -> List[dict]:
     """Get open polls in user's groups where user hasn't responded and isn't creator."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        """SELECT gp.* FROM group_polls gp
-           JOIN group_members gm ON gp.group_id = gm.group_id
-           WHERE gm.user_id = %s
-             AND gp.status = 'open'
-             AND gp.created_by != %s
-             AND NOT EXISTS (
-               SELECT 1 FROM group_poll_responses gpr
-               WHERE gpr.poll_id = gp.id AND gpr.user_id = %s
-             )
-           ORDER BY gp.created_at DESC""",
-        (user_id, user_id, user_id)
-    )
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT gp.* FROM group_polls gp
+               JOIN group_members gm ON gp.group_id = gm.group_id
+               WHERE gm.user_id = %s
+                 AND gp.status = 'open'
+                 AND gp.created_by != %s
+                 AND NOT EXISTS (
+                   SELECT 1 FROM group_poll_responses gpr
+                   WHERE gpr.poll_id = gp.id AND gpr.user_id = %s
+                 )
+               ORDER BY gp.created_at DESC""",
+            (user_id, user_id, user_id)
+        )
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
 
 
 def upsert_poll_response(poll_id: int, user_id: int, response: str, responses: list = None) -> dict:
     """Insert or update a poll response. `responses` is used for multi-select polls."""
     import json
-    conn = get_db()
-    cursor = conn.cursor()
-    responses_json = json.dumps(responses) if responses else None
-    cursor.execute(
-        """INSERT INTO group_poll_responses (poll_id, user_id, response, responses)
-           VALUES (%s, %s, %s, %s)
-           ON CONFLICT (poll_id, user_id) DO UPDATE SET response = EXCLUDED.response,
-           responses = EXCLUDED.responses,
-           responded_at = CURRENT_TIMESTAMP
-           RETURNING *""",
-        (poll_id, user_id, response, responses_json)
-    )
-    row = cursor.fetchone()
-    conn.commit()
-    conn.close()
-    return dict(row)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        responses_json = json.dumps(responses) if responses else None
+        cursor.execute(
+            """INSERT INTO group_poll_responses (poll_id, user_id, response, responses)
+               VALUES (%s, %s, %s, %s)
+               ON CONFLICT (poll_id, user_id) DO UPDATE SET response = EXCLUDED.response,
+               responses = EXCLUDED.responses,
+               responded_at = CURRENT_TIMESTAMP
+               RETURNING *""",
+            (poll_id, user_id, response, responses_json)
+        )
+        row = cursor.fetchone()
+        conn.commit()
+        return dict(row)
 
 
 def get_poll_responses(poll_id: int) -> List[dict]:
     """Get all responses for a poll."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM group_poll_responses WHERE poll_id = %s", (poll_id,))
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(row) for row in rows]
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM group_poll_responses WHERE poll_id = %s", (poll_id,))
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
 
 
 def get_poll_response(poll_id: int, user_id: int) -> Optional[dict]:
     """Get a specific user's response for a poll."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT * FROM group_poll_responses WHERE poll_id = %s AND user_id = %s",
-        (poll_id, user_id)
-    )
-    row = cursor.fetchone()
-    conn.close()
-    return dict(row) if row else None
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM group_poll_responses WHERE poll_id = %s AND user_id = %s",
+            (poll_id, user_id)
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
 
 
 def close_poll(poll_id: int) -> bool:
     """Close a poll."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "UPDATE group_polls SET status = 'closed' WHERE id = %s AND status = 'open'",
-        (poll_id,)
-    )
-    success = cursor.rowcount > 0
-    conn.commit()
-    conn.close()
-    return success
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE group_polls SET status = 'closed' WHERE id = %s AND status = 'open'",
+            (poll_id,)
+        )
+        success = cursor.rowcount > 0
+        conn.commit()
+        return success
 
 
 def convert_poll(poll_id: int, event_id: int) -> bool:
     """Mark poll as converted and link to the created event."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "UPDATE group_polls SET status = 'converted', converted_event_id = %s WHERE id = %s",
-        (event_id, poll_id)
-    )
-    success = cursor.rowcount > 0
-    conn.commit()
-    conn.close()
-    return success
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE group_polls SET status = 'converted', converted_event_id = %s WHERE id = %s",
+            (event_id, poll_id)
+        )
+        success = cursor.rowcount > 0
+        conn.commit()
+        return success
 
 
 def auto_close_expired_polls() -> int:
     """Close open polls that have passed their deadline. Returns count closed."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "UPDATE group_polls SET status = 'closed' WHERE status = 'open' AND deadline < CURRENT_TIMESTAMP"
-    )
-    count = cursor.rowcount
-    conn.commit()
-    conn.close()
-    return count
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE group_polls SET status = 'closed' WHERE status = 'open' AND deadline < CURRENT_TIMESTAMP"
+        )
+        count = cursor.rowcount
+        conn.commit()
+        return count
 
 
 def update_poll(poll_id: int, *, activity_name: str = None, note: str = None, deadline=None) -> bool:
@@ -1114,72 +1066,67 @@ def update_poll(poll_id: int, *, activity_name: str = None, note: str = None, de
     if not fields:
         return False
     values.append(poll_id)
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        f"UPDATE group_polls SET {', '.join(fields)} WHERE id = %s AND status = 'open'",
-        values,
-    )
-    success = cursor.rowcount > 0
-    conn.commit()
-    conn.close()
-    return success
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"UPDATE group_polls SET {', '.join(fields)} WHERE id = %s AND status = 'open'",
+            values,
+        )
+        success = cursor.rowcount > 0
+        conn.commit()
+        return success
 
 
 def add_poll_option(poll_id: int, label: str, emoji: str = '⭐') -> Optional[list]:
     """Append a new write-in option to an open poll that uses custom_options.
     Returns the updated options list, or None if the poll has no custom options."""
     import json
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT custom_options FROM group_polls WHERE id = %s AND status = 'open'",
-        (poll_id,),
-    )
-    row = cursor.fetchone()
-    if not row or not row['custom_options']:
-        conn.close()
-        return None  # Default-response polls don't support write-ins
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT custom_options FROM group_polls WHERE id = %s AND status = 'open'",
+            (poll_id,),
+        )
+        row = cursor.fetchone()
+        if not row or not row['custom_options']:
+            return None  # Default-response polls don't support write-ins
 
-    opts = row['custom_options'] if isinstance(row['custom_options'], list) else json.loads(row['custom_options'])
+        opts = row['custom_options'] if isinstance(row['custom_options'], list) else json.loads(row['custom_options'])
 
-    # Assign a non-colliding opt_N key
-    existing_nums = [int(o['value'][4:]) for o in opts if o.get('value', '').startswith('opt_') and o['value'][4:].isdigit()]
-    next_idx = max(existing_nums, default=-1) + 1
-    opts.append({'label': label, 'emoji': emoji, 'value': f'opt_{next_idx}'})
+        # Assign a non-colliding opt_N key
+        existing_nums = [int(o['value'][4:]) for o in opts if o.get('value', '').startswith('opt_') and o['value'][4:].isdigit()]
+        next_idx = max(existing_nums, default=-1) + 1
+        opts.append({'label': label, 'emoji': emoji, 'value': f'opt_{next_idx}'})
 
-    cursor.execute("UPDATE group_polls SET custom_options = %s WHERE id = %s", (json.dumps(opts), poll_id))
-    conn.commit()
-    conn.close()
-    return opts
+        cursor.execute("UPDATE group_polls SET custom_options = %s WHERE id = %s", (json.dumps(opts), poll_id))
+        conn.commit()
+        return opts
 
 
 def get_group_member_ids(group_id: int) -> List[int]:
     """Return a list of user_ids for all active members of a group."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT user_id FROM group_members WHERE group_id = %s", (group_id,))
-    rows = cursor.fetchall()
-    conn.close()
-    return [row['user_id'] for row in rows]
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT user_id FROM group_members WHERE group_id = %s", (group_id,))
+        rows = cursor.fetchall()
+        return [row['user_id'] for row in rows]
 
 
 def get_poll_non_responders(poll_id: int, group_id: int) -> List[int]:
     """Return user_ids of group members who haven't responded to a poll yet."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        """SELECT gm.user_id FROM group_members gm
-           WHERE gm.group_id = %s
-             AND NOT EXISTS (
-               SELECT 1 FROM group_poll_responses gpr
-               WHERE gpr.poll_id = %s AND gpr.user_id = gm.user_id
-             )""",
-        (group_id, poll_id),
-    )
-    rows = cursor.fetchall()
-    conn.close()
-    return [row['user_id'] for row in rows]
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT gm.user_id FROM group_members gm
+               WHERE gm.group_id = %s
+                 AND NOT EXISTS (
+                   SELECT 1 FROM group_poll_responses gpr
+                   WHERE gpr.poll_id = %s AND gpr.user_id = gm.user_id
+                 )""",
+            (group_id, poll_id),
+        )
+        rows = cursor.fetchall()
+        return [row['user_id'] for row in rows]
 
 
 # ===== Invite Code Utilities =====
@@ -1195,66 +1142,61 @@ def _generate_code_str(group_name: str) -> str:
 
 def generate_unique_code(group_name: str) -> str:
     """Generate a collision-free invite code."""
-    conn = get_db()
-    cursor = conn.cursor()
-    for _ in range(20):
-        code = _generate_code_str(group_name)
-        cursor.execute("SELECT id FROM invite_codes WHERE code = %s", (code,))
-        if not cursor.fetchone():
-            conn.close()
-            return code
-    conn.close()
-    raise ValueError("Could not generate unique invite code")
+    with get_db() as conn:
+        cursor = conn.cursor()
+        for _ in range(20):
+            code = _generate_code_str(group_name)
+            cursor.execute("SELECT id FROM invite_codes WHERE code = %s", (code,))
+            if not cursor.fetchone():
+                return code
+        raise ValueError("Could not generate unique invite code")
 
 
 def create_invite_code(group_id: int, group_name: str, join_behavior: str,
                        expiry_type: str = "never", expiry_days: int = None) -> dict:
     """Create a new invite code (latest row = active code)."""
     from datetime import timezone, timedelta
-    conn = get_db()
-    cursor = conn.cursor()
-    code = generate_unique_code(group_name)
-    expires_at = None
-    if expiry_type == "days" and expiry_days:
-        expires_at = datetime.now(timezone.utc) + timedelta(days=expiry_days)
-    cursor.execute("""
-        INSERT INTO invite_codes (group_id, code, join_behavior, expiry_type, expiry_days, expires_at)
-        VALUES (%s, %s, %s, %s, %s, %s) RETURNING *
-    """, (group_id, code, join_behavior, expiry_type, expiry_days, expires_at))
-    row = dict(cursor.fetchone())
-    conn.commit()
-    conn.close()
-    return row
+    with get_db() as conn:
+        cursor = conn.cursor()
+        code = generate_unique_code(group_name)
+        expires_at = None
+        if expiry_type == "days" and expiry_days:
+            expires_at = datetime.now(timezone.utc) + timedelta(days=expiry_days)
+        cursor.execute("""
+            INSERT INTO invite_codes (group_id, code, join_behavior, expiry_type, expiry_days, expires_at)
+            VALUES (%s, %s, %s, %s, %s, %s) RETURNING *
+        """, (group_id, code, join_behavior, expiry_type, expiry_days, expires_at))
+        row = dict(cursor.fetchone())
+        conn.commit()
+        return row
 
 
 def get_active_invite_code(group_id: int) -> Optional[dict]:
     """Return the most recently created invite code for the group."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT * FROM invite_codes WHERE group_id = %s
-        ORDER BY created_at DESC LIMIT 1
-    """, (group_id,))
-    row = cursor.fetchone()
-    conn.close()
-    return dict(row) if row else None
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM invite_codes WHERE group_id = %s
+            ORDER BY created_at DESC LIMIT 1
+        """, (group_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
 
 
 def get_invite_code_by_code(code: str) -> Optional[dict]:
     """Lookup invite code row by code string."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT ic.*, g.name AS group_name, g.activity_type,
-               (SELECT COUNT(*) FROM group_members WHERE group_id = ic.group_id) AS member_count,
-               ic.id = (SELECT id FROM invite_codes WHERE group_id = ic.group_id ORDER BY created_at DESC LIMIT 1) AS is_active
-        FROM invite_codes ic
-        JOIN groups g ON g.id = ic.group_id
-        WHERE ic.code = %s
-    """, (code,))
-    row = cursor.fetchone()
-    conn.close()
-    return dict(row) if row else None
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT ic.*, g.name AS group_name, g.activity_type,
+                   (SELECT COUNT(*) FROM group_members WHERE group_id = ic.group_id) AS member_count,
+                   ic.id = (SELECT id FROM invite_codes WHERE group_id = ic.group_id ORDER BY created_at DESC LIMIT 1) AS is_active
+            FROM invite_codes ic
+            JOIN groups g ON g.id = ic.group_id
+            WHERE ic.code = %s
+        """, (code,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
 
 
 def validate_invite_code(code: str) -> dict:
@@ -1278,80 +1220,73 @@ def validate_invite_code(code: str) -> dict:
 
 
 def increment_invite_used_count(invite_code_id: int):
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE invite_codes SET used_count = used_count + 1 WHERE id = %s", (invite_code_id,))
-    conn.commit()
-    conn.close()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE invite_codes SET used_count = used_count + 1 WHERE id = %s", (invite_code_id,))
+        conn.commit()
 
 
 # ===== Join Requests =====
 
 def create_join_request(group_id: int, user_id: int, invite_code_id: int) -> dict:
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO join_requests (group_id, user_id, invite_code_id)
-        VALUES (%s, %s, %s) RETURNING *
-    """, (group_id, user_id, invite_code_id))
-    row = dict(cursor.fetchone())
-    conn.commit()
-    conn.close()
-    return row
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO join_requests (group_id, user_id, invite_code_id)
+            VALUES (%s, %s, %s) RETURNING *
+        """, (group_id, user_id, invite_code_id))
+        row = dict(cursor.fetchone())
+        conn.commit()
+        return row
 
 
 def get_pending_join_requests(group_id: int) -> list:
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT * FROM join_requests WHERE group_id = %s AND status = 'pending'
-        ORDER BY requested_at ASC
-    """, (group_id,))
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM join_requests WHERE group_id = %s AND status = 'pending'
+            ORDER BY requested_at ASC
+        """, (group_id,))
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
 
 
 def get_join_request(request_id: int) -> Optional[dict]:
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM join_requests WHERE id = %s", (request_id,))
-    row = cursor.fetchone()
-    conn.close()
-    return dict(row) if row else None
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM join_requests WHERE id = %s", (request_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
 
 
 def get_pending_join_request_by_user(group_id: int, user_id: int) -> Optional[dict]:
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT * FROM join_requests WHERE group_id = %s AND user_id = %s AND status = 'pending'
-    """, (group_id, user_id))
-    row = cursor.fetchone()
-    conn.close()
-    return dict(row) if row else None
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM join_requests WHERE group_id = %s AND user_id = %s AND status = 'pending'
+        """, (group_id, user_id))
+        row = cursor.fetchone()
+        return dict(row) if row else None
 
 
 def update_join_request(request_id: int, status: str, reviewed_by: int) -> Optional[dict]:
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        UPDATE join_requests
-        SET status = %s, reviewed_at = NOW(), reviewed_by = %s
-        WHERE id = %s RETURNING *
-    """, (status, reviewed_by, request_id))
-    row = cursor.fetchone()
-    conn.commit()
-    conn.close()
-    return dict(row) if row else None
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            UPDATE join_requests
+            SET status = %s, reviewed_at = NOW(), reviewed_by = %s
+            WHERE id = %s RETURNING *
+        """, (status, reviewed_by, request_id))
+        row = cursor.fetchone()
+        conn.commit()
+        return dict(row) if row else None
 
 
 def get_pending_join_requests_count(group_id: int) -> int:
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) AS cnt FROM join_requests WHERE group_id = %s AND status = 'pending'", (group_id,))
-    row = cursor.fetchone()
-    conn.close()
-    return row["cnt"] if row else 0
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) AS cnt FROM join_requests WHERE group_id = %s AND status = 'pending'", (group_id,))
+        row = cursor.fetchone()
+        return row["cnt"] if row else 0
 
 

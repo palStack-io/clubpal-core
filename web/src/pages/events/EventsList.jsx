@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { isThisWeek, isThisMonth, startOfMonth, endOfMonth, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, isSameMonth, format, addMonths, subMonths } from 'date-fns'
 import AppShell from '../../components/shell/AppShell'
@@ -203,19 +203,8 @@ export default function EventsList() {
   const [statusFilter, setStatusFilter] = useState('Upcoming')
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
-  const [showNewMenu, setShowNewMenu] = useState(false)
   const [viewMode, setViewMode] = useState('list')
   const [ratingsMap, setRatingsMap] = useState({})
-  const newMenuRef = useRef(null)
-
-  useEffect(() => {
-    if (!showNewMenu) return
-    function handleClick(e) {
-      if (newMenuRef.current && !newMenuRef.current.contains(e.target)) setShowNewMenu(false)
-    }
-    document.addEventListener('mousedown', handleClick)
-    return () => document.removeEventListener('mousedown', handleClick)
-  }, [showNewMenu])
 
   useEffect(() => {
     if (!user?.id) return
@@ -310,44 +299,14 @@ export default function EventsList() {
         subtitle="Your upcoming and past outings"
         hasStats
       >
-        <div ref={newMenuRef} style={{ position: 'relative' }}>
-          <Button variant="primary" size="sm" onClick={() => setShowNewMenu(m => !m)}>+ New</Button>
-          {showNewMenu && (
-            <div style={{
-              position: 'absolute', top: 'calc(100% + 6px)', right: 0,
-              background: 'var(--s2)', border: '1px solid var(--glass)',
-              borderRadius: 12, padding: '6px', minWidth: 170,
-              boxShadow: '0 8px 24px rgba(0,0,0,0.18)', zIndex: 100,
-            }}>
-              <button
-                onClick={() => { setShowNewMenu(false); setShowCreate(true) }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  width: '100%', padding: '9px 12px', borderRadius: 8,
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  color: 'var(--t1)', fontSize: 13, fontWeight: 600, textAlign: 'left',
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = 'var(--s3)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'none'}
-              >
-                <span style={{ fontSize: 16 }}>📅</span> Event
-              </button>
-              <button
-                onClick={() => { setShowNewMenu(false); navigate('/events/new/invite') }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 10,
-                  width: '100%', padding: '9px 12px', borderRadius: 8,
-                  background: 'none', border: 'none', cursor: 'pointer',
-                  color: 'var(--rose-soft)', fontSize: 13, fontWeight: 600, textAlign: 'left',
-                }}
-                onMouseEnter={e => e.currentTarget.style.background = 'var(--rose-glow)'}
-                onMouseLeave={e => e.currentTarget.style.background = 'none'}
-              >
-                <span style={{ fontSize: 16 }}>✨</span> Party Invite
-              </button>
-            </div>
-          )}
-        </div>
+        <Button
+          variant="ghost" size="sm"
+          onClick={() => navigate('/events/new/invite')}
+          style={{ color: 'var(--rose-soft)', border: '1px solid var(--rose-border)', background: 'var(--rose-glow)' }}
+        >
+          ✨ Party Invite
+        </Button>
+        <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>+ Event</Button>
       </PageHero>
 
       {/* Floating stats */}

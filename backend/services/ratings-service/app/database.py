@@ -129,46 +129,40 @@ def create_rating(event_id: int, rater_user_id: int, rated_user_id: int,
                  score: int, comment: str = None, tags: list = None) -> int:
     """Create a new rating."""
     import json
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    try:
-        cursor.execute(
-            """INSERT INTO ratings (event_id, rater_user_id, rated_user_id, score, comment, tags)
-               VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
-            (event_id, rater_user_id, rated_user_id, score, comment, json.dumps(tags or []))
-        )
+        try:
+            cursor.execute(
+                """INSERT INTO ratings (event_id, rater_user_id, rated_user_id, score, comment, tags)
+                   VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
+                (event_id, rater_user_id, rated_user_id, score, comment, json.dumps(tags or []))
+            )
 
-        rating_id = cursor.fetchone()['id']
-        conn.commit()
-        conn.close()
+            rating_id = cursor.fetchone()['id']
+            conn.commit()
 
-        # Update stats for the rater (tracks ratings given per user)
-        update_user_stats(rater_user_id)
+            # Update stats for the rater (tracks ratings given per user)
+            update_user_stats(rater_user_id)
 
-        return rating_id
-    except psycopg2.IntegrityError as e:
-        conn.rollback()
-        conn.close()
-        raise ValueError(f"Rating already exists or invalid data: {str(e)}")
+            return rating_id
+        except psycopg2.IntegrityError as e:
+            conn.rollback()
+            raise ValueError(f"Rating already exists or invalid data: {str(e)}")
 
 
 def get_rating(rating_id: int) -> Optional[dict]:
     """Get rating by ID."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM ratings WHERE id = %s", (rating_id,))
         row = cursor.fetchone()
         return dict(row) if row else None
-    finally:
-        conn.close()
 
 
 def get_rating_by_event_and_rater(event_id: int, rater_user_id: int) -> Optional[dict]:
     """Get rating by event and rater (one rating per user per event)."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT * FROM ratings WHERE event_id = %s AND rater_user_id = %s",
@@ -176,15 +170,12 @@ def get_rating_by_event_and_rater(event_id: int, rater_user_id: int) -> Optional
         )
         row = cursor.fetchone()
         return dict(row) if row else None
-    finally:
-        conn.close()
 
 
 def get_rating_by_event_and_users(event_id: int, rater_user_id: int,
                                   rated_user_id: int) -> Optional[dict]:
     """Get rating by event and users."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
             """SELECT * FROM ratings
@@ -193,58 +184,46 @@ def get_rating_by_event_and_users(event_id: int, rater_user_id: int,
         )
         row = cursor.fetchone()
         return dict(row) if row else None
-    finally:
-        conn.close()
 
 
 def get_ratings_for_event(event_id: int) -> List[dict]:
     """Get all ratings for an event."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT * FROM ratings WHERE event_id = %s ORDER BY created_at DESC",
             (event_id,)
         )
         return [dict(row) for row in cursor.fetchall()]
-    finally:
-        conn.close()
 
 
 def get_ratings_by_rater(rater_user_id: int) -> List[dict]:
     """Get all ratings given by a user."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT * FROM ratings WHERE rater_user_id = %s ORDER BY created_at DESC",
             (rater_user_id,)
         )
         return [dict(row) for row in cursor.fetchall()]
-    finally:
-        conn.close()
 
 
 def get_ratings_for_user(rated_user_id: int) -> List[dict]:
     """Get all ratings received by a user."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT * FROM ratings WHERE rated_user_id = %s ORDER BY created_at DESC",
             (rated_user_id,)
         )
         return [dict(row) for row in cursor.fetchall()]
-    finally:
-        conn.close()
 
 
 def update_rating(rating_id: int, score: int = None, comment: str = None,
                   tags: list = None) -> bool:
     """Update a rating."""
     import json
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
 
         cursor.execute("SELECT rater_user_id FROM ratings WHERE id = %s", (rating_id,))
@@ -283,19 +262,16 @@ def update_rating(rating_id: int, score: int = None, comment: str = None,
 
         success = cursor.rowcount > 0
         conn.commit()
-    finally:
-        conn.close()
 
-    if success:
-        update_user_stats(rater_user_id)
+        if success:
+            update_user_stats(rater_user_id)
 
-    return success
+        return success
 
 
 def delete_rating(rating_id: int) -> bool:
     """Delete a rating."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
 
         cursor.execute("SELECT rater_user_id FROM ratings WHERE id = %s", (rating_id,))
@@ -310,21 +286,18 @@ def delete_rating(rating_id: int) -> bool:
 
         success = cursor.rowcount > 0
         conn.commit()
-    finally:
-        conn.close()
 
-    if success:
-        update_user_stats(rater_user_id)
+        if success:
+            update_user_stats(rater_user_id)
 
-    return success
+        return success
 
 
 # ===== Statistics Functions =====
 
 def update_user_stats(user_id: int):
     """Update cached statistics for a user."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
 
         cursor.execute(
@@ -367,14 +340,11 @@ def update_user_stats(user_id: int):
         )
 
         conn.commit()
-    finally:
-        conn.close()
 
 
 def increment_hosted_events(user_id: int):
     """Increment the hosted events count for a user."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
             """INSERT INTO user_stats (user_id, total_hosted_events, last_updated)
@@ -385,8 +355,6 @@ def increment_hosted_events(user_id: int):
             (user_id,)
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 _STATS_QUERY = """SELECT user_id, total_ratings, average_score,
@@ -401,33 +369,26 @@ _STATS_QUERY = """SELECT user_id, total_ratings, average_score,
 
 def get_user_stats(user_id: int) -> Optional[dict]:
     """Get statistics for a user."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(_STATS_QUERY, (user_id,))
         row = cursor.fetchone()
         if row:
             return dict(row)
-    finally:
-        conn.close()
 
-    # No cached stats — calculate and retry once
-    update_user_stats(user_id)
+        # No cached stats — calculate and retry once
+        update_user_stats(user_id)
 
-    conn = get_db()
-    try:
-        cursor = conn.cursor()
-        cursor.execute(_STATS_QUERY, (user_id,))
-        row = cursor.fetchone()
-        return dict(row) if row else None
-    finally:
-        conn.close()
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(_STATS_QUERY, (user_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
 
 
 def get_event_stats(event_id: int) -> Optional[dict]:
     """Get rating statistics for an event."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
             """SELECT COUNT(*) as total_ratings, AVG(score) as average_score
@@ -435,17 +396,15 @@ def get_event_stats(event_id: int) -> Optional[dict]:
             (event_id,)
         )
         row = cursor.fetchone()
-    finally:
-        conn.close()
 
-    if row and row['total_ratings'] > 0:
-        return {
-            "event_id": event_id,
-            "total_ratings": row['total_ratings'],
-            "average_score": round(row['average_score'], 2) if row['average_score'] else 0.0
-        }
+        if row and row['total_ratings'] > 0:
+            return {
+                "event_id": event_id,
+                "total_ratings": row['total_ratings'],
+                "average_score": round(row['average_score'], 2) if row['average_score'] else 0.0
+            }
 
-    return None
+        return None
 
 
 def get_group_leaderboard(group_id: int, member_ids: List[int]) -> List[dict]:
@@ -453,8 +412,7 @@ def get_group_leaderboard(group_id: int, member_ids: List[int]) -> List[dict]:
     if not member_ids:
         return []
 
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         placeholders = ','.join(['%s'] * len(member_ids))
         cursor.execute(
@@ -465,27 +423,24 @@ def get_group_leaderboard(group_id: int, member_ids: List[int]) -> List[dict]:
             member_ids
         )
         rows = cursor.fetchall()
-    finally:
-        conn.close()
 
-    return [
-        {
-            "user_id": row['user_id'],
-            "total_ratings": row['total_ratings'],
-            "average_score": round(row['average_score'], 2) if row['average_score'] else 0.0,
-            "total_hosted_events": row['total_hosted_events'],
-            "rank": rank,
-        }
-        for rank, row in enumerate(rows, start=1)
-    ]
+        return [
+            {
+                "user_id": row['user_id'],
+                "total_ratings": row['total_ratings'],
+                "average_score": round(row['average_score'], 2) if row['average_score'] else 0.0,
+                "total_hosted_events": row['total_hosted_events'],
+                "rank": rank,
+            }
+            for rank, row in enumerate(rows, start=1)
+        ]
 
 
 def get_group_event_avg_rating(event_ids: List[int]) -> Optional[float]:
     """Return the average rating score across all ratings for the given event IDs."""
     if not event_ids:
         return None
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         placeholders = ','.join(['%s'] * len(event_ids))
         cursor.execute(
@@ -495,5 +450,3 @@ def get_group_event_avg_rating(event_ids: List[int]) -> Optional[float]:
         row = cursor.fetchone()
         avg = row['avg_score'] if row else None
         return round(float(avg), 2) if avg is not None else None
-    finally:
-        conn.close()

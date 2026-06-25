@@ -213,6 +213,13 @@ export default function Dashboard() {
         subtitle={`${activeGroups} club${activeGroups !== 1 ? 's' : ''} · ${events.length} upcoming`}
         hasStats
       >
+        <Button
+          variant="ghost" size="sm"
+          onClick={() => navigate('/events/new/invite')}
+          style={{ color: 'var(--rose-soft)', border: '1px solid var(--rose-border)', background: 'var(--rose-glow)' }}
+        >
+          ✨ Party Invite
+        </Button>
         <Button variant="ghost" size="sm" onClick={() => setShowCreateEvent(true)}>+ Event</Button>
         <Button variant="primary" size="sm" onClick={() => setShowCreateGroup(true)}>+ Club</Button>
       </PageHero>

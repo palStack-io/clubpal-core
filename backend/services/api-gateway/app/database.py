@@ -327,34 +327,31 @@ def init_db():
 
 def get_all_integrations() -> dict:
     """Return all stored integration keys as {key: value}."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT key, value FROM system_integrations")
-    rows = cursor.fetchall()
-    conn.close()
-    return {row["key"]: row["value"] for row in rows}
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT key, value FROM system_integrations")
+        rows = cursor.fetchall()
+        return {row["key"]: row["value"] for row in rows}
 
 
 def set_integration(key: str, value: str):
     """Upsert a single integration key."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO system_integrations (key, value, updated_at)
-        VALUES (%s, %s, NOW())
-        ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
-    """, (key, value))
-    conn.commit()
-    conn.close()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO system_integrations (key, value, updated_at)
+            VALUES (%s, %s, NOW())
+            ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()
+        """, (key, value))
+        conn.commit()
 
 
 def delete_integration(key: str):
     """Remove a stored integration key."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM system_integrations WHERE key = %s", (key,))
-    conn.commit()
-    conn.close()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM system_integrations WHERE key = %s", (key,))
+        conn.commit()
 
 
 def get_db():
@@ -369,101 +366,95 @@ def create_user(username: str, email: str, password: str, full_name: str = None,
                 is_admin: bool = False, email_verified: bool = False,
                 password_changed: bool = True) -> int:
     """Create a new user."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    password_hash = pwd_context.hash(password)
+        password_hash = pwd_context.hash(password)
 
-    try:
-        cursor.execute(
-            """INSERT INTO users (username, email, password_hash, full_name, is_admin, email_verified, password_changed)
-               VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-            (username, email, password_hash, full_name, int(is_admin), int(email_verified), int(password_changed))
-        )
-        user_id = cursor.fetchone()['id']
-        conn.commit()
-        return user_id
-    except psycopg2.IntegrityError as e:
-        conn.rollback()
-        raise ValueError(f"User already exists: {str(e)}")
-    finally:
-        conn.close()
+        try:
+            cursor.execute(
+                """INSERT INTO users (username, email, password_hash, full_name, is_admin, email_verified, password_changed)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                (username, email, password_hash, full_name, int(is_admin), int(email_verified), int(password_changed))
+            )
+            user_id = cursor.fetchone()['id']
+            conn.commit()
+            return user_id
+        except psycopg2.IntegrityError as e:
+            conn.rollback()
+            raise ValueError(f"User already exists: {str(e)}")
 
 
 def get_user_by_username(username: str) -> dict:
     """Get user by username or email."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        """SELECT u.*, COALESCE(p.onboarding_complete, 0) AS onboarding_complete
-           FROM users u
-           LEFT JOIN user_preferences p ON u.id = p.user_id
-           WHERE u.username = %s OR u.email = %s""",
-        (username.lower(), username.lower())
-    )
-    row = cursor.fetchone()
-    conn.close()
+        cursor.execute(
+            """SELECT u.*, COALESCE(p.onboarding_complete, 0) AS onboarding_complete
+               FROM users u
+               LEFT JOIN user_preferences p ON u.id = p.user_id
+               WHERE u.username = %s OR u.email = %s""",
+            (username.lower(), username.lower())
+        )
+        row = cursor.fetchone()
 
-    return dict(row) if row else None
+        return dict(row) if row else None
 
 
 def get_user_by_email(email: str) -> dict:
     """Get user by email."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        """SELECT u.*, COALESCE(p.onboarding_complete, 0) AS onboarding_complete
-           FROM users u
-           LEFT JOIN user_preferences p ON u.id = p.user_id
-           WHERE u.email = %s""",
-        (email.lower(),)
-    )
-    row = cursor.fetchone()
-    conn.close()
+        cursor.execute(
+            """SELECT u.*, COALESCE(p.onboarding_complete, 0) AS onboarding_complete
+               FROM users u
+               LEFT JOIN user_preferences p ON u.id = p.user_id
+               WHERE u.email = %s""",
+            (email.lower(),)
+        )
+        row = cursor.fetchone()
 
-    return dict(row) if row else None
+        return dict(row) if row else None
 
 
 def search_users_by_username(query: str, limit: int = 10) -> list:
     """Search users by partial username match."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        """SELECT id, username, full_name, avatar_url FROM users
-           WHERE username ILIKE %s AND is_active = 1
-           ORDER BY username ASC LIMIT %s""",
-        (f"%{query.lower()}%", limit)
-    )
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT id, username, full_name, avatar_url FROM users
+               WHERE username ILIKE %s AND is_active = 1
+               ORDER BY username ASC LIMIT %s""",
+            (f"%{query.lower()}%", limit)
+        )
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
 
 
 def get_user_count() -> int:
     """Return the total number of registered users."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT COUNT(*) AS count FROM users")
-    return cursor.fetchone()["count"]
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) AS count FROM users")
+        return cursor.fetchone()["count"]
 
 
 def get_user_by_id(user_id: int) -> dict:
     """Get user by ID (includes onboarding_complete from user_preferences)."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT u.*, COALESCE(p.onboarding_complete, 0) AS onboarding_complete
-        FROM users u
-        LEFT JOIN user_preferences p ON u.id = p.user_id
-        WHERE u.id = %s
-    """, (user_id,))
-    row = cursor.fetchone()
-    conn.close()
+        cursor.execute("""
+            SELECT u.*, COALESCE(p.onboarding_complete, 0) AS onboarding_complete
+            FROM users u
+            LEFT JOIN user_preferences p ON u.id = p.user_id
+            WHERE u.id = %s
+        """, (user_id,))
+        row = cursor.fetchone()
 
-    return dict(row) if row else None
+        return dict(row) if row else None
 
 
 def verify_password(plain_password: str, password_hash: str) -> bool:
@@ -473,355 +464,332 @@ def verify_password(plain_password: str, password_hash: str) -> bool:
 
 def update_last_login(user_id: int):
     """Update user's last login timestamp."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        "UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = %s",
-        (user_id,)
-    )
+        cursor.execute(
+            "UPDATE users SET last_login_at = CURRENT_TIMESTAMP WHERE id = %s",
+            (user_id,)
+        )
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
 
 def update_user_email_verified(user_id: int):
     """Mark user's email as verified."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("UPDATE users SET email_verified = 1 WHERE id = %s", (user_id,))
+        cursor.execute("UPDATE users SET email_verified = 1 WHERE id = %s", (user_id,))
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
 
 def update_user_password(user_id: int, new_password: str):
     """Update user's password, invalidate all reset tokens, and mark it as changed."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    password_hash = pwd_context.hash(new_password)
-    cursor.execute(
-        "UPDATE users SET password_hash = %s, password_changed = 1, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
-        (password_hash, user_id)
-    )
-    # Invalidate any outstanding reset tokens so a previously-issued link cannot be replayed
-    cursor.execute("UPDATE reset_tokens SET used = 1 WHERE user_id = %s AND used = 0", (user_id,))
+        password_hash = pwd_context.hash(new_password)
+        cursor.execute(
+            "UPDATE users SET password_hash = %s, password_changed = 1, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+            (password_hash, user_id)
+        )
+        # Invalidate any outstanding reset tokens so a previously-issued link cannot be replayed
+        cursor.execute("UPDATE reset_tokens SET used = 1 WHERE user_id = %s AND used = 0", (user_id,))
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
 
 # Session functions
 def create_session(user_id: int) -> tuple[str, datetime]:
     """Create a new session token (30-day expiry)."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    session_token = secrets.token_urlsafe(32)
-    token_hash = _hash_session_token(session_token)
-    expires_at = datetime.utcnow() + timedelta(days=30)
+        session_token = secrets.token_urlsafe(32)
+        token_hash = _hash_session_token(session_token)
+        expires_at = datetime.utcnow() + timedelta(days=30)
 
-    cursor.execute(
-        "INSERT INTO sessions (user_id, session_token, expires_at) VALUES (%s, %s, %s)",
-        (user_id, token_hash, expires_at)   # store hash, never the raw token
-    )
+        cursor.execute(
+            "INSERT INTO sessions (user_id, session_token, expires_at) VALUES (%s, %s, %s)",
+            (user_id, token_hash, expires_at)   # store hash, never the raw token
+        )
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
-    return session_token, expires_at
+        return session_token, expires_at
 
 
 def get_user_by_session(session_token: str) -> dict:
     """Get user by session token (includes onboarding_complete)."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    token_hash = _hash_session_token(session_token)
-    cursor.execute("""
-        SELECT u.*, COALESCE(p.onboarding_complete, 0) AS onboarding_complete
-        FROM users u
-        JOIN sessions s ON u.id = s.user_id
-        LEFT JOIN user_preferences p ON u.id = p.user_id
-        WHERE s.session_token = %s AND s.expires_at > CURRENT_TIMESTAMP
-    """, (token_hash,))
+        token_hash = _hash_session_token(session_token)
+        cursor.execute("""
+            SELECT u.*, COALESCE(p.onboarding_complete, 0) AS onboarding_complete
+            FROM users u
+            JOIN sessions s ON u.id = s.user_id
+            LEFT JOIN user_preferences p ON u.id = p.user_id
+            WHERE s.session_token = %s AND s.expires_at > CURRENT_TIMESTAMP
+        """, (token_hash,))
 
-    row = cursor.fetchone()
-    conn.close()
+        row = cursor.fetchone()
 
-    return dict(row) if row else None
+        return dict(row) if row else None
 
 
 def delete_session(session_token: str):
     """Delete a session (logout)."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    token_hash = _hash_session_token(session_token)
-    cursor.execute("DELETE FROM sessions WHERE session_token = %s", (token_hash,))
+        token_hash = _hash_session_token(session_token)
+        cursor.execute("DELETE FROM sessions WHERE session_token = %s", (token_hash,))
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
 
 def cleanup_expired_sessions():
     """Remove expired sessions."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP")
+        cursor.execute("DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP")
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
 
 # Invite token functions
 def create_invite_token(email: str, invited_by: int, group_id: int) -> tuple[str, datetime]:
     """Create an invite token (7-day expiry)."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    token = secrets.token_urlsafe(32)
-    expires_at = datetime.utcnow() + timedelta(days=7)
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.utcnow() + timedelta(days=7)
 
-    cursor.execute(
-        """INSERT INTO invite_tokens (email, invited_by, group_id, token, expires_at)
-           VALUES (%s, %s, %s, %s, %s)""",
-        (email.lower(), invited_by, group_id, token, expires_at)
-    )
+        cursor.execute(
+            """INSERT INTO invite_tokens (email, invited_by, group_id, token, expires_at)
+               VALUES (%s, %s, %s, %s, %s)""",
+            (email.lower(), invited_by, group_id, token, expires_at)
+        )
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
-    return token, expires_at
+        return token, expires_at
 
 
 def get_invite_by_token(token: str) -> dict:
     """Get invite by token."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT * FROM invite_tokens
-        WHERE token = %s AND expires_at > CURRENT_TIMESTAMP AND accepted = 0
-    """, (token,))
+        cursor.execute("""
+            SELECT * FROM invite_tokens
+            WHERE token = %s AND expires_at > CURRENT_TIMESTAMP AND accepted = 0
+        """, (token,))
 
-    row = cursor.fetchone()
-    conn.close()
+        row = cursor.fetchone()
 
-    return dict(row) if row else None
+        return dict(row) if row else None
 
 
 def mark_invite_accepted(token: str):
     """Mark invite as accepted."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("UPDATE invite_tokens SET accepted = 1 WHERE token = %s", (token,))
+        cursor.execute("UPDATE invite_tokens SET accepted = 1 WHERE token = %s", (token,))
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
 
 def get_pending_invites_for_group(group_id: int) -> list:
     """Get pending (unaccepted, non-expired) email invites for a group."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT email, invited_by, created_at, expires_at
-        FROM invite_tokens
-        WHERE group_id = %s AND accepted = 0 AND expires_at > CURRENT_TIMESTAMP
-        ORDER BY created_at DESC
-    """, (group_id,))
+        cursor.execute("""
+            SELECT email, invited_by, created_at, expires_at
+            FROM invite_tokens
+            WHERE group_id = %s AND accepted = 0 AND expires_at > CURRENT_TIMESTAMP
+            ORDER BY created_at DESC
+        """, (group_id,))
 
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
 
 
 # Email verification functions
 def create_verification_token(user_id: int) -> tuple[str, datetime]:
     """Create email verification token (24-hour expiry)."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    token = secrets.token_urlsafe(32)
-    expires_at = datetime.utcnow() + timedelta(hours=24)
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.utcnow() + timedelta(hours=24)
 
-    cursor.execute(
-        "INSERT INTO verification_tokens (user_id, token, expires_at) VALUES (%s, %s, %s)",
-        (user_id, token, expires_at)
-    )
+        cursor.execute(
+            "INSERT INTO verification_tokens (user_id, token, expires_at) VALUES (%s, %s, %s)",
+            (user_id, token, expires_at)
+        )
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
-    return token, expires_at
+        return token, expires_at
 
 
 def verify_email_token(token: str) -> int:
     """Verify email token and return user_id."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT user_id FROM verification_tokens
-        WHERE token = %s AND expires_at > CURRENT_TIMESTAMP AND used = 0
-    """, (token,))
+        cursor.execute("""
+            SELECT user_id FROM verification_tokens
+            WHERE token = %s AND expires_at > CURRENT_TIMESTAMP AND used = 0
+        """, (token,))
 
-    row = cursor.fetchone()
+        row = cursor.fetchone()
 
-    if row:
-        user_id = row['user_id']
-        cursor.execute("UPDATE verification_tokens SET used = 1 WHERE token = %s", (token,))
-        conn.commit()
-        conn.close()
-        return user_id
+        if row:
+            user_id = row['user_id']
+            cursor.execute("UPDATE verification_tokens SET used = 1 WHERE token = %s", (token,))
+            conn.commit()
+            return user_id
 
-    conn.close()
-    return None
+        return None
 
 
 # Password reset functions
 def create_reset_token(user_id: int) -> tuple[str, datetime]:
     """Create password reset token (1-hour expiry)."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    token = secrets.token_urlsafe(32)
-    expires_at = datetime.utcnow() + timedelta(hours=1)
+        token = secrets.token_urlsafe(32)
+        expires_at = datetime.utcnow() + timedelta(hours=1)
 
-    cursor.execute(
-        "INSERT INTO reset_tokens (user_id, token, expires_at) VALUES (%s, %s, %s)",
-        (user_id, token, expires_at)
-    )
+        cursor.execute(
+            "INSERT INTO reset_tokens (user_id, token, expires_at) VALUES (%s, %s, %s)",
+            (user_id, token, expires_at)
+        )
 
-    conn.commit()
-    conn.close()
+        conn.commit()
 
-    return token, expires_at
+        return token, expires_at
 
 
 def verify_reset_token(token: str) -> int:
     """Verify reset token and return user_id."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT user_id FROM reset_tokens
-        WHERE token = %s AND expires_at > CURRENT_TIMESTAMP AND used = 0
-    """, (token,))
+        cursor.execute("""
+            SELECT user_id FROM reset_tokens
+            WHERE token = %s AND expires_at > CURRENT_TIMESTAMP AND used = 0
+        """, (token,))
 
-    row = cursor.fetchone()
+        row = cursor.fetchone()
 
-    if row:
-        user_id = row['user_id']
-        cursor.execute("UPDATE reset_tokens SET used = 1 WHERE token = %s", (token,))
-        conn.commit()
-        conn.close()
-        return user_id
+        if row:
+            user_id = row['user_id']
+            cursor.execute("UPDATE reset_tokens SET used = 1 WHERE token = %s", (token,))
+            conn.commit()
+            return user_id
 
-    conn.close()
-    return None
+        return None
 
 
 # Profile update
 def update_user_profile(user_id: int, full_name: str = None, username: str = None,
                          email: str = None, avatar_url: str = None) -> bool:
     """Update user profile fields."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    updates = []
-    params = []
+        updates = []
+        params = []
 
-    if full_name is not None:
-        updates.append("full_name = %s")
-        params.append(full_name)
-    if username is not None:
-        updates.append("username = %s")
-        params.append(username.lower())
-    if email is not None:
-        updates.append("email = %s")
-        params.append(email.lower())
-    if avatar_url is not None:
-        updates.append("avatar_url = %s")
-        params.append(avatar_url)
+        if full_name is not None:
+            updates.append("full_name = %s")
+            params.append(full_name)
+        if username is not None:
+            updates.append("username = %s")
+            params.append(username.lower())
+        if email is not None:
+            updates.append("email = %s")
+            params.append(email.lower())
+        if avatar_url is not None:
+            updates.append("avatar_url = %s")
+            params.append(avatar_url)
 
-    if not updates:
-        conn.close()
-        return True
+        if not updates:
+            return True
 
-    updates.append("updated_at = CURRENT_TIMESTAMP")
-    params.append(user_id)
+        updates.append("updated_at = CURRENT_TIMESTAMP")
+        params.append(user_id)
 
-    try:
-        cursor.execute(
-            f"UPDATE users SET {', '.join(updates)} WHERE id = %s",
-            params
-        )
-        success = cursor.rowcount > 0
-        conn.commit()
-        return success
-    except psycopg2.IntegrityError:
-        conn.rollback()
-        raise ValueError("Username or email already taken")
-    finally:
-        conn.close()
+        try:
+            cursor.execute(
+                f"UPDATE users SET {', '.join(updates)} WHERE id = %s",
+                params
+            )
+            success = cursor.rowcount > 0
+            conn.commit()
+            return success
+        except psycopg2.IntegrityError:
+            conn.rollback()
+            raise ValueError("Username or email already taken")
 
 
 # Session management
 def get_sessions_for_user(user_id: int) -> list:
     """Get all active sessions for a user."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute("""
-        SELECT session_token, created_at, expires_at, last_used_at, ip_address, user_agent
-        FROM sessions
-        WHERE user_id = %s AND expires_at > CURRENT_TIMESTAMP
-        ORDER BY created_at DESC
-    """, (user_id,))
+        cursor.execute("""
+            SELECT session_token, created_at, expires_at, last_used_at, ip_address, user_agent
+            FROM sessions
+            WHERE user_id = %s AND expires_at > CURRENT_TIMESTAMP
+            ORDER BY created_at DESC
+        """, (user_id,))
 
-    rows = cursor.fetchall()
-    conn.close()
+        rows = cursor.fetchall()
 
-    return [dict(row) for row in rows]
+        return [dict(row) for row in rows]
 
 
 def delete_sessions_except(user_id: int, keep_token: str) -> int:
     """Delete all sessions for a user except the specified one (used on password change)."""
-    conn = get_db()
-    cursor = conn.cursor()
-    keep_hash = _hash_session_token(keep_token)
-    cursor.execute(
-        "DELETE FROM sessions WHERE user_id = %s AND session_token != %s",
-        (user_id, keep_hash)
-    )
-    deleted = cursor.rowcount
-    conn.commit()
-    conn.close()
-    return deleted
+    with get_db() as conn:
+        cursor = conn.cursor()
+        keep_hash = _hash_session_token(keep_token)
+        cursor.execute(
+            "DELETE FROM sessions WHERE user_id = %s AND session_token != %s",
+            (user_id, keep_hash)
+        )
+        deleted = cursor.rowcount
+        conn.commit()
+        return deleted
 
 
 def delete_session_by_token_for_user(token: str, user_id: int) -> bool:
     """Delete a session owned by the given user."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        "DELETE FROM sessions WHERE session_token = %s AND user_id = %s",
-        (_hash_session_token(token), user_id)
-    )
+        cursor.execute(
+            "DELETE FROM sessions WHERE session_token = %s AND user_id = %s",
+            (_hash_session_token(token), user_id)
+        )
 
-    success = cursor.rowcount > 0
-    conn.commit()
-    conn.close()
+        success = cursor.rowcount > 0
+        conn.commit()
 
-    return success
+        return success
 
 
 # ── Invite abuse detection (SEC-M8) ──────────────────────────────────────────
@@ -829,30 +797,28 @@ def delete_session_by_token_for_user(token: str, user_id: int) -> bool:
 def log_invite_send(sender_user_id: int, to_email: str) -> None:
     """Record an outgoing invite in the send log for domain rate-limit tracking."""
     domain = to_email.split("@")[-1].lower() if "@" in to_email else to_email
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT INTO invite_send_log (sender_user_id, to_email, to_domain) VALUES (%s, %s, %s)",
-        (sender_user_id, to_email.lower(), domain)
-    )
-    conn.commit()
-    conn.close()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO invite_send_log (sender_user_id, to_email, to_domain) VALUES (%s, %s, %s)",
+            (sender_user_id, to_email.lower(), domain)
+        )
+        conn.commit()
 
 
 def count_recent_domain_invites(sender_user_id: int, to_email: str, hours: int = 1) -> int:
     """Return the number of invites this sender has sent to the same domain in the past hour."""
     domain = to_email.split("@")[-1].lower() if "@" in to_email else to_email
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        """SELECT COUNT(*) FROM invite_send_log
-           WHERE sender_user_id = %s AND to_domain = %s
-             AND sent_at > NOW() - INTERVAL '1 hour'""",
-        (sender_user_id, domain)
-    )
-    count = cursor.fetchone()[0]
-    conn.close()
-    return count
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT COUNT(*) FROM invite_send_log
+               WHERE sender_user_id = %s AND to_domain = %s
+                 AND sent_at > NOW() - INTERVAL '1 hour'""",
+            (sender_user_id, domain)
+        )
+        count = cursor.fetchone()[0]
+        return count
 
 
 # Admin user management
@@ -860,98 +826,92 @@ def log_admin_action(admin_id: int, admin_username: str, action: str,
                      target_user_id=None, target_email=None, detail=None):
     """Append an entry to the admin audit log."""
     import json as _json
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        """INSERT INTO admin_audit_log
-           (admin_id, admin_username, action, target_user_id, target_email, detail)
-           VALUES (%s, %s, %s, %s, %s, %s)""",
-        (admin_id, admin_username, action, target_user_id, target_email,
-         _json.dumps(detail or {}))
-    )
-    conn.commit()
-    conn.close()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO admin_audit_log
+               (admin_id, admin_username, action, target_user_id, target_email, detail)
+               VALUES (%s, %s, %s, %s, %s, %s)""",
+            (admin_id, admin_username, action, target_user_id, target_email,
+             _json.dumps(detail or {}))
+        )
+        conn.commit()
 
 
 def get_admin_emails() -> list:
     """Return email addresses of all admin users, oldest first.
     Used as fallback alert recipients when ADMIN_EMAIL env var is not set."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT email FROM users WHERE is_admin = 1 AND is_active = 1 ORDER BY created_at ASC"
-    )
-    rows = cursor.fetchall()
-    conn.close()
-    return [row["email"] for row in rows if row["email"]]
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT email FROM users WHERE is_admin = 1 AND is_active = 1 ORDER BY created_at ASC"
+        )
+        rows = cursor.fetchall()
+        return [row["email"] for row in rows if row["email"]]
 
 
 def get_all_users(limit: int = 100, offset: int = 0) -> list:
     """Get all users (admin only)."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    cursor.execute(
-        "SELECT * FROM users ORDER BY created_at DESC LIMIT %s OFFSET %s",
-        (limit, offset)
-    )
+        cursor.execute(
+            "SELECT * FROM users ORDER BY created_at DESC LIMIT %s OFFSET %s",
+            (limit, offset)
+        )
 
-    rows = cursor.fetchall()
-    conn.close()
+        rows = cursor.fetchall()
 
-    return [dict(row) for row in rows]
+        return [dict(row) for row in rows]
 
 
 def admin_update_user(user_id: int, full_name: str = None, is_admin: bool = None,
                        email_verified: bool = None, is_active: bool = None) -> bool:
     """Admin: update any user's fields."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    updates = []
-    params = []
+        updates = []
+        params = []
 
-    if full_name is not None:
-        updates.append("full_name = %s")
-        params.append(full_name)
-    if is_admin is not None:
-        updates.append("is_admin = %s")
-        params.append(int(is_admin))
-    if email_verified is not None:
-        updates.append("email_verified = %s")
-        params.append(int(email_verified))
-    if is_active is not None:
-        updates.append("is_active = %s")
-        params.append(int(is_active))
+        if full_name is not None:
+            updates.append("full_name = %s")
+            params.append(full_name)
+        if is_admin is not None:
+            updates.append("is_admin = %s")
+            params.append(int(is_admin))
+        if email_verified is not None:
+            updates.append("email_verified = %s")
+            params.append(int(email_verified))
+        if is_active is not None:
+            updates.append("is_active = %s")
+            params.append(int(is_active))
 
-    if not updates:
-        conn.close()
-        return True
+        if not updates:
+            return True
 
-    updates.append("updated_at = CURRENT_TIMESTAMP")
-    params.append(user_id)
+        updates.append("updated_at = CURRENT_TIMESTAMP")
+        params.append(user_id)
 
-    cursor.execute(
-        f"UPDATE users SET {', '.join(updates)} WHERE id = %s",
-        params
-    )
+        cursor.execute(
+            f"UPDATE users SET {', '.join(updates)} WHERE id = %s",
+            params
+        )
 
-    success = cursor.rowcount > 0
-    conn.commit()
-    conn.close()
+        success = cursor.rowcount > 0
+        conn.commit()
 
-    return success
+        return success
 
 
 def deactivate_user(user_id: int) -> bool:
     """Admin: hard delete a user account."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
-    success = cursor.rowcount > 0
-    conn.commit()
-    conn.close()
-    return success
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM users WHERE id = %s", (user_id,))
+        success = cursor.rowcount > 0
+        conn.commit()
+        return success
 
 
 # ── Notification preferences ─────────────────────────────────────────────────
@@ -967,45 +927,43 @@ _DEFAULT_PREFS = {
 
 def get_notification_prefs(user_id: int) -> dict:
     """Return notification preferences for a user (defaults if not yet set)."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT * FROM user_notification_prefs WHERE user_id = %s", (user_id,)
-    )
-    row = cursor.fetchone()
-    conn.close()
-    if row:
-        return {
-            "notify_rotation":  bool(row["notify_rotation"]),
-            "notify_events":    bool(row["notify_events"]),
-            "notify_reminders": bool(row["notify_reminders"]),
-            "notify_invites":   bool(row["notify_invites"]),
-            "push_enabled":     bool(row["push_enabled"]) if row.get("push_enabled") is not None else True,
-        }
-    return dict(_DEFAULT_PREFS)
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM user_notification_prefs WHERE user_id = %s", (user_id,)
+        )
+        row = cursor.fetchone()
+        if row:
+            return {
+                "notify_rotation":  bool(row["notify_rotation"]),
+                "notify_events":    bool(row["notify_events"]),
+                "notify_reminders": bool(row["notify_reminders"]),
+                "notify_invites":   bool(row["notify_invites"]),
+                "push_enabled":     bool(row["push_enabled"]) if row.get("push_enabled") is not None else True,
+            }
+        return dict(_DEFAULT_PREFS)
 
 
 def set_notification_prefs(user_id: int, notify_rotation: bool = True,
                             notify_events: bool = True, notify_reminders: bool = True,
                             notify_invites: bool = True, push_enabled: bool = True) -> None:
     """Upsert notification preferences for a user."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO user_notification_prefs
-            (user_id, notify_rotation, notify_events, notify_reminders, notify_invites, push_enabled, updated_at)
-        VALUES (%s, %s, %s, %s, %s, %s, NOW())
-        ON CONFLICT (user_id) DO UPDATE SET
-            notify_rotation  = EXCLUDED.notify_rotation,
-            notify_events    = EXCLUDED.notify_events,
-            notify_reminders = EXCLUDED.notify_reminders,
-            notify_invites   = EXCLUDED.notify_invites,
-            push_enabled     = EXCLUDED.push_enabled,
-            updated_at       = NOW()
-    """, (user_id, int(notify_rotation), int(notify_events),
-          int(notify_reminders), int(notify_invites), int(push_enabled)))
-    conn.commit()
-    conn.close()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO user_notification_prefs
+                (user_id, notify_rotation, notify_events, notify_reminders, notify_invites, push_enabled, updated_at)
+            VALUES (%s, %s, %s, %s, %s, %s, NOW())
+            ON CONFLICT (user_id) DO UPDATE SET
+                notify_rotation  = EXCLUDED.notify_rotation,
+                notify_events    = EXCLUDED.notify_events,
+                notify_reminders = EXCLUDED.notify_reminders,
+                notify_invites   = EXCLUDED.notify_invites,
+                push_enabled     = EXCLUDED.push_enabled,
+                updated_at       = NOW()
+        """, (user_id, int(notify_rotation), int(notify_events),
+              int(notify_reminders), int(notify_invites), int(push_enabled)))
+        conn.commit()
 
 
 # ── Discover preferences ──────────────────────────────────────────────────────
@@ -1029,28 +987,27 @@ _DEFAULT_DISCOVER_PREFS = {
 def get_user_preferences(user_id: int) -> dict:
     """Return discover preferences for a user (defaults if not yet set)."""
     import json
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM user_preferences WHERE user_id = %s", (user_id,))
-    row = cursor.fetchone()
-    conn.close()
-    if row:
-        return {
-            "user_id": row["user_id"],
-            "location_address": row["location_address"],
-            "location_lat": row["location_lat"],
-            "location_lng": row["location_lng"],
-            "radius_dining": row["radius_dining"],
-            "radius_hiking": row["radius_hiking"],
-            "radius_arts": row["radius_arts"],
-            "activities": json.loads(row["activities"] or '["dining","movies","books","hiking","gaming","arts"]'),
-            "book_genres": json.loads(row["book_genres"] or '[]'),
-            "movie_genres": json.loads(row["movie_genres"] or '[]'),
-            "game_types": json.loads(row["game_types"] or '["video_game","board_game"]'),
-            "onboarding_complete": bool(row["onboarding_complete"]),
-            "last_loaded_at": row["last_loaded_at"],
-        }
-    return {"user_id": user_id, **_DEFAULT_DISCOVER_PREFS}
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM user_preferences WHERE user_id = %s", (user_id,))
+        row = cursor.fetchone()
+        if row:
+            return {
+                "user_id": row["user_id"],
+                "location_address": row["location_address"],
+                "location_lat": row["location_lat"],
+                "location_lng": row["location_lng"],
+                "radius_dining": row["radius_dining"],
+                "radius_hiking": row["radius_hiking"],
+                "radius_arts": row["radius_arts"],
+                "activities": json.loads(row["activities"] or '["dining","movies","books","hiking","gaming","arts"]'),
+                "book_genres": json.loads(row["book_genres"] or '[]'),
+                "movie_genres": json.loads(row["movie_genres"] or '[]'),
+                "game_types": json.loads(row["game_types"] or '["video_game","board_game"]'),
+                "onboarding_complete": bool(row["onboarding_complete"]),
+                "last_loaded_at": row["last_loaded_at"],
+            }
+        return {"user_id": user_id, **_DEFAULT_DISCOVER_PREFS}
 
 
 def upsert_user_preferences(user_id: int, **fields) -> dict:
@@ -1059,64 +1016,60 @@ def upsert_user_preferences(user_id: int, **fields) -> dict:
     if not fields:
         return get_user_preferences(user_id)
 
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    # Serialize list fields
-    for list_field in ("activities", "book_genres", "movie_genres", "game_types"):
-        if list_field in fields and isinstance(fields[list_field], list):
-            fields[list_field] = json.dumps(fields[list_field])
+        # Serialize list fields
+        for list_field in ("activities", "book_genres", "movie_genres", "game_types"):
+            if list_field in fields and isinstance(fields[list_field], list):
+                fields[list_field] = json.dumps(fields[list_field])
 
-    set_clauses = [f"{k} = %s" for k in fields]
-    set_clauses.append("updated_at = CURRENT_TIMESTAMP")
-    values = list(fields.values())
+        set_clauses = [f"{k} = %s" for k in fields]
+        set_clauses.append("updated_at = CURRENT_TIMESTAMP")
+        values = list(fields.values())
 
-    cursor.execute(f"""
-        INSERT INTO user_preferences (user_id, {', '.join(fields.keys())}, updated_at)
-        VALUES (%s, {', '.join(['%s'] * len(fields))}, CURRENT_TIMESTAMP)
-        ON CONFLICT (user_id) DO UPDATE SET
-            {', '.join(set_clauses)}
-    """, [user_id] + values + values)
+        cursor.execute(f"""
+            INSERT INTO user_preferences (user_id, {', '.join(fields.keys())}, updated_at)
+            VALUES (%s, {', '.join(['%s'] * len(fields))}, CURRENT_TIMESTAMP)
+            ON CONFLICT (user_id) DO UPDATE SET
+                {', '.join(set_clauses)}
+        """, [user_id] + values + values)
 
-    conn.commit()
-    conn.close()
-    return get_user_preferences(user_id)
+        conn.commit()
+        return get_user_preferences(user_id)
 
 
 # ── Push tokens ───────────────────────────────────────────────────────────────
 
 def upsert_push_token(user_id: int, token: str, platform: str = "unknown") -> None:
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO user_push_tokens (user_id, token, platform, updated_at)
-        VALUES (%s, %s, %s, NOW())
-        ON CONFLICT (user_id, token) DO UPDATE SET platform = EXCLUDED.platform, updated_at = NOW()
-    """, (user_id, token, platform))
-    conn.commit()
-    conn.close()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO user_push_tokens (user_id, token, platform, updated_at)
+            VALUES (%s, %s, %s, NOW())
+            ON CONFLICT (user_id, token) DO UPDATE SET platform = EXCLUDED.platform, updated_at = NOW()
+        """, (user_id, token, platform))
+        conn.commit()
 
 
 def get_push_tokens_for_users(user_ids: list) -> list:
     """Return all Expo push tokens for a list of user IDs."""
     if not user_ids:
         return []
-    conn = get_db()
-    cursor = conn.cursor()
-    placeholders = ','.join(['%s'] * len(user_ids))
-    cursor.execute(f"SELECT token FROM user_push_tokens WHERE user_id IN ({placeholders})", user_ids)
-    rows = cursor.fetchall()
-    conn.close()
-    return [r["token"] for r in rows]
+    with get_db() as conn:
+        cursor = conn.cursor()
+        placeholders = ','.join(['%s'] * len(user_ids))
+        cursor.execute(f"SELECT token FROM user_push_tokens WHERE user_id IN ({placeholders})", user_ids)
+        rows = cursor.fetchall()
+        return [r["token"] for r in rows]
 
 
 def delete_push_token(token: str) -> None:
     """Remove a stale or invalid Expo push token from the database."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("DELETE FROM user_push_tokens WHERE token = %s", (token,))
-    conn.commit()
-    conn.close()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM user_push_tokens WHERE token = %s", (token,))
+        conn.commit()
 
 
 def get_inactive_users(days_min: int, days_max: int) -> list:
@@ -1124,64 +1077,59 @@ def get_inactive_users(days_min: int, days_max: int) -> list:
 
     Used by the re-engagement scheduler to find users who haven't checked in recently.
     """
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT id, username, email, full_name, last_login_at
-        FROM users
-        WHERE is_active = 1
-          AND last_login_at IS NOT NULL
-          AND last_login_at < NOW() - INTERVAL '%s days'
-          AND last_login_at >= NOW() - INTERVAL '%s days'
-    """, (days_min, days_max))
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, username, email, full_name, last_login_at
+            FROM users
+            WHERE is_active = 1
+              AND last_login_at IS NOT NULL
+              AND last_login_at < NOW() - INTERVAL '%s days'
+              AND last_login_at >= NOW() - INTERVAL '%s days'
+        """, (days_min, days_max))
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
 
 
 # ── In-app notifications ──────────────────────────────────────────────────────
 
 def create_notification(user_id: int, type: str, title: str, body: str = None,
                         link_type: str = None, link_id: int = None) -> int:
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO user_notifications (user_id, type, title, body, link_type, link_id)
-        VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
-    """, (user_id, type, title, body, link_type, link_id))
-    notif_id = cursor.fetchone()["id"]
-    conn.commit()
-    conn.close()
-    return notif_id
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO user_notifications (user_id, type, title, body, link_type, link_id)
+            VALUES (%s, %s, %s, %s, %s, %s) RETURNING id
+        """, (user_id, type, title, body, link_type, link_id))
+        notif_id = cursor.fetchone()["id"]
+        conn.commit()
+        return notif_id
 
 
 def get_notifications_for_user(user_id: int, limit: int = 50) -> list:
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT * FROM user_notifications WHERE user_id = %s
-        ORDER BY created_at DESC LIMIT %s
-    """, (user_id, limit))
-    rows = cursor.fetchall()
-    conn.close()
-    return [dict(r) for r in rows]
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT * FROM user_notifications WHERE user_id = %s
+            ORDER BY created_at DESC LIMIT %s
+        """, (user_id, limit))
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
 
 
 def mark_notification_read(notif_id: int, user_id: int) -> None:
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE user_notifications SET read = 1 WHERE id = %s AND user_id = %s",
-                   (notif_id, user_id))
-    conn.commit()
-    conn.close()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE user_notifications SET read = 1 WHERE id = %s AND user_id = %s",
+                       (notif_id, user_id))
+        conn.commit()
 
 
 def mark_all_notifications_read(user_id: int) -> None:
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE user_notifications SET read = 1 WHERE user_id = %s", (user_id,))
-    conn.commit()
-    conn.close()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE user_notifications SET read = 1 WHERE user_id = %s", (user_id,))
+        conn.commit()
 
 
 # ── OIDC helpers ──────────────────────────────────────────────────────────────
@@ -1191,30 +1139,27 @@ import re as _re
 
 def get_user_by_oidc_sub(oidc_sub: str):
     """Get user by OIDC subject identifier (e.g. 'google:1234567890')."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE oidc_sub = %s", (oidc_sub,))
-    row = cursor.fetchone()
-    conn.close()
-    return dict(row) if row else None
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM users WHERE oidc_sub = %s", (oidc_sub,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
 
 
 def link_oidc_sub(user_id: int, oidc_sub: str) -> None:
     """Associate an OIDC subject identifier with an existing user."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE users SET oidc_sub = %s WHERE id = %s", (oidc_sub, user_id))
-    conn.commit()
-    conn.close()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET oidc_sub = %s WHERE id = %s", (oidc_sub, user_id))
+        conn.commit()
 
 
 def unlink_oidc_sub(user_id: int) -> None:
     """Remove the OIDC subject identifier from a user."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("UPDATE users SET oidc_sub = NULL WHERE id = %s", (user_id,))
-    conn.commit()
-    conn.close()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE users SET oidc_sub = NULL WHERE id = %s", (user_id,))
+        conn.commit()
 
 
 def _unique_username(base: str, cursor) -> str:
@@ -1235,118 +1180,110 @@ def create_pending_link(oidc_sub: str, email: str, full_name: str = None, avatar
     """Store a short-lived token for a pending OIDC link confirmation (5-min TTL)."""
     import secrets
     token = secrets.token_urlsafe(32)
-    conn = get_db()
-    cursor = conn.cursor()
-    # Clean up expired tokens first
-    cursor.execute("DELETE FROM oidc_pending_links WHERE expires_at < NOW()")
-    cursor.execute("""
-        INSERT INTO oidc_pending_links (token, oidc_sub, email, full_name, avatar_url, expires_at)
-        VALUES (%s, %s, %s, %s, %s, NOW() + INTERVAL '5 minutes')
-        ON CONFLICT (token) DO NOTHING
-    """, (token, oidc_sub, email, full_name, avatar_url))
-    conn.commit()
-    conn.close()
-    return token
+    with get_db() as conn:
+        cursor = conn.cursor()
+        # Clean up expired tokens first
+        cursor.execute("DELETE FROM oidc_pending_links WHERE expires_at < NOW()")
+        cursor.execute("""
+            INSERT INTO oidc_pending_links (token, oidc_sub, email, full_name, avatar_url, expires_at)
+            VALUES (%s, %s, %s, %s, %s, NOW() + INTERVAL '5 minutes')
+            ON CONFLICT (token) DO NOTHING
+        """, (token, oidc_sub, email, full_name, avatar_url))
+        conn.commit()
+        return token
 
 
 def consume_pending_link(token: str) -> dict:
     """Return and delete the pending link record if it exists and hasn't expired."""
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute("""
-        DELETE FROM oidc_pending_links
-        WHERE token = %s AND expires_at > NOW()
-        RETURNING oidc_sub, email, full_name, avatar_url
-    """, (token,))
-    row = cursor.fetchone()
-    conn.commit()
-    conn.close()
-    return dict(row) if row else None
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            DELETE FROM oidc_pending_links
+            WHERE token = %s AND expires_at > NOW()
+            RETURNING oidc_sub, email, full_name, avatar_url
+        """, (token,))
+        row = cursor.fetchone()
+        conn.commit()
+        return dict(row) if row else None
 
 
 def create_oidc_user(email: str, full_name: str, oidc_sub: str, avatar_url: str = None) -> int:
     """Create a user that signed up via OIDC. No password needed."""
-    conn = get_db()
-    cursor = conn.cursor()
-    # Derive username from email prefix
-    base = email.split('@')[0]
-    username = _unique_username(base, cursor)
-    try:
-        cursor.execute(
-            """INSERT INTO users
-               (username, email, password_hash, full_name, email_verified,
-                password_changed, oidc_sub, avatar_url)
-               VALUES (%s, %s, %s, %s, 1, 1, %s, %s)
-               RETURNING id""",
-            (username, email.lower(), '', full_name, oidc_sub, avatar_url)
-        )
-        user_id = cursor.fetchone()['id']
-        conn.commit()
-        return user_id
-    except psycopg2.IntegrityError as e:
-        conn.rollback()
-        raise ValueError(f"OIDC user creation failed: {e}")
-    finally:
-        conn.close()
+    with get_db() as conn:
+        cursor = conn.cursor()
+        # Derive username from email prefix
+        base = email.split('@')[0]
+        username = _unique_username(base, cursor)
+        try:
+            cursor.execute(
+                """INSERT INTO users
+                   (username, email, password_hash, full_name, email_verified,
+                    password_changed, oidc_sub, avatar_url)
+                   VALUES (%s, %s, %s, %s, 1, 1, %s, %s)
+                   RETURNING id""",
+                (username, email.lower(), '', full_name, oidc_sub, avatar_url)
+            )
+            user_id = cursor.fetchone()['id']
+            conn.commit()
+            return user_id
+        except psycopg2.IntegrityError as e:
+            conn.rollback()
+            raise ValueError(f"OIDC user creation failed: {e}")
 
 
 # ── Saved items (wishlist) ────────────────────────────────────────────────────
 
 def get_saved_items(user_id: int, item_type: str = None) -> list:
-    conn = get_db()
-    cursor = conn.cursor()
-    if item_type:
-        cursor.execute(
-            "SELECT * FROM saved_items WHERE user_id = %s AND item_type = %s ORDER BY created_at DESC",
-            (user_id, item_type)
-        )
-    else:
-        cursor.execute(
-            "SELECT * FROM saved_items WHERE user_id = %s ORDER BY created_at DESC",
-            (user_id,)
-        )
-    rows = [dict(r) for r in cursor.fetchall()]
-    conn.close()
-    return rows
+    with get_db() as conn:
+        cursor = conn.cursor()
+        if item_type:
+            cursor.execute(
+                "SELECT * FROM saved_items WHERE user_id = %s AND item_type = %s ORDER BY created_at DESC",
+                (user_id, item_type)
+            )
+        else:
+            cursor.execute(
+                "SELECT * FROM saved_items WHERE user_id = %s ORDER BY created_at DESC",
+                (user_id,)
+            )
+        rows = [dict(r) for r in cursor.fetchall()]
+        return rows
 
 
 def get_saved_item(user_id: int, item_type: str, item_id: str) -> dict | None:
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT * FROM saved_items WHERE user_id = %s AND item_type = %s AND item_id = %s",
-        (user_id, item_type, item_id)
-    )
-    row = cursor.fetchone()
-    conn.close()
-    return dict(row) if row else None
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT * FROM saved_items WHERE user_id = %s AND item_type = %s AND item_id = %s",
+            (user_id, item_type, item_id)
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
 
 
 def save_item(user_id: int, item_type: str, item_id: str, item_name: str, item_meta: dict = None) -> dict:
     import json
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        """INSERT INTO saved_items (user_id, item_type, item_id, item_name, item_meta)
-           VALUES (%s, %s, %s, %s, %s)
-           ON CONFLICT (user_id, item_type, item_id) DO UPDATE SET item_name = EXCLUDED.item_name, item_meta = EXCLUDED.item_meta
-           RETURNING *""",
-        (user_id, item_type, item_id, item_name, json.dumps(item_meta or {}))
-    )
-    row = dict(cursor.fetchone())
-    conn.commit()
-    conn.close()
-    return row
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO saved_items (user_id, item_type, item_id, item_name, item_meta)
+               VALUES (%s, %s, %s, %s, %s)
+               ON CONFLICT (user_id, item_type, item_id) DO UPDATE SET item_name = EXCLUDED.item_name, item_meta = EXCLUDED.item_meta
+               RETURNING *""",
+            (user_id, item_type, item_id, item_name, json.dumps(item_meta or {}))
+        )
+        row = dict(cursor.fetchone())
+        conn.commit()
+        return row
 
 
 def delete_saved_item(user_id: int, item_type: str, item_id: str) -> bool:
-    conn = get_db()
-    cursor = conn.cursor()
-    cursor.execute(
-        "DELETE FROM saved_items WHERE user_id = %s AND item_type = %s AND item_id = %s",
-        (user_id, item_type, item_id)
-    )
-    deleted = cursor.rowcount > 0
-    conn.commit()
-    conn.close()
-    return deleted
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM saved_items WHERE user_id = %s AND item_type = %s AND item_id = %s",
+            (user_id, item_type, item_id)
+        )
+        deleted = cursor.rowcount > 0
+        conn.commit()
+        return deleted

@@ -143,56 +143,47 @@ def _serialize_activity(row: dict) -> dict:
 def create_activity(name: str, description: str = None, category: str = None,
                    icon: str = None, metadata: Dict[str, Any] = None) -> int:
     """Create a new activity."""
-    conn = get_db()
-    cursor = conn.cursor()
+    with get_db() as conn:
+        cursor = conn.cursor()
 
-    metadata_json = json.dumps(metadata) if metadata else None
+        metadata_json = json.dumps(metadata) if metadata else None
 
-    try:
-        cursor.execute(
-            """INSERT INTO activities (name, description, category, icon, metadata)
-               VALUES (%s, %s, %s, %s, %s) RETURNING id""",
-            (name, description, category, icon, metadata_json)
-        )
+        try:
+            cursor.execute(
+                """INSERT INTO activities (name, description, category, icon, metadata)
+                   VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+                (name, description, category, icon, metadata_json)
+            )
 
-        activity_id = cursor.fetchone()['id']
-        conn.commit()
-        conn.close()
-        return activity_id
-    except psycopg2.IntegrityError as e:
-        conn.rollback()
-        conn.close()
-        raise ValueError(f"Activity already exists: {str(e)}")
+            activity_id = cursor.fetchone()['id']
+            conn.commit()
+            return activity_id
+        except psycopg2.IntegrityError as e:
+            conn.rollback()
+            raise ValueError(f"Activity already exists: {str(e)}")
 
 
 def get_activity(activity_id: int) -> Optional[dict]:
     """Get activity by ID."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM activities WHERE id = %s", (activity_id,))
         row = cursor.fetchone()
         return _serialize_activity(row) if row else None
-    finally:
-        conn.close()
 
 
 def get_activity_by_name(name: str) -> Optional[dict]:
     """Get activity by name."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM activities WHERE name = %s", (name,))
         row = cursor.fetchone()
         return _serialize_activity(row) if row else None
-    finally:
-        conn.close()
 
 
 def get_all_activities(category: str = None, limit: int = 100, offset: int = 0) -> List[dict]:
     """Get all activities, optionally filtered by category."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         if category:
             cursor.execute(
@@ -210,14 +201,11 @@ def get_all_activities(category: str = None, limit: int = 100, offset: int = 0) 
                 (limit, offset)
             )
         return [_serialize_activity(row) for row in cursor.fetchall()]
-    finally:
-        conn.close()
 
 
 def search_activities(query: str, limit: int = 20) -> List[dict]:
     """Search activities by name or description."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         search_term = f"%{query}%"
         cursor.execute(
@@ -228,16 +216,13 @@ def search_activities(query: str, limit: int = 20) -> List[dict]:
             (search_term, search_term, limit)
         )
         return [_serialize_activity(row) for row in cursor.fetchall()]
-    finally:
-        conn.close()
 
 
 def update_activity(activity_id: int, name: str = None, description: str = None,
                    category: str = None, icon: str = None,
                    metadata: Dict[str, Any] = None) -> bool:
     """Update activity details."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
 
         updates = []
@@ -277,43 +262,34 @@ def update_activity(activity_id: int, name: str = None, description: str = None,
         success = cursor.rowcount > 0
         conn.commit()
         return success
-    finally:
-        conn.close()
 
 
 def delete_activity(activity_id: int) -> bool:
     """Delete an activity."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute("DELETE FROM activities WHERE id = %s", (activity_id,))
         success = cursor.rowcount > 0
         conn.commit()
         return success
-    finally:
-        conn.close()
 
 
 def increment_usage_count(activity_id: int):
     """Increment usage count for an activity."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "UPDATE activities SET usage_count = usage_count + 1 WHERE id = %s",
             (activity_id,)
         )
         conn.commit()
-    finally:
-        conn.close()
 
 
 # ===== Category Functions =====
 
 def get_all_categories() -> List[dict]:
     """Get all categories with activity counts."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
             """SELECT category, COUNT(*) as count
@@ -323,14 +299,11 @@ def get_all_categories() -> List[dict]:
                ORDER BY count DESC, category ASC"""
         )
         return [{"category": row['category'], "count": row['count']} for row in cursor.fetchall()]
-    finally:
-        conn.close()
 
 
 def get_popular_activities(limit: int = 10) -> List[dict]:
     """Get most popular activities by usage count."""
-    conn = get_db()
-    try:
+    with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
             """SELECT * FROM activities
@@ -340,5 +313,3 @@ def get_popular_activities(limit: int = 10) -> List[dict]:
             (limit,)
         )
         return [_serialize_activity(row) for row in cursor.fetchall()]
-    finally:
-        conn.close()

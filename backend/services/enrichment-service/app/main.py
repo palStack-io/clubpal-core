@@ -302,9 +302,9 @@ async def location_autocomplete(input: str):
 
 @app.get("/places/{place_id}")
 async def get_place_detail(place_id: str):
-    # Check detail cache
+    # Return cached record only if it has photos (or no API key to fetch them)
     row = get_place(place_id)
-    if row:
+    if row and (row.get("photo_object_keys") or not external.GOOGLE_API_KEY):
         track_call("google_places", True)
         return row
 
@@ -313,7 +313,7 @@ async def get_place_detail(place_id: str):
     if not data:
         raise HTTPException(status_code=404, detail="Place not found")
 
-    # Cache photos in MinIO
+    # Cache photos in object storage
     photo_keys = []
     for i, photo_ref in enumerate(data.get("photo_refs", [])[:5]):
         if not external.GOOGLE_API_KEY:
@@ -324,9 +324,12 @@ async def get_place_detail(place_id: str):
         if cached_url:
             photo_keys.append({"object_key": object_key, "url": cached_url})
 
+    had_photo_refs = bool(data.get("photo_refs"))
     data["photo_object_keys"] = photo_keys
     data.pop("photo_refs", None)
-    upsert_place(place_id, data)
+    # Don't persist if Google had photos but all uploads failed — retry next request
+    if photo_keys or not had_photo_refs:
+        upsert_place(place_id, data)
     return data
 
 

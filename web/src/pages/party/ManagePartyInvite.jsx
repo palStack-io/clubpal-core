@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { eventsClient, groupsClient } from '../../api/client'
+import { eventsClient } from '../../api/client'
+import { groupsApi } from '../../api/groups'
+import { useAuth } from '../../contexts/AuthContext'
 import AppShell from '../../components/shell/AppShell'
 
 export default function ManagePartyInvite() {
   const { token }   = useParams()
   const navigate    = useNavigate()
+  const { user }    = useAuth()
   const [data, setData]           = useState(null)
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState('')
@@ -18,10 +21,10 @@ export default function ManagePartyInvite() {
     try {
       const [inv, grps] = await Promise.all([
         eventsClient.get(`/party-invites/${token}/manage`),
-        groupsClient.get('/groups'),
+        user?.id ? groupsApi.getUserGroups(user.id) : Promise.resolve([]),
       ])
       setData(inv.data)
-      setAllGroups(grps.data)
+      setAllGroups(grps)
     } catch {
       setError('Could not load invite details.')
     } finally {

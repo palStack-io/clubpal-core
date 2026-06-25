@@ -1,34 +1,33 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { groupsClient, eventsClient } from '../../api/client'
+import { eventsClient } from '../../api/client'
+import { groupsApi } from '../../api/groups'
 import { useAuth } from '../../contexts/AuthContext'
 import AppShell from '../../components/shell/AppShell'
 import ThemePicker from '../../components/party/ThemePicker'
 import BringListBuilder from '../../components/party/BringListBuilder'
 
-const STEPS = ['Details', 'Groups', 'Theme', 'Bring List', 'Publish']
+const STEPS = ['Details', 'Theme', 'Bring List', 'Publish']
 
 export default function CreatePartyInvite() {
   const { user }   = useAuth()
   const navigate   = useNavigate()
-  const [step, setStep]                   = useState(0)
-  const [groups, setGroups]               = useState([])
+  const [step, setStep]                     = useState(0)
+  const [groups, setGroups]                 = useState([])
   const [selectedGroups, setSelectedGroups] = useState([])
-  const [form, setForm]                   = useState({
-    title: '', scheduled_date: '', location: '', activity_type: 'other',
-    bring_list_enabled: false, bring_list_type: 'freeform', items: [],
+  const [form, setForm]                     = useState({
+    title: '', scheduled_date: '', location: '', description: '',
+    activity_type: 'other', bring_list_enabled: false, bring_list_type: 'freeform', items: [],
   })
-  const [loading, setLoading]     = useState(false)
-  const [error, setError]         = useState('')
+  const [loading, setLoading]       = useState(false)
+  const [error, setError]           = useState('')
   const [createdToken, setCreatedToken] = useState(null)
 
   useEffect(() => {
-    groupsClient.get('/groups').then(r => setGroups(r.data)).catch(() => {})
-  }, [])
+    if (user?.id) groupsApi.getUserGroups(user.id).then(setGroups).catch(() => {})
+  }, [user?.id])
 
-  function setField(key, val) {
-    setForm(f => ({ ...f, [key]: val }))
-  }
+  function setField(key, val) { setForm(f => ({ ...f, [key]: val })) }
 
   function toggleGroup(id) {
     setSelectedGroups(g => g.includes(id) ? g.filter(x => x !== id) : [...g, id])
@@ -36,7 +35,6 @@ export default function CreatePartyInvite() {
 
   function nextStep() {
     if (step === 0 && !form.title.trim()) { setError('Event title is required'); return }
-    if (step === 1 && selectedGroups.length === 0) { setError('Select at least one club'); return }
     setError('')
     setStep(s => s + 1)
   }
@@ -49,7 +47,8 @@ export default function CreatePartyInvite() {
         title: form.title,
         scheduled_date: form.scheduled_date || null,
         location: form.location || null,
-        group_id: selectedGroups[0],
+        description: form.description || null,
+        group_id: selectedGroups[0] || null,
         activity_type: form.activity_type,
         bill_split_enabled: false,
         created_by: user.id,
@@ -63,7 +62,7 @@ export default function CreatePartyInvite() {
         items: form.items,
       })
       setCreatedToken(inviteRes.data.token)
-      setStep(4)
+      setStep(STEPS.length)
     } catch (err) {
       setError(err?.response?.data?.detail || 'Failed to create invite')
     } finally {
@@ -76,78 +75,113 @@ export default function CreatePartyInvite() {
     border: '1px solid var(--s3)', background: 'var(--s2)',
     color: 'var(--t1)', fontSize: '1rem', width: '100%', boxSizing: 'border-box',
   }
+  const labelStyle = { color: 'var(--t2)', fontSize: '0.8rem', marginBottom: 4, display: 'block' }
+
+  const isDone = step >= STEPS.length
 
   return (
     <AppShell>
-      <div style={{ maxWidth: 560, margin: '0 auto', padding: '24px 16px' }}>
-        {/* Progress bar */}
-        <div style={{ display: 'flex', gap: 4, marginBottom: 24 }}>
-          {STEPS.map((_, i) => (
-            <div key={i} style={{
-              flex: 1, height: 4, borderRadius: 2,
-              background: i <= step ? 'var(--rose)' : 'var(--s3)',
-              transition: 'background 0.2s',
-            }} />
-          ))}
-        </div>
+      <div style={{ maxWidth: 520, margin: '0 auto', padding: '24px 16px' }}>
 
-        <h1 style={{ color: 'var(--t1)', margin: '0 0 4px', fontSize: '1.5rem' }}>Party Invite ✨</h1>
-        <p style={{ color: 'var(--t2)', marginBottom: 24, marginTop: 0 }}>{STEPS[step]}</p>
+        {/* Header */}
+        <div style={{ marginBottom: 24 }}>
+          <h1 style={{ color: 'var(--t1)', margin: '0 0 4px', fontSize: '1.4rem', fontWeight: 700 }}>
+            {isDone ? '🎉 Invite live!' : 'New Party Invite ✨'}
+          </h1>
+          {!isDone && (
+            <div style={{ display: 'flex', gap: 4, marginTop: 12 }}>
+              {STEPS.map((_, i) => (
+                <div key={i} style={{
+                  flex: 1, height: 3, borderRadius: 2,
+                  background: i <= step ? 'var(--rose)' : 'var(--s3)',
+                  transition: 'background 0.2s',
+                }} />
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Step 0: Details */}
         {step === 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <input
-              placeholder="Event title *"
-              value={form.title}
-              onChange={e => setField('title', e.target.value)}
-              style={inputStyle}
-              autoFocus
-            />
-            <input
-              type="datetime-local"
-              value={form.scheduled_date}
-              onChange={e => setField('scheduled_date', e.target.value)}
-              style={inputStyle}
-            />
-            <input
-              placeholder="Location (optional)"
-              value={form.location}
-              onChange={e => setField('location', e.target.value)}
-              style={inputStyle}
-            />
-          </div>
-        )}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <label style={labelStyle}>Event name *</label>
+              <input
+                placeholder="Summer BBQ, Game Night…"
+                value={form.title}
+                onChange={e => setField('title', e.target.value)}
+                style={inputStyle}
+                autoFocus
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Date & time</label>
+              <input
+                type="datetime-local"
+                value={form.scheduled_date}
+                onChange={e => setField('scheduled_date', e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Location</label>
+              <input
+                placeholder="Address or venue name"
+                value={form.location}
+                onChange={e => setField('location', e.target.value)}
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Description</label>
+              <textarea
+                placeholder="What's the vibe? (optional)"
+                value={form.description}
+                onChange={e => setField('description', e.target.value)}
+                rows={3}
+                style={{ ...inputStyle, resize: 'none', fontFamily: 'inherit' }}
+              />
+            </div>
 
-        {/* Step 1: Groups */}
-        {step === 1 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {groups.length === 0 && <p style={{ color: 'var(--t2)' }}>No clubs found. Create a club first.</p>}
-            {groups.map(g => (
-              <div
-                key={g.id}
-                onClick={() => toggleGroup(g.id)}
-                style={{
-                  padding: '14px 16px', borderRadius: 12, cursor: 'pointer',
-                  border: `2px solid ${selectedGroups.includes(g.id) ? 'var(--rose)' : 'var(--s3)'}`,
-                  background: selectedGroups.includes(g.id) ? 'rgba(244,63,94,0.08)' : 'var(--s2)',
-                  color: 'var(--t1)', transition: 'all 0.15s',
-                }}
-              >
-                <span style={{ fontWeight: 600 }}>{g.name}</span>
-                {selectedGroups.includes(g.id) && <span style={{ float: 'right', color: 'var(--rose)' }}>✓</span>}
+            {/* Optional group selector inline */}
+            {groups.length > 0 && (
+              <div>
+                <label style={labelStyle}>Share with clubs (optional)</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {groups.map(g => (
+                    <div
+                      key={g.id}
+                      onClick={() => toggleGroup(g.id)}
+                      style={{
+                        padding: '10px 14px', borderRadius: 10, cursor: 'pointer',
+                        border: `1.5px solid ${selectedGroups.includes(g.id) ? 'var(--rose)' : 'var(--s3)'}`,
+                        background: selectedGroups.includes(g.id) ? 'rgba(244,63,94,0.08)' : 'var(--s2)',
+                        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                        transition: 'all 0.15s',
+                      }}
+                    >
+                      <span style={{ color: 'var(--t1)', fontWeight: 500 }}>{g.name}</span>
+                      {selectedGroups.includes(g.id) && (
+                        <span style={{ color: 'var(--rose)', fontSize: '0.9rem' }}>✓</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <p style={{ color: 'var(--t3)', fontSize: '0.78rem', marginTop: 6 }}>
+                  Club members will be notified and auto-added as pending attendees.
+                </p>
               </div>
-            ))}
+            )}
           </div>
         )}
 
-        {/* Step 2: Theme */}
-        {step === 2 && (
+        {/* Step 1: Theme */}
+        {step === 1 && (
           <ThemePicker value={form.activity_type} onChange={v => setField('activity_type', v)} />
         )}
 
-        {/* Step 3: Bring list */}
-        {step === 3 && (
+        {/* Step 2: Bring list */}
+        {step === 2 && (
           <BringListBuilder
             enabled={form.bring_list_enabled && form.activity_type !== 'dining'}
             onToggle={() => setField('bring_list_enabled', !form.bring_list_enabled)}
@@ -156,65 +190,69 @@ export default function CreatePartyInvite() {
           />
         )}
 
-        {/* Step 4: Published */}
-        {step === 4 && createdToken && (
-          <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '3rem', marginBottom: 16 }}>🎉</div>
-            <p style={{ color: 'var(--t1)', fontWeight: 700, fontSize: '1.2rem', marginBottom: 8 }}>Your invite is live!</p>
-            <div style={{ background: 'var(--s2)', borderRadius: 10, padding: '12px 16px', margin: '16px 0', color: 'var(--t2)', fontSize: '0.88rem', wordBreak: 'break-all', border: '1px solid var(--s3)' }}>
-              {window.location.origin}/p/{createdToken}
+        {/* Done */}
+        {isDone && createdToken && (
+          <div>
+            <div style={{
+              background: 'var(--s2)', borderRadius: 14, padding: '16px 18px',
+              border: '1px solid var(--s3)', marginBottom: 16,
+            }}>
+              <p style={{ color: 'var(--t3)', fontSize: '0.78rem', margin: '0 0 6px' }}>Share link</p>
+              <p style={{ color: 'var(--t1)', fontSize: '0.92rem', margin: 0, wordBreak: 'break-all', fontFamily: 'monospace' }}>
+                {window.location.origin}/p/{createdToken}
+              </p>
             </div>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'center', marginTop: 16, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
               <button
                 onClick={() => navigator.clipboard.writeText(`${window.location.origin}/p/${createdToken}`)}
-                style={{ padding: '10px 20px', borderRadius: 10, border: 'none', background: 'var(--rose)', color: '#fff', cursor: 'pointer', fontWeight: 600 }}
+                style={{ flex: 1, padding: '12px', borderRadius: 10, border: 'none', background: 'var(--rose)', color: '#fff', cursor: 'pointer', fontWeight: 700, minWidth: 120 }}
               >
                 Copy Link
               </button>
               <button
-                onClick={() => window.open(`/p/${createdToken}`, '_blank')}
-                style={{ padding: '10px 20px', borderRadius: 10, border: '1px solid var(--s3)', background: 'var(--s2)', color: 'var(--t1)', cursor: 'pointer' }}
-              >
-                Preview
-              </button>
-              <button
                 onClick={() => navigate(`/party-invites/${createdToken}/manage`)}
-                style={{ padding: '10px 20px', borderRadius: 10, border: '1px solid var(--s3)', background: 'var(--s2)', color: 'var(--t1)', cursor: 'pointer' }}
+                style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid var(--s3)', background: 'var(--s2)', color: 'var(--t1)', cursor: 'pointer', minWidth: 120 }}
               >
                 Manage
               </button>
             </div>
+            <button
+              onClick={() => window.open(`/p/${createdToken}`, '_blank')}
+              style={{ width: '100%', marginTop: 10, padding: '10px', borderRadius: 10, border: '1px solid var(--s3)', background: 'none', color: 'var(--t2)', cursor: 'pointer', fontSize: '0.88rem' }}
+            >
+              Preview invite page →
+            </button>
           </div>
         )}
 
         {/* Navigation */}
-        {step < 4 && (
+        {!isDone && (
           <div style={{ marginTop: 28 }}>
             {error && <p style={{ color: 'var(--rose)', fontSize: '0.85rem', marginBottom: 10 }}>{error}</p>}
             <div style={{ display: 'flex', gap: 10 }}>
               {step > 0 && (
                 <button
                   onClick={() => { setError(''); setStep(s => s - 1) }}
-                  style={{ flex: 1, padding: '12px', borderRadius: 10, border: '1px solid var(--s3)', background: 'var(--s2)', color: 'var(--t1)', cursor: 'pointer' }}
+                  style={{ flex: 1, padding: '13px', borderRadius: 10, border: '1px solid var(--s3)', background: 'var(--s2)', color: 'var(--t1)', cursor: 'pointer' }}
                 >
                   Back
                 </button>
               )}
-              {step < 3 && (
+              {step < STEPS.length - 1 && (
                 <button
                   onClick={nextStep}
-                  style={{ flex: 2, padding: '12px', borderRadius: 10, border: 'none', background: 'var(--rose)', color: '#fff', cursor: 'pointer', fontWeight: 700 }}
+                  style={{ flex: 2, padding: '13px', borderRadius: 10, border: 'none', background: 'var(--rose)', color: '#fff', cursor: 'pointer', fontWeight: 700 }}
                 >
                   Next
                 </button>
               )}
-              {step === 3 && (
+              {step === STEPS.length - 1 && (
                 <button
                   onClick={publish}
                   disabled={loading}
-                  style={{ flex: 2, padding: '12px', borderRadius: 10, border: 'none', background: 'var(--rose)', color: '#fff', cursor: 'pointer', fontWeight: 700, opacity: loading ? 0.7 : 1 }}
+                  style={{ flex: 2, padding: '13px', borderRadius: 10, border: 'none', background: 'var(--rose)', color: '#fff', cursor: 'pointer', fontWeight: 700, opacity: loading ? 0.7 : 1 }}
                 >
-                  {loading ? 'Creating…' : 'Publish Invite ✨'}
+                  {loading ? 'Creating…' : 'Publish ✨'}
                 </button>
               )}
             </div>

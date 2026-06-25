@@ -1,131 +1,200 @@
 import { useEffect, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, Link } from 'react-router-dom'
 import axios from 'axios'
-import StickerLayer from '../../components/party/StickerLayer'
-import RsvpBlock    from '../../components/party/RsvpBlock'
-import GuestList    from '../../components/party/GuestList'
+import RsvpBlock from '../../components/party/RsvpBlock'
+import GuestList from '../../components/party/GuestList'
 
 const EVENTS_BASE = import.meta.env.VITE_EVENTS_URL || '/api/events'
 
-const HERO_GRADIENTS = {
-  dining:  'linear-gradient(135deg, #7c4a00, #f59e0b)',
-  hiking:  'linear-gradient(135deg, #064e3b, #22d3a0)',
-  gaming:  'linear-gradient(135deg, #1e1b4b, #a855f7)',
-  movies:  'linear-gradient(135deg, #0f172a, #6366f1)',
-  arts:    'linear-gradient(135deg, #4a044e, #fb7185)',
-  other:   'linear-gradient(135deg, #1a0010, #f43f5e)',
+const THEME = {
+  dining: { grad: ['#92400e', '#f59e0b'], emoji: '🍽️' },
+  hiking: { grad: ['#064e3b', '#22d3a0'], emoji: '🥾' },
+  gaming: { grad: ['#1e1b4b', '#a855f7'], emoji: '🎮' },
+  movies: { grad: ['#0f172a', '#6366f1'], emoji: '🎬' },
+  arts:   { grad: ['#4a044e', '#fb7185'], emoji: '🎨' },
+  other:  { grad: ['#1a0010', '#f43f5e'], emoji: '🎉' },
+}
+
+function formatDate(dt) {
+  if (!dt) return null
+  const d = new Date(dt)
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+    + (d.getHours() || d.getMinutes()
+      ? ' · ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+      : '')
 }
 
 export default function PartyInvitePage() {
-  const { token }         = useParams()
+  const { token } = useParams()
   const [invite, setInvite]   = useState(null)
   const [guests, setGuests]   = useState({ guests: [], member_groups: [] })
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
 
   useEffect(() => {
-    async function load() {
-      try {
-        const [inv, gst] = await Promise.all([
-          axios.get(`${EVENTS_BASE}/p/${token}`),
-          axios.get(`${EVENTS_BASE}/p/${token}/guests`),
-        ])
-        setInvite(inv.data)
-        setGuests(gst.data)
-      } catch {
-        setError('Invite not found or has been removed.')
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
+    Promise.all([
+      axios.get(`${EVENTS_BASE}/p/${token}`),
+      axios.get(`${EVENTS_BASE}/p/${token}/guests`),
+    ]).then(([inv, gst]) => {
+      setInvite(inv.data)
+      setGuests(gst.data)
+    }).catch(() => {
+      setError('Invite not found or no longer available.')
+    }).finally(() => setLoading(false))
   }, [token])
 
   if (loading) return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t2)' }}>
-      Loading…
+    <div style={{ minHeight: '100vh', background: '#08080a', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ color: '#9898b0', fontSize: '0.9rem' }}>Loading…</div>
     </div>
   )
+
   if (error) return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--t2)', flexDirection: 'column', gap: 12 }}>
-      <span style={{ fontSize: '2rem' }}>😕</span>
-      <p>{error}</p>
+    <div style={{ minHeight: '100vh', background: '#08080a', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+      <div style={{ fontSize: '2.5rem' }}>😕</div>
+      <p style={{ color: '#9898b0', margin: 0 }}>{error}</p>
     </div>
   )
 
-  const accent      = invite.accent_color || '#f43f5e'
-  const heroGrad    = HERO_GRADIENTS[invite.theme_activity_type] || HERO_GRADIENTS.other
-  const heroStyle   = invite.cover_image_url
-    ? { background: `url(${invite.cover_image_url}) center/cover` }
-    : { background: heroGrad }
+  const theme   = THEME[invite.theme_activity_type] || THEME.other
+  const accent  = invite.accent_color || '#f43f5e'
+  const dateStr = formatDate(invite.event?.scheduled_date)
 
-  const totalGoing = (guests.guests?.filter(g => g.status === 'going').length || 0)
-    + (guests.member_groups?.reduce((s, mg) => s + mg.members.length, 0) || 0)
+  const totalGoing = (guests.guests?.filter(g => g.rsvp_status === 'going').length || 0)
+    + (guests.member_groups?.reduce((s, mg) => s + (mg.members?.length || 0), 0) || 0)
 
-  const hasGuests = totalGoing > 0
-    || guests.member_groups?.some(mg => mg.members.length > 0)
+  const hasGuests = totalGoing > 0 || guests.member_groups?.some(mg => mg.members?.length > 0)
+
+  const heroBg = invite.cover_image_url
+    ? { backgroundImage: `url(${invite.cover_image_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
+    : { background: `linear-gradient(145deg, ${theme.grad[0]}, ${theme.grad[1]})` }
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--bg)', color: 'var(--t1)', fontFamily: 'inherit' }}>
+    <div style={{ minHeight: '100vh', background: '#08080a', color: '#fff' }}>
+
       {/* Hero */}
-      <div style={{ position: 'relative', minHeight: 320, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'flex-end', padding: '32px 24px', ...heroStyle }}>
-        <StickerLayer stickers={invite.sticker_data || []} />
-        {/* Subtle dark overlay for text readability */}
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.1) 60%)' }} />
-        <div style={{ position: 'relative', textAlign: 'center' }}>
+      <div style={{ position: 'relative', minHeight: 280, ...heroBg }}>
+        {/* Gradient fade to page bg */}
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.15) 0%, rgba(8,8,10,0.92) 100%)' }} />
+
+        <div style={{ position: 'relative', padding: '48px 24px 32px', maxWidth: 520, margin: '0 auto' }}>
+          {/* Turn reveal badge */}
           {invite.is_turn_reveal && (
-            <div style={{ display: 'inline-block', background: 'rgba(0,0,0,0.5)', borderRadius: 20, padding: '4px 14px', fontSize: '0.8rem', color: '#fff', marginBottom: 10 }}>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 20, padding: '4px 12px', fontSize: '0.78rem',
+              color: 'rgba(255,255,255,0.85)', marginBottom: 16,
+            }}>
               🎯 It's {invite.host?.full_name?.split(' ')[0] || 'their'} turn to host
             </div>
           )}
-          <h1 style={{ fontSize: '2.2rem', fontWeight: 800, color: '#fff', textShadow: '0 2px 8px rgba(0,0,0,0.5)', margin: '0 0 8px' }}>
-            {invite.event?.title}
-          </h1>
-          {invite.event?.scheduled_date && (
-            <p style={{ color: 'rgba(255,255,255,0.85)', margin: '0 0 6px', fontSize: '1rem' }}>
-              {new Date(invite.event.scheduled_date).toLocaleDateString('en-US', {
-                weekday: 'long', month: 'long', day: 'numeric',
-              })}
-              {invite.event.location && ` · ${invite.event.location}`}
-            </p>
-          )}
-          {totalGoing > 0 && (
-            <p style={{ color: accent, fontWeight: 700, margin: 0, fontSize: '1rem' }}>
-              {totalGoing} going
-            </p>
-          )}
+
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
+            <div style={{
+              width: 52, height: 52, borderRadius: 14, flexShrink: 0,
+              background: `linear-gradient(135deg, ${theme.grad[0]}, ${theme.grad[1]})`,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '1.6rem', boxShadow: '0 4px 16px rgba(0,0,0,0.4)',
+              border: '1px solid rgba(255,255,255,0.1)',
+            }}>
+              {theme.emoji}
+            </div>
+            <div>
+              <h1 style={{ margin: 0, fontSize: '1.7rem', fontWeight: 800, lineHeight: 1.2, color: '#fff' }}>
+                {invite.event?.title}
+              </h1>
+              {invite.host?.full_name && (
+                <p style={{ margin: '4px 0 0', color: 'rgba(255,255,255,0.55)', fontSize: '0.85rem' }}>
+                  Hosted by {invite.host.full_name}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {/* Meta row */}
+          <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {dateStr && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'rgba(255,255,255,0.75)', fontSize: '0.9rem' }}>
+                <span>📅</span><span>{dateStr}</span>
+              </div>
+            )}
+            {invite.event?.location && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'rgba(255,255,255,0.75)', fontSize: '0.9rem' }}>
+                <span>📍</span><span>{invite.event.location}</span>
+              </div>
+            )}
+            {totalGoing > 0 && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: '0.9rem' }}>
+                <span>👥</span>
+                <span style={{ color: accent, fontWeight: 600 }}>{totalGoing} going</span>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      <div style={{ maxWidth: 520, margin: '0 auto', padding: '24px 16px' }}>
-        {/* RSVP block */}
-        <div style={{ background: 'var(--s2)', borderRadius: 16, padding: 20, marginBottom: 20, border: '1px solid var(--s3)' }}>
-          <h2 style={{ marginTop: 0, marginBottom: 16, fontSize: '1.1rem', color: 'var(--t1)' }}>RSVP</h2>
+      {/* Content */}
+      <div style={{ maxWidth: 520, margin: '0 auto', padding: '0 16px 48px' }}>
+
+        {/* Description */}
+        {invite.event?.description && (
+          <p style={{
+            color: '#9898b0', fontSize: '0.92rem', lineHeight: 1.6,
+            margin: '20px 0', padding: '16px', borderRadius: 12,
+            background: '#0e0e12', border: '1px solid #1a1a22',
+          }}>
+            {invite.event.description}
+          </p>
+        )}
+
+        {/* RSVP */}
+        <div style={{ margin: '20px 0', background: '#0e0e12', borderRadius: 16, padding: '20px', border: '1px solid #1a1a22' }}>
+          <h2 style={{ margin: '0 0 16px', fontSize: '1rem', fontWeight: 700, color: '#fff' }}>Are you coming?</h2>
           <RsvpBlock token={token} accentColor={accent} />
         </div>
 
         {/* Bring list */}
         {invite.bring_list_enabled && invite.items?.length > 0 && (
-          <div style={{ background: 'var(--s2)', borderRadius: 16, padding: 20, marginBottom: 20, border: '1px solid var(--s3)' }}>
-            <h2 style={{ marginTop: 0, marginBottom: 16, fontSize: '1.1rem', color: 'var(--t1)' }}>What to Bring</h2>
-            {invite.items.map(item => (
-              <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid var(--s3)' }}>
-                <span style={{ color: 'var(--t1)' }}>{item.emoji} {item.label}</span>
-                <span style={{ color: item.claim_count >= item.max_claims ? 'var(--t3)' : accent, fontSize: '0.8rem', fontWeight: 600 }}>
-                  {item.claim_count >= item.max_claims ? 'Taken' : `${item.max_claims - item.claim_count} left`}
-                </span>
-              </div>
-            ))}
+          <div style={{ margin: '16px 0', background: '#0e0e12', borderRadius: 16, padding: '20px', border: '1px solid #1a1a22' }}>
+            <h2 style={{ margin: '0 0 16px', fontSize: '1rem', fontWeight: 700, color: '#fff' }}>What to bring</h2>
+            {invite.items.map(item => {
+              const taken = item.claim_count >= item.max_claims
+              return (
+                <div key={item.id} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '10px 0', borderBottom: '1px solid #1a1a22',
+                }}>
+                  <span style={{ color: '#fff', fontSize: '0.92rem' }}>
+                    {item.emoji && <span style={{ marginRight: 6 }}>{item.emoji}</span>}
+                    {item.label}
+                  </span>
+                  <span style={{
+                    fontSize: '0.78rem', fontWeight: 600, padding: '3px 10px', borderRadius: 20,
+                    background: taken ? '#1a1a22' : `${accent}22`,
+                    color: taken ? '#55556a' : accent,
+                  }}>
+                    {taken ? 'Taken' : `${item.max_claims - item.claim_count} left`}
+                  </span>
+                </div>
+              )
+            })}
           </div>
         )}
 
         {/* Guest list */}
         {hasGuests && (
-          <div style={{ background: 'var(--s2)', borderRadius: 16, padding: 20, border: '1px solid var(--s3)' }}>
-            <h2 style={{ marginTop: 0, marginBottom: 16, fontSize: '1.1rem', color: 'var(--t1)' }}>Who's Coming</h2>
+          <div style={{ margin: '16px 0', background: '#0e0e12', borderRadius: 16, padding: '20px', border: '1px solid #1a1a22' }}>
+            <h2 style={{ margin: '0 0 16px', fontSize: '1rem', fontWeight: 700, color: '#fff' }}>Who's coming</h2>
             <GuestList guests={guests.guests} memberGroups={guests.member_groups} accentColor={accent} />
           </div>
         )}
+
+        {/* Footer nudge */}
+        <p style={{ textAlign: 'center', color: '#38383f', fontSize: '0.78rem', marginTop: 32 }}>
+          Made with <Link to="/" style={{ color: '#55556a', textDecoration: 'none' }}>clubPal</Link>
+        </p>
       </div>
     </div>
   )

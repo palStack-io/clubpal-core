@@ -278,7 +278,10 @@ async def get_group_leaderboard_endpoint(group_id: int, event_ids: Optional[str]
     """
     async with httpx.AsyncClient() as client:
         try:
-            response = await client.get(f"{GROUPS_SERVICE_URL}/groups/{group_id}/members")
+            response = await client.get(
+                f"{GROUPS_SERVICE_URL}/internal/groups/{group_id}/members",
+                headers={"x-internal-secret": INTERNAL_API_SECRET},
+            )
             if response.status_code == 404:
                 raise HTTPException(status_code=404, detail="Group not found")
             if response.status_code != 200:

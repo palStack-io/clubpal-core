@@ -32,7 +32,7 @@ function createClient(baseURL, { injectUserId = false } = {}) {
     (error) => {
       if (error.response?.status === 401) {
         localStorage.removeItem('user')
-        const pub = ['/login', '/register', '/forgot-password', '/reset-password', '/invite']
+        const pub = ['/login', '/register', '/forgot-password', '/reset-password', '/invite', '/p/', '/pay/', '/claim/']
         const onPublic = pub.some(p => window.location.pathname.startsWith(p))
         if (!onPublic) {
           const next = window.location.pathname + window.location.search

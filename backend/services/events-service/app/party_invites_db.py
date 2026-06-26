@@ -138,6 +138,14 @@ def init_party_invite_tables():
         "CREATE INDEX IF NOT EXISTS idx_pi_email_notifications_status ON party_invite_email_notifications(status, notification_type)"
     )
 
+    # Migrations
+    cursor.execute(
+        "ALTER TABLE party_invite_guests ADD COLUMN IF NOT EXISTS plus_ones INTEGER DEFAULT 0"
+    )
+    cursor.execute(
+        "ALTER TABLE party_invites ADD COLUMN IF NOT EXISTS cover_image_position VARCHAR(50) DEFAULT '50% 50%'"
+    )
+
     conn.commit()
     conn.close()
 
@@ -193,7 +201,8 @@ def get_party_invite_by_event_id(event_id: int) -> Optional[dict]:
 def update_party_invite(token: str, **kwargs) -> Optional[dict]:
     allowed = {
         "theme_activity_type", "theme_variant", "bg_animation", "accent_color",
-        "cover_image_url", "sticker_data", "bring_list_enabled", "bring_list_type", "style",
+        "cover_image_url", "cover_image_position", "sticker_data",
+        "bring_list_enabled", "bring_list_type", "style",
     }
     updates = {k: v for k, v in kwargs.items() if k in allowed and v is not None}
     if not updates:
@@ -231,7 +240,8 @@ def get_invite_groups(party_invite_id: int) -> list:
 
 def create_guest_rsvp(party_invite_id: int, name: str, email: str,
                       status: str = "going", bring_note: str = None,
-                      claim_item_id: int = None, email_opt_in: bool = False) -> dict:
+                      claim_item_id: int = None, email_opt_in: bool = False,
+                      plus_ones: int = 0) -> dict:
     conn = get_db()
     cursor = conn.cursor()
     # Upsert: if same email already RSVPd, return existing record
@@ -264,12 +274,12 @@ def create_guest_rsvp(party_invite_id: int, name: str, email: str,
         return updated
     cursor.execute("""
         INSERT INTO party_invite_guests
-            (party_invite_id, name, email, rsvp_status, bring_note, claim_item_id, email_opt_in, email_opt_in_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s, CASE WHEN %s THEN NOW() ELSE NULL END)
+            (party_invite_id, name, email, rsvp_status, bring_note, claim_item_id, email_opt_in, email_opt_in_at, plus_ones)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, CASE WHEN %s THEN NOW() ELSE NULL END, %s)
         RETURNING *
     """, (
         party_invite_id, name.strip(), email.strip().lower(), status, bring_note,
-        claim_item_id, bool(email_opt_in), bool(email_opt_in),
+        claim_item_id, bool(email_opt_in), bool(email_opt_in), int(plus_ones or 0),
     ))
     row = dict(cursor.fetchone())
     conn.commit()

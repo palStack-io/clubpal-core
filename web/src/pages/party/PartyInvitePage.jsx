@@ -33,27 +33,42 @@ function styleVars(style, accent) {
         cardBg: 'rgba(0,0,0,0.75)',
         cardBorder: `1px solid ${accent}`,
         cardShadow: `0 0 24px ${accent}44`,
-        sectionBg: 'rgba(0,0,0,0.6)',
-        sectionBorder: `1px solid ${accent}33`,
-        blur: false,
+        blur: false, blurAmount: '0px',
       }
     case 'minimal':
       return {
         cardBg: '#111114',
-        cardBorder: '1px solid #1a1a22',
+        cardBorder: '1px solid #1c1c24',
         cardShadow: 'none',
-        sectionBg: '#111114',
-        sectionBorder: '1px solid #1a1a22',
-        blur: false,
+        blur: false, blurAmount: '0px',
+      }
+    case 'frosted':
+      return {
+        cardBg: 'rgba(255,255,255,0.13)',
+        cardBorder: '1px solid rgba(255,255,255,0.22)',
+        cardShadow: '0 8px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.12)',
+        blur: true, blurAmount: '22px',
+      }
+    case 'velvet':
+      return {
+        cardBg: 'rgba(14,8,22,0.94)',
+        cardBorder: `2px solid ${accent}55`,
+        cardShadow: `0 4px 28px ${accent}22, 0 0 0 1px ${accent}11`,
+        blur: false, blurAmount: '0px',
+      }
+    case 'bold':
+      return {
+        cardBg: `${accent}1a`,
+        cardBorder: `1px solid ${accent}66`,
+        cardShadow: `0 8px 24px ${accent}22`,
+        blur: false, blurAmount: '0px',
       }
     default: // glass
       return {
         cardBg: 'rgba(255,255,255,0.06)',
         cardBorder: '1px solid rgba(255,255,255,0.1)',
         cardShadow: '0 8px 32px rgba(0,0,0,0.4)',
-        sectionBg: 'rgba(255,255,255,0.04)',
-        sectionBorder: '1px solid rgba(255,255,255,0.08)',
-        blur: true,
+        blur: true, blurAmount: '8px',
       }
   }
 }
@@ -228,206 +243,214 @@ export default function PartyInvitePage() {
     </div>
   )
 
-  const style    = invite.style || 'glass'
-  const accent   = invite.accent_color || '#f43f5e'
-  const gradPair = THEME_GRAD[invite.theme_activity_type] || THEME_GRAD.other
-  const vars     = styleVars(style, accent)
-  const dateStr  = formatDate(invite.event?.scheduled_date)
+  const accent    = invite.accent_color || '#f43f5e'
+  const gradPair  = THEME_GRAD[invite.theme_activity_type] || THEME_GRAD.other
+  const vars      = styleVars(invite.style || 'glass', accent)
+  const dateStr   = formatDate(invite.event?.scheduled_date)
+  const coverPos  = invite.cover_image_position || '50% 50%'
+  const admitCode = token.slice(-8).toUpperCase()
 
-  const goingCount = (guests.guests?.filter(g => g.status === 'going' || g.rsvp_status === 'going').length || 0)
+  const goingGuests = guests.guests?.filter(g => g.rsvp_status === 'going' || g.status === 'going') || []
+  const goingCount  = goingGuests.length
     + (guests.member_groups?.reduce((s, mg) => s + (mg.members?.length || 0), 0) || 0)
 
   const heroBg = invite.cover_image_url
-    ? { backgroundImage: `url(${invite.cover_image_url})`, backgroundSize: 'cover', backgroundPosition: 'center' }
-    : { background: `linear-gradient(145deg, ${gradPair[0]}, ${gradPair[1]})` }
+    ? { backgroundImage: `url(${invite.cover_image_url})`, backgroundSize: 'cover', backgroundPosition: coverPos }
+    : { background: `linear-gradient(145deg, ${gradPair[0]} 0%, ${gradPair[1]} 100%)` }
 
-  const admitCode = token.slice(-8).toUpperCase()
+  const cardBlur = vars.blur ? `blur(${vars.blurAmount})` : 'none'
 
   return (
-    <div style={{ minHeight: '100vh', background: '#08080a', color: '#fff' }}>
+    <div style={{ minHeight: '100vh', background: '#08080a', color: '#fff', fontFamily: 'system-ui, -apple-system, sans-serif' }}>
+      <style>{`:root { --pi-card-bg: ${vars.cardBg}; --pi-card-border: ${vars.cardBorder}; --pi-card-shadow: ${vars.cardShadow}; --pi-card-blur: ${cardBlur}; }`}</style>
       <style>{`
-        .party-invite-hero-inner { max-width: 1180px; margin: 0 auto; padding: 86px 28px 52px; min-height: min(760px, 78vh); display: flex; flex-direction: column; justify-content: flex-end; }
-        .party-invite-eyebrow { display: inline-flex; align-items: center; gap: 8px; width: fit-content; margin-bottom: 20px; background: rgba(0,0,0,0.46); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.14); border-radius: 999px; padding: 7px 13px; font-size: .76rem; color: rgba(255,255,255,.82); }
-        .party-invite-title { margin: 0 0 12px; max-width: 900px; font-size: clamp(2.5rem, 7vw, 6.8rem); font-weight: 950; line-height: .92; color: #fff; letter-spacing: 0; }
-        .party-invite-host { margin: 0 0 26px; color: rgba(255,255,255,.64); font-size: 1rem; }
-        .party-invite-meta { display: flex; flex-wrap: wrap; gap: 10px; max-width: 980px; }
-        .party-invite-meta-item { display: inline-flex; align-items: center; gap: 9px; min-height: 38px; padding: 9px 13px; border-radius: 999px; background: rgba(0,0,0,.42); border: 1px solid rgba(255,255,255,.14); color: rgba(255,255,255,.82); font-size: .9rem; backdrop-filter: blur(10px); }
-        .party-invite-ticket { max-width: 1180px; margin: 0 auto; padding: 0 28px; }
-        .party-invite-content { max-width: 1180px; margin: 0 auto; padding: 18px 28px 64px; display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; align-items: start; }
-        .party-invite-stack { display: flex; flex-direction: column; gap: 16px; }
-        .party-invite-rsvp { position: sticky; top: 18px; }
-        @media (max-width: 860px) {
-          .party-invite-hero-inner { padding: 62px 20px 34px; min-height: 560px; }
-          .party-invite-title { font-size: clamp(2.25rem, 15vw, 4.2rem); line-height: .96; }
-          .party-invite-host { margin-bottom: 18px; }
-          .party-invite-meta { flex-direction: column; align-items: stretch; }
-          .party-invite-meta-item { border-radius: 16px; }
-          .party-invite-ticket { padding: 0 20px; }
-          .party-invite-content { padding: 16px 20px 56px; display: flex; flex-direction: column; }
-          .party-invite-rsvp { position: static; width: 100%; order: -1; }
+        .pi-wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+        .pi-hero-inner { padding: 100px 24px 56px; max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; justify-content: flex-end; min-height: min(680px, 80vh); }
+        .pi-eyebrow { display: inline-flex; align-items: center; gap: 7px; width: fit-content; margin-bottom: 18px; background: rgba(0,0,0,0.5); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.16); border-radius: 999px; padding: 6px 14px; font-size: .72rem; font-weight: 700; color: rgba(255,255,255,.9); letter-spacing: .04em; text-transform: uppercase; }
+        .pi-title { margin: 0 0 14px; font-size: clamp(2.6rem, 7vw, 5.8rem); font-weight: 950; line-height: .9; color: #fff; letter-spacing: -1px; text-shadow: 0 2px 20px rgba(0,0,0,0.5); }
+        .pi-host { margin: 0 0 22px; color: rgba(255,255,255,.6); font-size: .95rem; display: flex; align-items: center; gap: 8px; }
+        .pi-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+        .pi-chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px; border-radius: 999px; background: rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.13); color: rgba(255,255,255,.85); font-size: .85rem; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
+        .pi-content { max-width: 960px; margin: 0 auto; padding: 20px 24px 80px; display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: 16px; align-items: start; }
+        .pi-left { display: flex; flex-direction: column; gap: 14px; }
+        .pi-right { position: sticky; top: 20px; display: flex; flex-direction: column; gap: 14px; }
+        .pi-card { border-radius: 16px; padding: 20px; border: var(--pi-card-border); background: var(--pi-card-bg); box-shadow: var(--pi-card-shadow); backdrop-filter: var(--pi-card-blur); -webkit-backdrop-filter: var(--pi-card-blur); }
+        .pi-section-title { margin: 0 0 14px; font-size: .85rem; font-weight: 800; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: .08em; }
+        .pi-perforated { position: relative; padding: 0 24px; max-width: 960px; margin: 0 auto; }
+        @media (max-width: 780px) {
+          .pi-hero-inner { padding: 70px 20px 40px; min-height: 520px; }
+          .pi-title { font-size: clamp(2.2rem, 14vw, 3.6rem); }
+          .pi-content { padding: 16px 20px 60px; grid-template-columns: 1fr; }
+          .pi-right { position: static; order: -1; }
+          .pi-perforated { padding: 0 20px; }
         }
       `}</style>
 
-      {/* Hero */}
-      <div style={{ position: 'relative', minHeight: 'min(760px, 78vh)', ...heroBg }}>
+      {/* ─── Hero ─── */}
+      <div style={{ position: 'relative', overflow: 'hidden', ...heroBg }}>
         <InviteMotion type={invite.bg_animation} accent={accent} />
-        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.18) 0%, rgba(0,0,0,0.38) 46%, rgba(8,8,10,0.98) 100%)' }} />
+        {/* layered gradient: top-dim → transparent → heavy bottom fade */}
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.22) 0%, rgba(0,0,0,0.08) 35%, rgba(0,0,0,0.55) 70%, rgba(8,8,10,1) 100%)' }} />
+        {/* subtle accent glow at bottom */}
+        {invite.cover_image_url && (
+          <div style={{ position: 'absolute', bottom: 0, left: '10%', right: '10%', height: 60, background: `radial-gradient(ellipse, ${accent}30 0%, transparent 70%)`, filter: 'blur(20px)', pointerEvents: 'none' }} />
+        )}
 
-        <div className="party-invite-hero-inner" style={{ position: 'relative' }}>
-          {invite.is_turn_reveal && (
-            <div className="party-invite-eyebrow">
-              🎯 It's {invite.host?.full_name?.split(' ')[0] || 'their'} turn to host
-            </div>
-          )}
-          {!invite.is_turn_reveal && (
-            <div className="party-invite-eyebrow">
-              Party Invite
-            </div>
-          )}
+        <div className="pi-hero-inner" style={{ position: 'relative' }}>
+          <div className="pi-eyebrow">
+            {invite.is_turn_reveal
+              ? `🎯 ${invite.host?.full_name?.split(' ')[0] || 'Their'} turn to host`
+              : '🎉 Party Invite'}
+          </div>
 
-          <h1 className="party-invite-title">
-            {invite.event?.title}
-          </h1>
+          <h1 className="pi-title">{invite.event?.title}</h1>
 
           {invite.host?.full_name && (
-            <p className="party-invite-host">
+            <p className="pi-host">
+              <span style={{ width: 28, height: 28, borderRadius: '50%', background: `${accent}44`, border: `1.5px solid ${accent}88`, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: '.7rem', fontWeight: 800, color: accent, flexShrink: 0 }}>
+                {invite.host.full_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+              </span>
               Hosted by {invite.host.full_name}
             </p>
           )}
 
-          <div className="party-invite-meta">
+          <div className="pi-chips">
             {dateStr && (
-              <div className="party-invite-meta-item">
-                <CalIcon /><span>{dateStr}</span>
-              </div>
+              <div className="pi-chip"><CalIcon /><span>{dateStr}</span></div>
             )}
             {invite.event?.location && (
-              <div className="party-invite-meta-item">
-                <PinIcon /><span>{invite.event.location}</span>
+              <div className="pi-chip"><PinIcon /><span>{invite.event.location}</span></div>
+            )}
+            {goingCount > 0 && (
+              <div className="pi-chip">
+                <span>👥</span><span>{goingCount} going</span>
               </div>
             )}
           </div>
+
           <AddToCalendar event={invite.event} accent={accent} />
         </div>
       </div>
 
-      {/* Ticket perforated divider */}
-      <div className="party-invite-ticket" style={{ position: 'relative' }}>
-        <div style={{ position: 'absolute', left: 16, top: -12, width: 24, height: 24, borderRadius: '50%', background: '#08080a', zIndex: 10 }} />
-        <div style={{ position: 'absolute', right: 16, top: -12, width: 24, height: 24, borderRadius: '50%', background: '#08080a', zIndex: 10 }} />
-        <div style={{ borderTop: '2px dashed rgba(255,255,255,0.12)', position: 'relative', zIndex: 5 }} />
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0' }}>
-          <span style={{ fontSize: '0.65rem', color: 'rgba(255,255,255,0.25)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>Admit One</span>
-          <span style={{ fontFamily: "'Space Mono', 'Courier New', monospace", fontSize: '0.78rem', fontWeight: 700, color: accent, letterSpacing: '0.2em' }}>
+      {/* ─── Ticket perforated strip ─── */}
+      <div className="pi-perforated" style={{ position: 'relative', marginTop: 0 }}>
+        <div style={{ position: 'absolute', left: 4, top: -13, width: 26, height: 26, borderRadius: '50%', background: '#08080a', zIndex: 10 }} />
+        <div style={{ position: 'absolute', right: 4, top: -13, width: 26, height: 26, borderRadius: '50%', background: '#08080a', zIndex: 10 }} />
+        <div style={{ borderTop: '1.5px dashed rgba(255,255,255,0.1)' }} />
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0' }}>
+          <span style={{ fontSize: '.62rem', color: 'rgba(255,255,255,0.22)', letterSpacing: '.18em', textTransform: 'uppercase' }}>Admit One</span>
+          <span style={{ fontFamily: "'Space Mono', 'Courier New', monospace", fontSize: '.72rem', fontWeight: 700, color: accent, letterSpacing: '.22em' }}>
             {admitCode}
           </span>
         </div>
       </div>
 
-      {/* Content */}
-      <div className="party-invite-content">
-        <div className="party-invite-stack">
+      {/* ─── Content ─── */}
+      <div className="pi-content">
 
-        {guestAccess && (
-          <CapacityBar going={goingCount} max={invite.event?.max_attendees} accent={accent} />
-        )}
+        {/* ── Left column ── */}
+        <div className="pi-left">
 
-        {invite.event?.description && (
-          <div style={{
-            background: vars.sectionBg, borderRadius: 14, padding: '16px 18px',
-            border: vars.sectionBorder, marginBottom: 16,
-            backdropFilter: vars.blur ? 'blur(8px)' : 'none',
-          }}>
-            <p style={{ margin: 0, color: 'rgba(255,255,255,0.65)', fontSize: '0.9rem', lineHeight: 1.6 }}>
-              {invite.event.description}
-            </p>
-          </div>
-        )}
+          {/* Going count + capacity */}
+          {guestAccess && invite.event?.max_attendees && (
+            <div className="pi-card">
+              <CapacityBar going={goingCount} max={invite.event.max_attendees} accent={accent} />
+            </div>
+          )}
 
-        {/* Bring list */}
-        {invite.bring_list_enabled && invite.items?.length > 0 && (
-          <div style={{
-            background: vars.sectionBg, borderRadius: 16, padding: '20px',
-            border: vars.sectionBorder, marginBottom: 16,
-            backdropFilter: vars.blur ? 'blur(8px)' : 'none',
-          }}>
-            <h2 style={{ margin: '0 0 14px', fontSize: '1rem', fontWeight: 700, color: '#fff' }}>What to bring</h2>
-            {invite.items.map(item => {
-              const taken = item.claim_count >= item.max_claims
-              return (
-                <div key={item.id} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '10px 0', borderBottom: '1px solid rgba(255,255,255,0.06)',
-                }}>
-                  <span style={{ color: '#fff', fontSize: '0.9rem' }}>
-                    {item.emoji && <span style={{ marginRight: 6 }}>{item.emoji}</span>}
-                    {item.label}
-                  </span>
-                  <span style={{
-                    fontSize: '0.75rem', fontWeight: 600, padding: '3px 10px', borderRadius: 20,
-                    background: taken ? 'rgba(255,255,255,0.06)' : `${accent}22`,
-                    color: taken ? 'rgba(255,255,255,0.3)' : accent,
+          {/* Description */}
+          {invite.event?.description && (
+            <div className="pi-card">
+              <p className="pi-section-title">About this event</p>
+              <p style={{ margin: 0, color: 'rgba(255,255,255,0.65)', fontSize: '.88rem', lineHeight: 1.65 }}>
+                {invite.event.description}
+              </p>
+            </div>
+          )}
+
+          {/* Bring list */}
+          {invite.bring_list_enabled && invite.items?.length > 0 && (
+            <div className="pi-card">
+              <p className="pi-section-title">What to bring</p>
+              {invite.items.map((item, i) => {
+                const taken = item.claim_count >= item.max_claims
+                return (
+                  <div key={item.id} style={{
+                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                    padding: '10px 0',
+                    borderBottom: i < invite.items.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
                   }}>
-                    {taken ? 'Taken' : `${item.max_claims - item.claim_count} left`}
-                  </span>
-                </div>
-              )
-            })}
-          </div>
-        )}
+                    <span style={{ color: taken ? 'rgba(255,255,255,0.3)' : '#fff', fontSize: '.88rem' }}>
+                      {item.emoji && <span style={{ marginRight: 6 }}>{item.emoji}</span>}
+                      {item.label}
+                    </span>
+                    <span style={{
+                      fontSize: '.72rem', fontWeight: 700, padding: '3px 10px', borderRadius: 999,
+                      background: taken ? 'rgba(255,255,255,0.05)' : `${accent}20`,
+                      color: taken ? 'rgba(255,255,255,0.2)' : accent,
+                    }}>
+                      {taken ? 'Taken' : `${item.max_claims - item.claim_count} left`}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
-        {/* Guest list */}
-        {!guestAccess && (
-          <div style={{
-            background: vars.sectionBg, borderRadius: 16, padding: '20px',
-            border: vars.sectionBorder,
-            backdropFilter: vars.blur ? 'blur(8px)' : 'none',
-          }}>
-            <h2 style={{ margin: '0 0 8px', fontSize: '1rem', fontWeight: 700, color: '#fff' }}>Who's coming</h2>
-            <p style={{ margin: 0, color: 'rgba(255,255,255,0.58)', fontSize: '0.9rem', lineHeight: 1.55 }}>
-              RSVP first to see who else has said yes.
-            </p>
-          </div>
-        )}
+          {/* Guest list */}
+          {!guestAccess && (
+            <div className="pi-card" style={{ textAlign: 'center', padding: '28px 20px' }}>
+              <div style={{ fontSize: '1.6rem', marginBottom: 10 }}>🎊</div>
+              <p style={{ margin: '0 0 6px', fontWeight: 700, color: '#fff', fontSize: '.95rem' }}>Who's coming?</p>
+              <p style={{ margin: 0, color: 'rgba(255,255,255,0.45)', fontSize: '.82rem', lineHeight: 1.55 }}>
+                RSVP first to see the full guest list.
+              </p>
+            </div>
+          )}
 
-        {guestAccess && guestsLoading && (
-          <div style={{
-            background: vars.sectionBg, borderRadius: 16, padding: '20px',
-            border: vars.sectionBorder,
-            color: 'rgba(255,255,255,0.58)',
-          }}>
-            Loading guest list...
-          </div>
-        )}
+          {guestAccess && guestsLoading && (
+            <div className="pi-card" style={{ color: 'rgba(255,255,255,0.4)', fontSize: '.85rem' }}>Loading guests…</div>
+          )}
 
-        {guestAccess && !guestsLoading && goingCount > 0 && (
-          <div style={{
-            background: vars.sectionBg, borderRadius: 16, padding: '20px',
-            border: vars.sectionBorder,
-            backdropFilter: vars.blur ? 'blur(8px)' : 'none',
-          }}>
-            <h2 style={{ margin: '0 0 14px', fontSize: '1rem', fontWeight: 700, color: '#fff' }}>Who's coming</h2>
-            <GuestList guests={guests.guests} memberGroups={guests.member_groups} accentColor={accent} />
-          </div>
-        )}
+          {guestAccess && !guestsLoading && (
+            <div className="pi-card">
+              <p className="pi-section-title">Who's coming · {goingCount} going</p>
+              {goingCount > 0
+                ? <GuestList guests={guests.guests} memberGroups={guests.member_groups} accentColor={accent} />
+                : <p style={{ margin: 0, color: 'rgba(255,255,255,0.4)', fontSize: '.85rem' }}>You're the first one! Invite your friends.</p>
+              }
+            </div>
+          )}
         </div>
 
-        {/* RSVP */}
-        <div className="party-invite-rsvp" style={{
-          background: vars.cardBg, borderRadius: 18, padding: '22px',
-          border: vars.cardBorder, boxShadow: vars.cardShadow,
-          backdropFilter: vars.blur ? 'blur(12px)' : 'none',
-        }}>
-          <p style={{ margin: '0 0 8px', color: accent, fontSize: '0.76rem', textTransform: 'uppercase', letterSpacing: '0.08em', fontWeight: 800 }}>
-            RSVP
+        {/* ── Right column — RSVP ── */}
+        <div className="pi-right">
+          <div style={{
+            borderRadius: 18, overflow: 'hidden',
+            border: vars.cardBorder,
+            boxShadow: `${vars.cardShadow}, 0 0 40px ${accent}18`,
+          }}>
+            {/* Accent header strip */}
+            <div style={{
+              padding: '16px 20px 14px',
+              background: `linear-gradient(135deg, ${accent}22 0%, ${accent}0a 100%)`,
+              borderBottom: `1px solid ${accent}22`,
+            }}>
+              <p style={{ margin: 0, color: accent, fontSize: '.7rem', fontWeight: 900, textTransform: 'uppercase', letterSpacing: '.1em' }}>
+                {invite.event?.title?.length > 28 ? invite.event.title.slice(0, 27) + '…' : invite.event?.title}
+              </p>
+              <h2 style={{ margin: '4px 0 0', fontSize: '1.25rem', fontWeight: 900, color: '#fff' }}>Are you coming?</h2>
+            </div>
+            <div style={{ padding: '18px 20px 20px', background: vars.cardBg, backdropFilter: cardBlur }}>
+              <RsvpBlock token={token} accentColor={accent} onRsvpd={handleRsvpd} />
+            </div>
+          </div>
+
+          {/* clubPal footer link */}
+          <p style={{ textAlign: 'center', color: '#2a2a32', fontSize: '.7rem', margin: 0 }}>
+            Made with <Link to="/" style={{ color: '#38383f', textDecoration: 'none' }}>clubPal</Link>
           </p>
-          <h2 style={{ margin: '0 0 16px', fontSize: '1.35rem', fontWeight: 850, color: '#fff' }}>Are you coming?</h2>
-          <RsvpBlock token={token} accentColor={accent} onRsvpd={handleRsvpd} />
         </div>
-
-        <p style={{ gridColumn: '1 / -1', textAlign: 'center', color: '#2a2a32', fontSize: '0.72rem', marginTop: 18 }}>
-          Made with <Link to="/" style={{ color: '#38383f', textDecoration: 'none' }}>clubPal</Link>
-        </p>
       </div>
     </div>
   )

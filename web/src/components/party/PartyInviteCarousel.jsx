@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { Link } from 'react-router-dom'
 import { eventsApi } from '../../api/events'
+import InviteMotion from './InviteMotion'
 
 const ACCENT_DEFAULTS = {
   dining: '#f59e0b', hiking: '#22d3a0', gaming: '#a855f7',
@@ -9,211 +11,244 @@ const ACCENT_DEFAULTS = {
 function formatDateShort(dt) {
   if (!dt) return null
   const d = new Date(dt)
-  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  return d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric',
+    hour: 'numeric', minute: '2-digit' })
 }
 
-function CapacityBar({ going, max, accent }) {
-  if (!max) return null
-  const pct = Math.min(100, Math.round((going / max) * 100))
-  return (
-    <div style={{ marginTop: 10 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
-        <span style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.5)' }}>
-          {going} / {max} spots
-        </span>
-        <span style={{ fontSize: '0.75rem', color: accent }}>{pct}%</span>
-      </div>
-      <div style={{ height: 4, background: 'rgba(255,255,255,0.1)', borderRadius: 2 }}>
-        <div style={{ height: '100%', width: `${pct}%`, background: accent, borderRadius: 2, transition: 'width 0.4s' }} />
-      </div>
-    </div>
-  )
+function cardBorderStyle(style, accent) {
+  switch (style) {
+    case 'neon':    return { border: `1.5px solid ${accent}`, boxShadow: `0 0 28px ${accent}44, 0 8px 24px rgba(0,0,0,0.4)` }
+    case 'minimal': return { border: '1px solid var(--s3)', boxShadow: 'none' }
+    case 'frosted': return { border: '1px solid rgba(255,255,255,0.22)', boxShadow: '0 8px 40px rgba(0,0,0,0.5)' }
+    case 'velvet':  return { border: `2px solid ${accent}55`, boxShadow: `0 4px 28px ${accent}22` }
+    case 'bold':    return { border: `1.5px solid ${accent}66`, boxShadow: `0 8px 24px ${accent}22` }
+    default:        return { border: `1.5px solid ${accent}33`, boxShadow: '0 8px 32px rgba(0,0,0,0.3)' }
+  }
 }
 
-function InviteMotion({ type, accent }) {
-  if (!type || type === 'none') return null
-  if (type === 'waves') {
-    return (
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', left: '-25%', right: '-25%', bottom: 12, height: 54, borderRadius: '50%', background: `radial-gradient(ellipse, ${accent}55, transparent 68%)`, animation: 'clubInviteWave 5s ease-in-out infinite alternate' }} />
-      </div>
-    )
+function InviteBanner({ invite, userId, onRsvp }) {
+  const [responding, setResponding] = useState(null)
+  const [done, setDone] = useState(false)
+  const accent = invite.accent_color || ACCENT_DEFAULTS[invite.activity_type] || '#f43f5e'
+  const style  = invite.style || 'glass'
+  const coverPos = invite.cover_image_position || '50% 50%'
+
+  async function rsvp(status) {
+    setResponding(status)
+    try {
+      await eventsApi.rsvp(invite.event_id, userId, status)
+      setDone(true)
+      setTimeout(() => onRsvp(invite.event_id), 900)
+    } catch {
+      setResponding(null)
+    }
   }
-  if (type === 'aurora' || type === 'spotlight') {
-    return (
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
-        <div style={{
-          position: 'absolute',
-          inset: '-25%',
-          background: type === 'aurora'
-            ? `linear-gradient(115deg, transparent 4%, ${accent}aa 28%, rgba(255,255,255,0.42) 45%, #14b8a699 62%, transparent 88%)`
-            : 'linear-gradient(105deg, transparent 22%, rgba(255,255,255,0.66) 48%, transparent 72%)',
-          filter: type === 'aurora' ? 'blur(9px)' : 'blur(4px)',
-          mixBlendMode: 'screen',
-          animation: 'clubInviteSweep 4s ease-in-out infinite alternate',
-        }} />
-        {type === 'aurora' && (
-          <div style={{
-            position: 'absolute',
-            inset: '-18%',
-            background: `linear-gradient(65deg, transparent 15%, #6366f188 42%, ${accent}77 58%, transparent 82%)`,
-            filter: 'blur(16px)',
-            mixBlendMode: 'screen',
-            animation: 'clubInviteSweep 5.6s ease-in-out infinite alternate-reverse',
-          }} />
-        )}
-        {type === 'spotlight' && (
-          <div style={{
-            position: 'absolute',
-            inset: '-16%',
-            background: `radial-gradient(circle at 50% 50%, ${accent}66, transparent 46%)`,
-            filter: 'blur(9px)',
-            opacity: 0.9,
-        }} />
-        )}
-      </div>
-    )
-  }
-  if (type === 'fireworks') {
-    return (
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
-        {Array.from({ length: 5 }).map((_, i) => (
-          <span key={i} style={{
-            position: 'absolute',
-            left: `${12 + i * 17}%`,
-            top: `${12 + (i % 3) * 20}%`,
-            width: 30,
-            height: 30,
-            borderRadius: '50%',
-            border: `2px solid ${i % 2 ? '#fff' : accent}`,
-            boxShadow: `0 0 14px ${accent}88, inset 0 0 10px ${accent}55`,
-            opacity: 0,
-            animation: `clubInviteBurst ${1.7 + i * 0.14}s ease-out infinite`,
-            animationDelay: `${i * 0.22}s`,
-          }} />
-        ))}
-      </div>
-    )
-  }
+
+  const heroBg = invite.cover_image_url
+    ? { backgroundImage: `url(${invite.cover_image_url})`, backgroundSize: 'cover', backgroundPosition: coverPos }
+    : { background: `linear-gradient(135deg, ${accent}66 0%, #111827 100%)` }
+
+  const { border, boxShadow } = cardBorderStyle(style, accent)
+
   return (
-    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
-      {Array.from({ length: 7 }).map((_, i) => (
-        <span key={i} style={{
-          position: 'absolute',
-          left: `${9 + i * 13}%`,
-          top: `${16 + (i % 3) * 18}%`,
-          width: type === 'confetti' ? 7 : 5,
-          height: type === 'confetti' ? 12 : 5,
-          borderRadius: type === 'confetti' ? 2 : '50%',
-          background: i % 2 ? '#fff' : accent,
-          opacity: 0.58,
-          animation: `${type === 'sparkles' || type === 'fireflies' ? 'clubInviteGlow' : 'clubInviteFloat'} ${2.4 + i * 0.2}s ease-in-out infinite`,
-          animationDelay: `${i * 0.14}s`,
-        }} />
-      ))}
+    <div style={{
+      borderRadius: 16, overflow: 'hidden', position: 'relative',
+      border, boxShadow, marginBottom: 16,
+    }}>
+      {/* Hero area */}
+      <div style={{ position: 'relative', minHeight: 180, ...heroBg }}>
+        <InviteMotion type={invite.bg_animation} accent={accent} />
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.72) 100%)' }} />
+
+        <div style={{ position: 'relative', padding: '18px 20px 16px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', minHeight: 180 }}>
+          {/* Top row */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+            <div style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              background: `${accent}33`, backdropFilter: 'blur(8px)',
+              border: `1px solid ${accent}55`, borderRadius: 999,
+              padding: '4px 12px', fontSize: '.68rem', fontWeight: 800,
+              color: '#fff', letterSpacing: '.06em', textTransform: 'uppercase',
+            }}>
+              🎉 Party Invite
+            </div>
+            <Link
+              to={`/p/${invite.token}`}
+              style={{
+                display: 'inline-flex', alignItems: 'center', gap: 5,
+                background: 'rgba(0,0,0,0.45)', backdropFilter: 'blur(8px)',
+                border: '1px solid rgba(255,255,255,0.18)', borderRadius: 999,
+                padding: '5px 14px', fontSize: '.75rem', fontWeight: 700,
+                color: '#fff', textDecoration: 'none',
+              }}
+            >
+              View full invite →
+            </Link>
+          </div>
+
+          {/* Bottom info */}
+          <div>
+            <h3 style={{ margin: '0 0 6px', color: '#fff', fontSize: '1.4rem', fontWeight: 900, lineHeight: 1.1, textShadow: '0 1px 8px rgba(0,0,0,0.5)' }}>
+              {invite.title}
+            </h3>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+              {invite.scheduled_date && (
+                <span style={{ fontSize: '.78rem', color: 'rgba(255,255,255,0.85)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  🗓 {formatDateShort(invite.scheduled_date)}
+                </span>
+              )}
+              {invite.location && (
+                <span style={{ fontSize: '.78rem', color: 'rgba(255,255,255,0.7)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  📍 {invite.location}
+                </span>
+              )}
+              {invite.host?.full_name && (
+                <span style={{ fontSize: '.78rem', color: 'rgba(255,255,255,0.6)' }}>
+                  by {invite.host.full_name}
+                </span>
+              )}
+              {invite.going_count > 0 && (
+                <span style={{
+                  fontSize: '.72rem', fontWeight: 700, color: accent,
+                  background: `${accent}22`, borderRadius: 999, padding: '2px 9px',
+                }}>
+                  {invite.going_count} going
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* RSVP row */}
+      <div style={{
+        display: 'flex', gap: 8, padding: '12px 16px',
+        background: style === 'minimal' ? 'var(--s2)' : style === 'neon' ? '#08080d' : 'rgba(10,10,14,0.88)',
+        backdropFilter: (style === 'glass' || style === 'frosted') ? 'blur(12px)' : 'none',
+      }}>
+        {done ? (
+          <p style={{ margin: 0, color: 'rgba(255,255,255,0.5)', fontSize: '.82rem', flex: 1, textAlign: 'center', paddingTop: 4 }}>
+            ✓ Response saved
+          </p>
+        ) : (
+          <>
+            {[
+              { status: 'going',     label: '✅ Going',      color: '#22d3a0' },
+              { status: 'maybe',     label: '🤔 Maybe',      color: '#f59e0b' },
+              { status: 'not_going', label: "❌ Can't go",   color: 'rgba(255,255,255,0.35)' },
+            ].map(({ status, label, color }) => (
+              <button
+                key={status}
+                disabled={!!responding}
+                onClick={() => rsvp(status)}
+                style={{
+                  flex: 1, padding: '9px 4px', borderRadius: 10,
+                  border: responding === status ? `1.5px solid ${accent}` : '1px solid rgba(255,255,255,0.1)',
+                  background: responding === status ? `${accent}22` : 'rgba(255,255,255,0.05)',
+                  color: responding === status ? '#fff' : color,
+                  fontWeight: 700, fontSize: '.78rem',
+                  cursor: responding ? 'default' : 'pointer',
+                  opacity: responding && responding !== status ? 0.4 : 1,
+                  transition: 'all 0.15s',
+                }}
+              >
+                {responding === status ? '…' : label}
+              </button>
+            ))}
+          </>
+        )}
+      </div>
     </div>
   )
 }
 
 function InviteCard({ invite, userId, onRsvp }) {
-  const [responding, setResponding] = useState(false)
+  const [responding, setResponding] = useState(null)
+  const [done, setDone] = useState(false)
   const accent = invite.accent_color || ACCENT_DEFAULTS[invite.activity_type] || '#f43f5e'
-  const style = invite.style || 'glass'
-  const isNeon = style === 'neon'
-  const isMinimal = style === 'minimal'
+  const style  = invite.style || 'glass'
+  const { border, boxShadow } = cardBorderStyle(style, accent)
+  const coverPos = invite.cover_image_position || '50% 50%'
 
   async function rsvp(status) {
-    setResponding(true)
+    setResponding(status)
     try {
       await eventsApi.rsvp(invite.event_id, userId, status)
-      onRsvp(invite.event_id)
+      setDone(true)
+      setTimeout(() => onRsvp(invite.event_id), 800)
     } catch {
-      setResponding(false)
+      setResponding(null)
     }
   }
 
+  const heroBg = invite.cover_image_url
+    ? { backgroundImage: `url(${invite.cover_image_url})`, backgroundSize: 'cover', backgroundPosition: coverPos }
+    : { background: `linear-gradient(135deg, ${accent}66 0%, #111827 100%)` }
+
   return (
     <div style={{
-      minWidth: 280, maxWidth: 320, flexShrink: 0,
-      background: isMinimal ? 'var(--s2)' : isNeon ? '#08080d' : 'rgba(255,255,255,0.06)',
-      borderRadius: 16,
-      border: isNeon ? `1.5px solid ${accent}` : isMinimal ? '1px solid var(--s3)' : `1.5px solid ${accent}44`,
-      boxShadow: isNeon ? `0 0 24px ${accent}44` : isMinimal ? 'none' : '0 12px 30px rgba(0,0,0,0.18)',
-      backdropFilter: style === 'glass' ? 'blur(12px)' : 'none',
-      overflow: 'hidden', scrollSnapAlign: 'start',
+      minWidth: 300, maxWidth: 340, flexShrink: 0, scrollSnapAlign: 'start',
+      borderRadius: 14, overflow: 'hidden', border, boxShadow,
     }}>
-      {/* Accent top strip */}
-      <div style={{ height: 4, background: accent }} />
+      <div style={{ position: 'relative', height: 110, ...heroBg }}>
+        <InviteMotion type={invite.bg_animation} accent={accent} />
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.05), rgba(0,0,0,0.65))' }} />
+        <div style={{ position: 'absolute', bottom: 10, left: 14, right: 14 }}>
+          <h3 style={{ margin: 0, color: '#fff', fontSize: '.95rem', fontWeight: 800, lineHeight: 1.2 }}>{invite.title}</h3>
+          {invite.scheduled_date && (
+            <p style={{ margin: '3px 0 0', color: 'rgba(255,255,255,0.7)', fontSize: '.72rem' }}>{formatDateShort(invite.scheduled_date)}</p>
+          )}
+        </div>
+        <div style={{ position: 'absolute', top: 10, right: 10 }}>
+          <span style={{ background: `${accent}33`, border: `1px solid ${accent}55`, borderRadius: 999, padding: '2px 8px', fontSize: '.62rem', fontWeight: 800, color: '#fff', textTransform: 'uppercase', letterSpacing: '.06em' }}>Invite</span>
+        </div>
+      </div>
 
-      {/* Cover or gradient */}
-      {invite.cover_image_url ? (
-        <div style={{
-          height: 100,
-          backgroundImage: `url(${invite.cover_image_url})`,
-          backgroundSize: 'cover', backgroundPosition: 'center',
-          position: 'relative',
+      <div style={{
+        padding: '10px 14px 12px',
+        background: style === 'minimal' ? 'var(--s2)' : style === 'neon' ? '#08080d' : 'rgba(10,10,14,0.85)',
+        backdropFilter: (style === 'glass' || style === 'frosted') ? 'blur(10px)' : 'none',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          <span style={{ fontSize: '.72rem', color: 'rgba(255,255,255,0.45)' }}>
+            {invite.host?.full_name ? `by ${invite.host.full_name}` : ''}
+          </span>
+          {invite.going_count > 0 && (
+            <span style={{ fontSize: '.68rem', fontWeight: 700, color: accent }}>{invite.going_count} going</span>
+          )}
+        </div>
+        {done ? (
+          <p style={{ margin: 0, color: 'rgba(255,255,255,0.45)', fontSize: '.78rem', textAlign: 'center', padding: '4px 0' }}>✓ Response saved</p>
+        ) : (
+          <div style={{ display: 'flex', gap: 6 }}>
+            {[
+              { status: 'going', label: '✅' },
+              { status: 'maybe', label: '🤔' },
+              { status: 'not_going', label: '❌' },
+            ].map(({ status, label }) => (
+              <button
+                key={status}
+                disabled={!!responding}
+                onClick={() => rsvp(status)}
+                style={{
+                  flex: 1, padding: '7px 4px', borderRadius: 8,
+                  border: responding === status ? `1.5px solid ${accent}` : '1px solid rgba(255,255,255,0.1)',
+                  background: responding === status ? `${accent}22` : 'rgba(255,255,255,0.04)',
+                  color: '#fff', fontSize: '.88rem', cursor: responding ? 'default' : 'pointer',
+                  opacity: responding && responding !== status ? 0.4 : 1, transition: 'all 0.12s',
+                }}
+              >
+                {responding === status ? '…' : label}
+              </button>
+            ))}
+          </div>
+        )}
+        <Link to={`/p/${invite.token}`} style={{
+          display: 'block', textAlign: 'center', marginTop: 8,
+          color: accent, fontSize: '.72rem', fontWeight: 700, textDecoration: 'none',
         }}>
-          <InviteMotion type={invite.bg_animation} accent={accent} />
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.1), rgba(0,0,0,0.6))' }} />
-        </div>
-      ) : (
-        <div style={{ height: 100, background: `linear-gradient(135deg, ${accent}66, #111827)`, position: 'relative', overflow: 'hidden' }}>
-          <InviteMotion type={invite.bg_animation} accent={accent} />
-        </div>
-      )}
-
-      <div style={{ padding: '14px 16px 16px' }}>
-        {/* Badge */}
-        <div style={{ display: 'inline-flex', alignItems: 'center', background: `${accent}22`, borderRadius: 6, padding: '2px 8px', marginBottom: 8 }}>
-          <span style={{ fontSize: '0.7rem', fontWeight: 700, color: accent, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Party Invite</span>
-        </div>
-
-        <h3 style={{ margin: '0 0 4px', color: 'var(--t1)', fontSize: '1rem', fontWeight: 700, lineHeight: 1.3 }}>
-          {invite.title}
-        </h3>
-
-        {invite.host?.full_name && (
-          <p style={{ margin: '0 0 8px', color: 'var(--t3)', fontSize: '0.78rem' }}>
-            by {invite.host.full_name}
-          </p>
-        )}
-
-        {invite.scheduled_date && (
-          <p style={{ margin: '0 0 4px', color: 'var(--t2)', fontSize: '0.82rem' }}>
-            {formatDateShort(invite.scheduled_date)}
-          </p>
-        )}
-
-        {invite.location && (
-          <p style={{ margin: 0, color: 'var(--t3)', fontSize: '0.78rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            {invite.location}
-          </p>
-        )}
-
-        <CapacityBar going={invite.going_count || 0} max={invite.max_attendees} accent={accent} />
-
-        {/* RSVP buttons */}
-        <div style={{ display: 'flex', gap: 6, marginTop: 14 }}>
-          {[
-            { status: 'going',     label: 'Going',  color: 'var(--green)' },
-            { status: 'maybe',     label: 'Maybe',  color: 'var(--amber)' },
-            { status: 'not_going', label: "Can't",  color: 'var(--t3)' },
-          ].map(({ status, label, color }) => (
-            <button
-              key={status}
-              disabled={responding}
-              onClick={() => rsvp(status)}
-              style={{
-                flex: 1, padding: '8px 4px', borderRadius: 8, border: `1px solid ${color}44`,
-                background: `${color}11`, color, fontWeight: 600, fontSize: '0.8rem',
-                cursor: responding ? 'not-allowed' : 'pointer', opacity: responding ? 0.6 : 1,
-                transition: 'opacity 0.15s',
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+          View full invite →
+        </Link>
       </div>
     </div>
   )
@@ -225,22 +260,23 @@ export default function PartyInviteCarousel({ invites, userId, onRsvp }) {
   if (!invites?.length) return null
 
   function handleScroll(e) {
-    const scrollLeft = e.target.scrollLeft
-    const cardWidth  = 300
-    setDotIndex(Math.round(scrollLeft / cardWidth))
+    setDotIndex(Math.round(e.target.scrollLeft / 312))
+  }
+
+  if (invites.length === 1) {
+    return (
+      <InviteBanner
+        invite={invites[0]}
+        userId={userId}
+        onRsvp={onRsvp}
+      />
+    )
   }
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <style>{`
-        @keyframes clubInviteFloat { from { transform: translateY(0) rotate(0deg); opacity: .2; } 50% { opacity: .85; } to { transform: translateY(-26px) rotate(18deg); opacity: .2; } }
-        @keyframes clubInviteWave { from { transform: translateX(-18%); } to { transform: translateX(18%); } }
-        @keyframes clubInviteGlow { 0%, 100% { opacity: .25; transform: scale(.85); } 50% { opacity: .9; transform: scale(1.15); } }
-        @keyframes clubInviteBurst { 0% { transform: scale(.2); opacity: 0; } 28% { opacity: .95; } 100% { transform: scale(1.85); opacity: 0; } }
-        @keyframes clubInviteSweep { from { transform: translateX(-50%) rotate(-12deg); opacity: .55; } to { transform: translateX(50%) rotate(12deg); opacity: .95; } }
-      `}</style>
-      <p style={{ margin: '0 0 10px', color: 'var(--t3)', fontSize: '0.78rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-        Pending Invites · {invites.length}
+      <p style={{ margin: '0 0 10px', color: 'var(--t3)', fontSize: '.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em' }}>
+        🎉 Party Invites · {invites.length}
       </p>
       <div
         onScroll={handleScroll}
@@ -250,12 +286,7 @@ export default function PartyInviteCarousel({ invites, userId, onRsvp }) {
         }}
       >
         {invites.map(inv => (
-          <InviteCard
-            key={inv.token}
-            invite={inv}
-            userId={userId}
-            onRsvp={onRsvp}
-          />
+          <InviteCard key={inv.token} invite={inv} userId={userId} onRsvp={onRsvp} />
         ))}
       </div>
       {invites.length > 1 && (

@@ -153,6 +153,7 @@ class PartyInviteCreate(BaseModel):
     bring_list_type: str = "freeform"
     style: str = "glass"
     cover_image_url: Optional[str] = None
+    cover_image_position: Optional[str] = None
     items: List[dict] = Field(default_factory=list)
 
 
@@ -162,6 +163,7 @@ class PartyInvitePatch(BaseModel):
     bg_animation: Optional[str] = None
     accent_color: Optional[str] = None
     cover_image_url: Optional[str] = None
+    cover_image_position: Optional[str] = None
     sticker_data: Optional[list] = None
     bring_list_enabled: Optional[bool] = None
     bring_list_type: Optional[str] = None
@@ -196,6 +198,7 @@ class GuestRsvpCreate(BaseModel):
     bring_note: Optional[str] = Field(None, max_length=500)
     claim_item_id: Optional[int] = None
     email_opt_in: bool = False
+    plus_ones: int = Field(0, ge=0, le=20)
 
 
 class GuestRsvpPatch(BaseModel):
@@ -203,6 +206,7 @@ class GuestRsvpPatch(BaseModel):
     bring_note: Optional[str] = Field(None, max_length=500)
     claim_item_id: Optional[int] = None
     edit_token: Optional[str] = None
+    plus_ones: Optional[int] = Field(None, ge=0, le=20)
 
 
 # ── Simple in-memory rate limiter ─────────────────────────────────────────────
@@ -332,7 +336,8 @@ async def get_pending_for_group(
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT pi.token, pi.accent_color, pi.style, pi.bg_animation, pi.cover_image_url,
+        SELECT pi.token, pi.accent_color, pi.style, pi.bg_animation,
+               pi.cover_image_url, pi.cover_image_position,
                pi.host_user_id, pi.event_id,
                e.title, e.scheduled_date, e.location, e.max_attendees,
                e.activity_type,
@@ -718,6 +723,7 @@ async def public_rsvp(token: str, body: GuestRsvpCreate, request: Request):
         bring_note=body.bring_note,
         claim_item_id=body.claim_item_id,
         email_opt_in=body.email_opt_in,
+        plus_ones=body.plus_ones,
     )
     if body.email_opt_in:
         upsert_email_notification(

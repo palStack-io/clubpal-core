@@ -17,10 +17,24 @@ const ACTIVITIES = [
 ]
 
 const STYLES = [
-  { value: 'glass', label: 'Glass', desc: 'Soft blur and translucent panels' },
-  { value: 'neon', label: 'Neon', desc: 'Darker card with glowing edges' },
+  { value: 'glass',   label: 'Glass',   desc: 'Soft blur, translucent panels' },
+  { value: 'frosted', label: 'Frosted', desc: 'Heavy blur, bright glass feel' },
+  { value: 'neon',    label: 'Neon',    desc: 'Dark card with glowing edges' },
+  { value: 'velvet',  label: 'Velvet',  desc: 'Rich dark with accent borders' },
+  { value: 'bold',    label: 'Bold',    desc: 'Accent-filled vivid panels' },
   { value: 'minimal', label: 'Minimal', desc: 'Flat, quiet, high contrast' },
 ]
+
+function previewCardStyle(style, accent) {
+  switch (style) {
+    case 'neon':    return { border: `1px solid ${accent}`, background: '#08080d', boxShadow: `0 0 34px ${accent}55`, backdropFilter: 'none' }
+    case 'minimal': return { border: '1px solid #1c1c24', background: '#101014', boxShadow: 'none', backdropFilter: 'none' }
+    case 'frosted': return { border: '1px solid rgba(255,255,255,0.22)', background: 'rgba(255,255,255,0.13)', boxShadow: '0 8px 40px rgba(0,0,0,0.5)', backdropFilter: 'blur(22px)' }
+    case 'velvet':  return { border: `2px solid ${accent}55`, background: 'rgba(14,8,22,0.94)', boxShadow: `0 4px 28px ${accent}22`, backdropFilter: 'none' }
+    case 'bold':    return { border: `1px solid ${accent}66`, background: `${accent}1a`, boxShadow: `0 8px 24px ${accent}22`, backdropFilter: 'none' }
+    default:        return { border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', boxShadow: '0 18px 50px rgba(0,0,0,0.22)', backdropFilter: 'blur(18px)' }
+  }
+}
 
 const ANIMATIONS = [
   { value: 'confetti', label: 'Confetti', desc: 'Little party flecks' },
@@ -118,6 +132,7 @@ export default function CreatePartyInvite() {
   })
   const [coverFile, setCoverFile] = useState(null)
   const [coverPreview, setCoverPreview] = useState('')
+  const [coverPosition, setCoverPosition] = useState('50% 50%')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [createdToken, setCreatedToken] = useState(null)
@@ -243,6 +258,7 @@ export default function CreatePartyInvite() {
         style: form.style,
         bg_animation: form.bg_animation,
         cover_image_url: coverUrl,
+        cover_image_position: coverPosition,
         bring_list_enabled: form.activity_type === 'dining' ? false : form.bring_list_enabled,
         bring_list_type: form.bring_list_type,
         items: form.items,
@@ -256,7 +272,10 @@ export default function CreatePartyInvite() {
           body: coverFile,
         })
         if (!uploadRes.ok) throw new Error(`Cover upload failed (${uploadRes.status})`)
-        await eventsApi.updatePartyInvite(invite.token, { cover_image_url: urlData.public_url })
+        await eventsApi.updatePartyInvite(invite.token, {
+          cover_image_url: urlData.public_url,
+          cover_image_position: coverPosition,
+        })
       }
 
       if (directInvitees.length > 0) {
@@ -381,22 +400,57 @@ export default function CreatePartyInvite() {
             <Section title="Banner">
               <input ref={coverRef} type="file" accept="image/*" onChange={handleCoverPick} style={{ display: 'none' }} />
               <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr)', gap: 12 }}>
-                <div onClick={() => coverRef.current?.click()} style={{
-                  minHeight: 190,
-                  borderRadius: 12,
-                  border: `1px dashed ${bannerSrc ? 'transparent' : 'var(--s3)'}`,
-                  background: bannerSrc ? `linear-gradient(180deg, rgba(0,0,0,0.12), rgba(0,0,0,0.46)), url(${bannerSrc}) center/cover` : 'var(--s3)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'flex-end',
-                  padding: 14,
-                  boxSizing: 'border-box',
-                  overflow: 'hidden',
-                }}>
-                  <span style={{ color: bannerSrc ? '#fff' : 'var(--t3)', fontSize: '0.88rem', fontWeight: 700 }}>
-                    {bannerSrc ? 'Change banner' : 'Upload banner'}
-                  </span>
-                </div>
+                {bannerSrc ? (
+                  /* ── Drag-to-reposition framer ── */
+                  <div>
+                    <div
+                      style={{ position: 'relative', height: 210, borderRadius: 12, overflow: 'hidden', cursor: 'crosshair', userSelect: 'none' }}
+                      onClick={e => {
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const x = Math.round(((e.clientX - rect.left) / rect.width) * 100)
+                        const y = Math.round(((e.clientY - rect.top) / rect.height) * 100)
+                        setCoverPosition(`${x}% ${y}%`)
+                      }}
+                      onMouseMove={e => {
+                        if (e.buttons !== 1) return
+                        const rect = e.currentTarget.getBoundingClientRect()
+                        const x = Math.round(((e.clientX - rect.left) / rect.width) * 100)
+                        const y = Math.round(((e.clientY - rect.top) / rect.height) * 100)
+                        setCoverPosition(`${x}% ${y}%`)
+                      }}
+                    >
+                      <img
+                        src={bannerSrc}
+                        alt=""
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: coverPosition, display: 'block', pointerEvents: 'none' }}
+                        draggable={false}
+                      />
+                      {/* Crosshair */}
+                      {(() => {
+                        const [xPct, yPct] = coverPosition.split(' ').map(s => parseFloat(s))
+                        return (
+                          <div style={{ position: 'absolute', left: `${xPct}%`, top: `${yPct}%`, transform: 'translate(-50%,-50%)', pointerEvents: 'none' }}>
+                            <div style={{ width: 24, height: 24, borderRadius: '50%', border: '2px solid #fff', boxShadow: '0 0 0 1px rgba(0,0,0,0.5), 0 2px 8px rgba(0,0,0,0.6)', background: 'rgba(255,255,255,0.18)' }} />
+                          </div>
+                        )
+                      })()}
+                      {/* Label overlay */}
+                      <div style={{ position: 'absolute', bottom: 10, left: 0, right: 0, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+                        <span style={{ background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(6px)', color: '#fff', fontSize: '0.72rem', fontWeight: 700, padding: '4px 12px', borderRadius: 999, letterSpacing: '0.05em' }}>
+                          Click or drag to set focal point
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div onClick={() => coverRef.current?.click()} style={{
+                    minHeight: 190, borderRadius: 12, border: '1px dashed var(--s3)', background: 'var(--s3)',
+                    cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  }}>
+                    <span style={{ fontSize: '1.8rem' }}>🖼️</span>
+                    <span style={{ color: 'var(--t3)', fontSize: '0.88rem', fontWeight: 700 }}>Upload banner photo</span>
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
                   <div style={{ flex: '1 1 260px' }}>
                     <Field label="Use image URL instead">
@@ -404,11 +458,13 @@ export default function CreatePartyInvite() {
                     </Field>
                   </div>
                   <button type="button" onClick={() => coverRef.current?.click()} style={{ padding: '12px 14px', borderRadius: 10, border: 'none', background: form.accent_color, color: '#fff', fontWeight: 800, cursor: 'pointer' }}>
-                    Choose file
+                    {bannerSrc ? 'Change' : 'Choose file'}
                   </button>
-                  <button type="button" onClick={clearCover} style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid var(--s3)', background: 'transparent', color: 'var(--t2)', cursor: 'pointer' }}>
-                    Clear
-                  </button>
+                  {bannerSrc && (
+                    <button type="button" onClick={clearCover} style={{ padding: '12px 14px', borderRadius: 10, border: '1px solid var(--s3)', background: 'transparent', color: 'var(--t2)', cursor: 'pointer' }}>
+                      Clear
+                    </button>
+                  )}
                 </div>
               </div>
             </Section>
@@ -669,16 +725,13 @@ export default function CreatePartyInvite() {
             <div style={{
               borderRadius: 18,
               overflow: 'hidden',
-              border: form.style === 'neon' ? `1px solid ${form.accent_color}` : form.style === 'minimal' ? '1px solid #252530' : '1px solid rgba(255,255,255,0.12)',
-              background: form.style === 'minimal' ? '#101014' : form.style === 'neon' ? '#08080d' : 'rgba(255,255,255,0.06)',
-              boxShadow: form.style === 'neon' ? `0 0 34px ${form.accent_color}55` : form.style === 'minimal' ? 'none' : '0 18px 50px rgba(0,0,0,0.22)',
-              backdropFilter: form.style === 'glass' ? 'blur(18px)' : 'none',
+              ...previewCardStyle(form.style, form.accent_color),
             }}>
               <div style={{
                 position: 'relative',
                 minHeight: 230,
                 background: bannerSrc
-                  ? `linear-gradient(180deg, rgba(0,0,0,0.05), rgba(0,0,0,0.72)), url(${bannerSrc}) center/cover`
+                  ? `linear-gradient(180deg, rgba(0,0,0,0.05), rgba(0,0,0,0.72)), url(${bannerSrc}) ${coverPosition}/cover`
                   : `linear-gradient(135deg, ${form.accent_color}, #111827)`,
                 padding: 20,
                 display: 'flex',

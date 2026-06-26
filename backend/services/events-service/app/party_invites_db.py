@@ -56,6 +56,8 @@ def init_party_invite_tables():
             rsvp_status        VARCHAR(20) DEFAULT 'going',
             bring_note         TEXT,
             claim_item_id      INTEGER REFERENCES party_invite_items(id) ON DELETE SET NULL,
+            email_opt_in       BOOLEAN DEFAULT FALSE,
+            email_opt_in_at    TIMESTAMPTZ,
             account_nudge_sent BOOLEAN DEFAULT FALSE,
             created_at         TIMESTAMPTZ DEFAULT NOW()
         )
@@ -85,6 +87,12 @@ def init_party_invite_tables():
     cursor.execute(
         "ALTER TABLE party_invites ADD COLUMN IF NOT EXISTS style VARCHAR(20) DEFAULT 'glass'"
     )
+    cursor.execute(
+        "ALTER TABLE party_invite_guests ADD COLUMN IF NOT EXISTS email_opt_in BOOLEAN DEFAULT FALSE"
+    )
+    cursor.execute(
+        "ALTER TABLE party_invite_guests ADD COLUMN IF NOT EXISTS email_opt_in_at TIMESTAMPTZ"
+    )
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS party_invite_members (
@@ -99,12 +107,35 @@ def init_party_invite_tables():
         )
     """)
 
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS party_invite_email_notifications (
+            id               SERIAL PRIMARY KEY,
+            party_invite_id  INTEGER NOT NULL REFERENCES party_invites(id) ON DELETE CASCADE,
+            guest_id         INTEGER REFERENCES party_invite_guests(id) ON DELETE SET NULL,
+            user_id          INTEGER,
+            email            VARCHAR(255) NOT NULL,
+            notification_type VARCHAR(50) NOT NULL DEFAULT 'invite',
+            status           VARCHAR(20) NOT NULL DEFAULT 'pending',
+            sent_at          TIMESTAMPTZ,
+            last_error       TEXT,
+            created_at       TIMESTAMPTZ DEFAULT NOW(),
+            updated_at       TIMESTAMPTZ DEFAULT NOW(),
+            UNIQUE(party_invite_id, email, notification_type)
+        )
+    """)
+
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_pi_token ON party_invites(token)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_pi_event ON party_invites(event_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_pig_invite ON party_invite_groups(party_invite_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_piguests_invite ON party_invite_guests(party_invite_id)")
     cursor.execute(
         "CREATE INDEX IF NOT EXISTS idx_pim_invite ON party_invite_members(party_invite_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pi_email_notifications_invite ON party_invite_email_notifications(party_invite_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_pi_email_notifications_status ON party_invite_email_notifications(status, notification_type)"
     )
 
     conn.commit()
@@ -200,7 +231,7 @@ def get_invite_groups(party_invite_id: int) -> list:
 
 def create_guest_rsvp(party_invite_id: int, name: str, email: str,
                       status: str = "going", bring_note: str = None,
-                      claim_item_id: int = None) -> dict:
+                      claim_item_id: int = None, email_opt_in: bool = False) -> dict:
     conn = get_db()
     cursor = conn.cursor()
     # Upsert: if same email already RSVPd, return existing record
@@ -210,14 +241,36 @@ def create_guest_rsvp(party_invite_id: int, name: str, email: str,
     )
     existing = cursor.fetchone()
     if existing:
+        cursor.execute("""
+            UPDATE party_invite_guests
+            SET name = %s,
+                rsvp_status = %s,
+                bring_note = %s,
+                claim_item_id = %s,
+                email_opt_in = party_invite_guests.email_opt_in OR %s,
+                email_opt_in_at = CASE
+                    WHEN %s AND party_invite_guests.email_opt_in_at IS NULL THEN NOW()
+                    ELSE party_invite_guests.email_opt_in_at
+                END
+            WHERE id = %s
+            RETURNING *
+        """, (
+            name.strip(), status, bring_note, claim_item_id,
+            bool(email_opt_in), bool(email_opt_in), existing["id"],
+        ))
+        updated = dict(cursor.fetchone())
+        conn.commit()
         conn.close()
-        return dict(existing)
+        return updated
     cursor.execute("""
         INSERT INTO party_invite_guests
-            (party_invite_id, name, email, rsvp_status, bring_note, claim_item_id)
-        VALUES (%s, %s, %s, %s, %s, %s)
+            (party_invite_id, name, email, rsvp_status, bring_note, claim_item_id, email_opt_in, email_opt_in_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, CASE WHEN %s THEN NOW() ELSE NULL END)
         RETURNING *
-    """, (party_invite_id, name.strip(), email.strip().lower(), status, bring_note, claim_item_id))
+    """, (
+        party_invite_id, name.strip(), email.strip().lower(), status, bring_note,
+        claim_item_id, bool(email_opt_in), bool(email_opt_in),
+    ))
     row = dict(cursor.fetchone())
     conn.commit()
     conn.close()
@@ -254,6 +307,71 @@ def get_all_guests(party_invite_id: int) -> list:
     cursor = conn.cursor()
     cursor.execute(
         "SELECT * FROM party_invite_guests WHERE party_invite_id = %s ORDER BY created_at ASC",
+        (party_invite_id,)
+    )
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    return rows
+
+
+def guest_has_rsvpd(party_invite_id: int, guest_id: int) -> bool:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT id FROM party_invite_guests WHERE id = %s AND party_invite_id = %s",
+        (guest_id, party_invite_id)
+    )
+    row = cursor.fetchone()
+    conn.close()
+    return bool(row)
+
+
+def upsert_email_notification(
+    party_invite_id: int,
+    email: str,
+    notification_type: str = "invite",
+    status: str = "pending",
+    guest_id: int = None,
+    user_id: int = None,
+    last_error: str = None,
+) -> dict:
+    conn = get_db()
+    cursor = conn.cursor()
+    sent_at_expr = "NOW()" if status == "sent" else "NULL"
+    cursor.execute(f"""
+        INSERT INTO party_invite_email_notifications
+            (party_invite_id, guest_id, user_id, email, notification_type, status, sent_at, last_error)
+        VALUES (%s, %s, %s, %s, %s, %s, {sent_at_expr}, %s)
+        ON CONFLICT (party_invite_id, email, notification_type) DO UPDATE
+            SET guest_id = COALESCE(EXCLUDED.guest_id, party_invite_email_notifications.guest_id),
+                user_id = COALESCE(EXCLUDED.user_id, party_invite_email_notifications.user_id),
+                status = EXCLUDED.status,
+                sent_at = CASE WHEN EXCLUDED.status = 'sent' THEN NOW() ELSE party_invite_email_notifications.sent_at END,
+                last_error = EXCLUDED.last_error,
+                updated_at = NOW()
+        RETURNING *
+    """, (
+        party_invite_id,
+        guest_id,
+        user_id,
+        email.strip().lower(),
+        notification_type,
+        status,
+        last_error,
+    ))
+    row = dict(cursor.fetchone())
+    conn.commit()
+    conn.close()
+    return row
+
+
+def get_email_notifications(party_invite_id: int) -> list:
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute(
+        """SELECT * FROM party_invite_email_notifications
+           WHERE party_invite_id = %s
+           ORDER BY created_at ASC""",
         (party_invite_id,)
     )
     rows = [dict(r) for r in cursor.fetchall()]

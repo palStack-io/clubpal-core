@@ -14,6 +14,7 @@ export default function RsvpBlock({ token, accentColor = '#f43f5e', onRsvpd }) {
   const [name, setName]           = useState('')
   const [email, setEmail]         = useState('')
   const [bringNote, setBringNote] = useState('')
+  const [emailOptIn, setEmailOptIn] = useState(false)
   const [loading, setLoading]     = useState(false)
   const [done, setDone]           = useState(false)
   const [error, setError]         = useState('')
@@ -29,7 +30,14 @@ export default function RsvpBlock({ token, accentColor = '#f43f5e', onRsvpd }) {
         email: email.trim(),
         status,
         bring_note: bringNote || undefined,
+        email_opt_in: emailOptIn,
       })
+      try {
+        window.localStorage.setItem(`partyInviteRsvp:${token}`, JSON.stringify({
+          guest_id: res.data.guest_id,
+          edit_token: res.data.edit_token,
+        }))
+      } catch {}
       setDone(true)
       onRsvpd && onRsvpd(res.data)
     } catch (err) {
@@ -90,6 +98,29 @@ export default function RsvpBlock({ token, accentColor = '#f43f5e', onRsvpd }) {
         onChange={e => setBringNote(e.target.value)}
         style={{ padding: '10px 14px', borderRadius: 10, border: '1px solid var(--t4)', background: 'var(--s2)', color: 'var(--t1)', fontSize: '0.95rem' }}
       />
+      <label style={{
+        display: 'flex',
+        gap: 10,
+        alignItems: 'flex-start',
+        padding: '10px 12px',
+        borderRadius: 10,
+        border: '1px solid var(--t4)',
+        background: 'rgba(255,255,255,0.03)',
+        color: 'var(--t2)',
+        fontSize: '0.82rem',
+        lineHeight: 1.4,
+        cursor: 'pointer',
+      }}>
+        <input
+          type="checkbox"
+          checked={emailOptIn}
+          onChange={e => setEmailOptIn(e.target.checked)}
+          style={{ marginTop: 2, accentColor }}
+        />
+        <span>
+          Send me ClubPal emails about this party, like updates, reminders, or changes from the host.
+        </span>
+      </label>
       {error && <p style={{ color: 'var(--rose)', fontSize: '0.85rem', margin: 0 }}>{error}</p>}
       <button
         type="submit"

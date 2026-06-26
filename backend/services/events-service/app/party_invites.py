@@ -12,6 +12,7 @@ from collections import defaultdict
 from typing import Optional, List
 
 from fastapi import APIRouter, HTTPException, Header, Depends, Request
+from fastapi import Query
 from pydantic import BaseModel, Field
 
 from app import storage
@@ -20,6 +21,7 @@ from app.party_invites_db import (
     create_party_invite, get_party_invite_by_token, get_party_invite_by_event_id,
     update_party_invite, add_group_to_invite, get_invite_groups,
     create_guest_rsvp, get_guest_rsvp, update_guest_rsvp, get_all_guests,
+    guest_has_rsvpd, upsert_email_notification, get_email_notifications,
     create_invite_item, delete_invite_item, get_invite_items,
     claim_item, increment_view_count,
     add_member_invite, get_member_invites,
@@ -193,6 +195,7 @@ class GuestRsvpCreate(BaseModel):
     status: str = Field("going", pattern="^(going|maybe|not_going)$")
     bring_note: Optional[str] = Field(None, max_length=500)
     claim_item_id: Optional[int] = None
+    email_opt_in: bool = False
 
 
 class GuestRsvpPatch(BaseModel):
@@ -388,6 +391,7 @@ async def get_manage_view(
         **invite,
         "groups": get_invite_groups(invite["id"]),
         "guests": get_all_guests(invite["id"]),
+        "email_notifications": get_email_notifications(invite["id"]),
         "items": get_invite_items(invite["id"]),
     }
 
@@ -504,6 +508,13 @@ async def invite_users(
                 if not email:
                     continue
                 add_member_invite(invite["id"], email=email, user_id=uid)
+                upsert_email_notification(
+                    invite["id"],
+                    email=email,
+                    user_id=uid,
+                    notification_type="invite",
+                    status="pending",
+                )
                 _add_pending_attendees(invite["event_id"], [{"user_id": uid}])
                 await client.post(
                     f"{GATEWAY_URL}/internal/notify/push",
@@ -539,6 +550,13 @@ async def invite_users(
                     profile = {}
                 matched_user_id = profile.get("id")
                 add_member_invite(invite["id"], email=email, user_id=matched_user_id)
+                upsert_email_notification(
+                    invite["id"],
+                    email=email,
+                    user_id=matched_user_id,
+                    notification_type="invite",
+                    status="pending",
+                )
                 if matched_user_id:
                     _add_pending_attendees(invite["event_id"], [{"user_id": matched_user_id}])
                     await client.post(
@@ -552,7 +570,7 @@ async def invite_users(
                         },
                         headers={"x-internal-secret": internal},
                     )
-                await client.post(
+                email_result = await client.post(
                     f"{GATEWAY_URL}/internal/notify/party-invite-email",
                     json={
                         "to_email": email,
@@ -565,8 +583,23 @@ async def invite_users(
                     },
                     headers={"x-internal-secret": internal},
                 )
+                upsert_email_notification(
+                    invite["id"],
+                    email=email,
+                    user_id=matched_user_id,
+                    notification_type="invite",
+                    status="sent" if email_result.status_code < 400 else "failed",
+                    last_error=None if email_result.status_code < 400 else email_result.text[:500],
+                )
                 added.append({"type": "email", "email": email, "user_id": matched_user_id})
             except Exception:
+                upsert_email_notification(
+                    invite["id"],
+                    email=email,
+                    notification_type="invite",
+                    status="failed",
+                    last_error="Failed to send invite email",
+                )
                 pass
 
     return {"added": added}
@@ -684,7 +717,16 @@ async def public_rsvp(token: str, body: GuestRsvpCreate, request: Request):
         status=body.status,
         bring_note=body.bring_note,
         claim_item_id=body.claim_item_id,
+        email_opt_in=body.email_opt_in,
     )
+    if body.email_opt_in:
+        upsert_email_notification(
+            invite["id"],
+            email=body.email,
+            notification_type="event_updates",
+            status="pending",
+            guest_id=guest["id"],
+        )
 
     # Notify host via push
     event = get_event(invite["event_id"])
@@ -728,10 +770,20 @@ async def update_public_rsvp(token: str, guest_id: int, body: GuestRsvpPatch):
 
 
 @public_router.get("/{token}/guests")
-async def get_public_guests(token: str):
+async def get_public_guests(
+    token: str,
+    guest_id: Optional[int] = Query(None),
+    edit_token: Optional[str] = Query(None),
+):
     invite = get_party_invite_by_token(token)
     if not invite:
         raise HTTPException(status_code=404, detail="Invite not found")
+    if not guest_id or not edit_token:
+        raise HTTPException(status_code=403, detail="RSVP first to see who else is going")
+    if not guest_has_rsvpd(invite["id"], guest_id) or not hmac.compare_digest(
+        edit_token, _guest_edit_token(guest_id, token)
+    ):
+        raise HTTPException(status_code=403, detail="Invalid RSVP access")
 
     groups    = get_invite_groups(invite["id"])
     guests_raw = get_all_guests(invite["id"])

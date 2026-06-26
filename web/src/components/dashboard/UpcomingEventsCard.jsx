@@ -56,9 +56,23 @@ export default function UpcomingEventsCard({ events = [], loading = false, onNew
 
   return (
     <Card>
-      <Card.Header
-        title="Upcoming Events"
-        action={
+      <div style={{
+        padding: '12px 16px 10px',
+        borderBottom: '1px solid var(--card-border)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+      }}>
+        <span style={{
+          flex: 1,
+          fontSize: 'var(--text-base)',
+          fontWeight: 700,
+          color: 'var(--t1)',
+          letterSpacing: '-0.2px',
+        }}>
+          Upcoming Events
+        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
           <button
             onClick={() => navigate('/events')}
             style={{
@@ -68,11 +82,11 @@ export default function UpcomingEventsCard({ events = [], loading = false, onNew
           >
             View all →
           </button>
-        }
-      />
+        </div>
+      </div>
       {/* Filter pills — own row below header */}
       <div style={{
-        display: 'flex', gap: '4px', padding: '0 16px 8px',
+        display: 'flex', gap: '4px', padding: '10px 16px 8px',
         overflowX: 'auto', scrollbarWidth: 'none',
       }}>
         {PILLS.map(p => (

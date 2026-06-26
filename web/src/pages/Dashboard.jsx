@@ -250,48 +250,48 @@ export default function Dashboard() {
       <div className="cp-dashboard-content">
         <div className="cp-dashboard-grid">
 
-          {/* Left column */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {/* 1. Pick CTA — your turn banner or static placeholder */}
-            <div id="tour-turn">
-              {!loading && activeTurn ? (
-                <PickCTACard
-                  turn={activeTurn}
-                  groupId={primaryGroupId}
-                  onSkip={async () => { await groupsApi.skipRotation(primaryGroupId); await load() }}
-                  onAlreadyPicked={async () => { await groupsApi.completeTurn(primaryGroupId); await load() }}
-                />
-              ) : !loading && (
+          {/* 1. Pick CTA — your turn banner or static placeholder */}
+          <div id="tour-turn" className="cp-dashboard-primary-top">
+            {!loading && activeTurn ? (
+              <PickCTACard
+                turn={activeTurn}
+                groupId={primaryGroupId}
+                onSkip={async () => { await groupsApi.skipRotation(primaryGroupId); await load() }}
+                onAlreadyPicked={async () => { await groupsApi.completeTurn(primaryGroupId); await load() }}
+              />
+            ) : !loading && (
+              <div style={{
+                borderRadius: '16px',
+                border: '1px solid var(--glass)',
+                background: 'var(--s2)',
+                padding: '16px 18px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '14px',
+                opacity: 0.6,
+              }}>
                 <div style={{
-                  borderRadius: '16px',
-                  border: '1px solid var(--glass)',
-                  background: 'var(--s2)',
-                  padding: '16px 18px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '14px',
-                  opacity: 0.6,
+                  width: '48px', height: '48px', borderRadius: '14px', flexShrink: 0,
+                  background: 'var(--s3)', border: '1px solid var(--glass)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '22px',
                 }}>
-                  <div style={{
-                    width: '48px', height: '48px', borderRadius: '14px', flexShrink: 0,
-                    background: 'var(--s3)', border: '1px solid var(--glass)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '22px',
-                  }}>
-                    🔄
+                  🔄
+                </div>
+                <div>
+                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: '3px' }}>
+                    Rotation
                   </div>
-                  <div>
-                    <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: '3px' }}>
-                      Rotation
-                    </div>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--t2)' }}>
-                      When it's your turn to pick, it'll show here
-                    </div>
+                  <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--t2)' }}>
+                    When it's your turn to pick, it'll show here
                   </div>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+          </div>
 
+          {/* Left column */}
+          <div className="cp-dashboard-primary-stack">
             {/* 2. RSVP needed */}
             {pendingPartyInvites.length > 0 && (
               <PartyInviteCarousel
@@ -322,7 +322,7 @@ export default function Dashboard() {
           </div>
 
           {/* Right column */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div className="cp-dashboard-side-stack">
             <div id="tour-queue">
               <TurnQueueCard
                 groups={groups}

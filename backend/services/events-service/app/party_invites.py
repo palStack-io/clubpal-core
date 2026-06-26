@@ -31,7 +31,7 @@ GROUPS_SERVICE_URL = "http://groups-service:8002"
 GATEWAY_URL        = "http://api-gateway:8001"
 
 _ACTIVITY_DEFAULTS = {
-    "dining":  {"variant": "warm",      "bg_animation": "fireflies", "accent_color": "#f59e0b"},
+    "dining":  {"variant": "warm",      "bg_animation": "fireworks", "accent_color": "#f59e0b"},
     "hiking":  {"variant": "outdoor",   "bg_animation": "waves",     "accent_color": "#22d3a0"},
     "gaming":  {"variant": "neon",      "bg_animation": "sparkles",  "accent_color": "#a855f7"},
     "movies":  {"variant": "cinematic", "bg_animation": "none",      "accent_color": "#6366f1"},

@@ -25,8 +25,9 @@ const STYLES = [
 const ANIMATIONS = [
   { value: 'confetti', label: 'Confetti', desc: 'Little party flecks' },
   { value: 'sparkles', label: 'Sparkles', desc: 'Glints over the banner' },
-  { value: 'fireflies', label: 'Fireflies', desc: 'Soft floating lights' },
-  { value: 'waves', label: 'Waves', desc: 'Slow ambient motion' },
+  { value: 'fireworks', label: 'Fireworks', desc: 'Radial bursts and pops' },
+  { value: 'aurora', label: 'Aurora', desc: 'Bright animated color ribbons' },
+  { value: 'spotlight', label: 'Spotlight', desc: 'Bold stage-light sweep' },
   { value: 'none', label: 'None', desc: 'Still and simple' },
 ]
 
@@ -280,9 +281,12 @@ export default function CreatePartyInvite() {
         <div style={{ maxWidth: 760, margin: '0 auto', padding: '32px 16px' }}>
           <div style={{ background: 'var(--s2)', border: '1px solid var(--s3)', borderRadius: 16, padding: 24 }}>
             <p style={{ margin: '0 0 8px', color: form.accent_color, fontWeight: 800, fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-              Invite live
+              Public invite live
             </p>
             <h1 style={{ margin: '0 0 16px', color: 'var(--t1)', fontSize: '1.7rem' }}>{form.title}</h1>
+            <p style={{ margin: '0 0 14px', color: 'var(--t3)', fontSize: '0.92rem', lineHeight: 1.5 }}>
+              This public link is ready to share. Selected clubs and direct invitees will see the same banner and invite styling on their dashboards and club pages.
+            </p>
             <div style={{ padding: 14, borderRadius: 12, background: 'var(--s3)', border: '1px solid var(--glass)', marginBottom: 16 }}>
               <code style={{ color: 'var(--t1)', fontSize: '0.9rem', wordBreak: 'break-all' }}>{shareUrl}</code>
             </div>
@@ -294,7 +298,7 @@ export default function CreatePartyInvite() {
                 Manage invite
               </button>
               <button type="button" onClick={() => window.open(`/p/${createdToken}`, '_blank')} style={{ padding: '12px 16px', borderRadius: 10, border: '1px solid var(--s3)', background: 'transparent', color: 'var(--t2)', cursor: 'pointer' }}>
-                Preview
+                Open public link
               </button>
             </div>
           </div>
@@ -309,6 +313,8 @@ export default function CreatePartyInvite() {
         @keyframes inviteFloat { from { transform: translateY(0) rotate(0deg); opacity: .25; } 50% { opacity: .85; } to { transform: translateY(-36px) rotate(18deg); opacity: .25; } }
         @keyframes inviteWave { from { transform: translateX(-18%); } to { transform: translateX(18%); } }
         @keyframes inviteGlow { 0%, 100% { opacity: .35; transform: scale(.9); } 50% { opacity: .9; transform: scale(1.08); } }
+        @keyframes inviteBurst { 0% { transform: scale(.2); opacity: 0; } 28% { opacity: .95; } 100% { transform: scale(1.9); opacity: 0; } }
+        @keyframes inviteSweep { from { transform: translateX(-50%) rotate(-12deg); opacity: .55; } to { transform: translateX(50%) rotate(12deg); opacity: .95; } }
         .cp-party-native-input::-webkit-calendar-picker-indicator {
           filter: invert(1) brightness(1.45);
           opacity: 0.9;
@@ -683,6 +689,32 @@ export default function CreatePartyInvite() {
                   <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
                     {form.bg_animation === 'waves' ? (
                       <div style={{ position: 'absolute', left: '-20%', right: '-20%', bottom: 28, height: 90, borderRadius: '50%', background: `radial-gradient(ellipse, ${form.accent_color}55, transparent 65%)`, animation: 'inviteWave 5s ease-in-out infinite alternate' }} />
+                    ) : form.bg_animation === 'aurora' ? (
+                      <>
+                        <div style={{ position: 'absolute', inset: '-30%', background: `linear-gradient(115deg, transparent 4%, ${form.accent_color}aa 28%, rgba(255,255,255,0.42) 45%, #14b8a699 62%, transparent 86%)`, filter: 'blur(10px)', mixBlendMode: 'screen', animation: 'inviteSweep 4.6s ease-in-out infinite alternate' }} />
+                        <div style={{ position: 'absolute', inset: '-18%', background: `linear-gradient(65deg, transparent 15%, #6366f188 42%, ${form.accent_color}77 58%, transparent 82%)`, filter: 'blur(18px)', mixBlendMode: 'screen', animation: 'inviteSweep 6.2s ease-in-out infinite alternate-reverse' }} />
+                      </>
+                    ) : form.bg_animation === 'spotlight' ? (
+                      <>
+                        <div style={{ position: 'absolute', inset: '-30%', background: 'linear-gradient(105deg, transparent 22%, rgba(255,255,255,0.64) 48%, transparent 72%)', filter: 'blur(4px)', mixBlendMode: 'screen', animation: 'inviteSweep 3.4s ease-in-out infinite alternate' }} />
+                        <div style={{ position: 'absolute', inset: '-20%', background: `radial-gradient(circle at 50% 50%, ${form.accent_color}66, transparent 46%)`, filter: 'blur(10px)', opacity: 0.9 }} />
+                      </>
+                    ) : form.bg_animation === 'fireworks' ? (
+                      [0, 1, 2, 3].map(i => (
+                        <span key={i} style={{
+                          position: 'absolute',
+                          left: `${18 + i * 19}%`,
+                          top: `${18 + (i % 2) * 30}%`,
+                          width: 42,
+                          height: 42,
+                          borderRadius: '50%',
+                          border: `2px solid ${i % 2 ? '#fff' : form.accent_color}`,
+                          boxShadow: `0 0 16px ${form.accent_color}88, inset 0 0 12px ${form.accent_color}55`,
+                          opacity: 0,
+                          animation: `inviteBurst ${1.8 + i * 0.18}s ease-out infinite`,
+                          animationDelay: `${i * 0.32}s`,
+                        }} />
+                      ))
                     ) : [0, 1, 2, 3, 4, 5, 6].map(i => (
                       <span key={i} style={{
                         position: 'absolute',

@@ -39,6 +39,62 @@ function InviteMotion({ type, accent }) {
       </div>
     )
   }
+  if (type === 'aurora' || type === 'spotlight') {
+    return (
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+        <div style={{
+          position: 'absolute',
+          inset: '-25%',
+          background: type === 'aurora'
+            ? `linear-gradient(115deg, transparent 4%, ${accent}aa 28%, rgba(255,255,255,0.42) 45%, #14b8a699 62%, transparent 88%)`
+            : 'linear-gradient(105deg, transparent 22%, rgba(255,255,255,0.66) 48%, transparent 72%)',
+          filter: type === 'aurora' ? 'blur(9px)' : 'blur(4px)',
+          mixBlendMode: 'screen',
+          animation: 'clubInviteSweep 4s ease-in-out infinite alternate',
+        }} />
+        {type === 'aurora' && (
+          <div style={{
+            position: 'absolute',
+            inset: '-18%',
+            background: `linear-gradient(65deg, transparent 15%, #6366f188 42%, ${accent}77 58%, transparent 82%)`,
+            filter: 'blur(16px)',
+            mixBlendMode: 'screen',
+            animation: 'clubInviteSweep 5.6s ease-in-out infinite alternate-reverse',
+          }} />
+        )}
+        {type === 'spotlight' && (
+          <div style={{
+            position: 'absolute',
+            inset: '-16%',
+            background: `radial-gradient(circle at 50% 50%, ${accent}66, transparent 46%)`,
+            filter: 'blur(9px)',
+            opacity: 0.9,
+        }} />
+        )}
+      </div>
+    )
+  }
+  if (type === 'fireworks') {
+    return (
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+        {Array.from({ length: 5 }).map((_, i) => (
+          <span key={i} style={{
+            position: 'absolute',
+            left: `${12 + i * 17}%`,
+            top: `${12 + (i % 3) * 20}%`,
+            width: 30,
+            height: 30,
+            borderRadius: '50%',
+            border: `2px solid ${i % 2 ? '#fff' : accent}`,
+            boxShadow: `0 0 14px ${accent}88, inset 0 0 10px ${accent}55`,
+            opacity: 0,
+            animation: `clubInviteBurst ${1.7 + i * 0.14}s ease-out infinite`,
+            animationDelay: `${i * 0.22}s`,
+          }} />
+        ))}
+      </div>
+    )
+  }
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
       {Array.from({ length: 7 }).map((_, i) => (
@@ -180,6 +236,8 @@ export default function PartyInviteCarousel({ invites, userId, onRsvp }) {
         @keyframes clubInviteFloat { from { transform: translateY(0) rotate(0deg); opacity: .2; } 50% { opacity: .85; } to { transform: translateY(-26px) rotate(18deg); opacity: .2; } }
         @keyframes clubInviteWave { from { transform: translateX(-18%); } to { transform: translateX(18%); } }
         @keyframes clubInviteGlow { 0%, 100% { opacity: .25; transform: scale(.85); } 50% { opacity: .9; transform: scale(1.15); } }
+        @keyframes clubInviteBurst { 0% { transform: scale(.2); opacity: 0; } 28% { opacity: .95; } 100% { transform: scale(1.85); opacity: 0; } }
+        @keyframes clubInviteSweep { from { transform: translateX(-50%) rotate(-12deg); opacity: .55; } to { transform: translateX(50%) rotate(12deg); opacity: .95; } }
       `}</style>
       <p style={{ margin: '0 0 10px', color: 'var(--t3)', fontSize: '0.78rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         Pending Invites · {invites.length}

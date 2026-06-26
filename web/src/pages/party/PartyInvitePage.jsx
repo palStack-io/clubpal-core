@@ -66,6 +66,62 @@ function InviteMotion({ type, accent }) {
       </div>
     )
   }
+  if (type === 'aurora' || type === 'spotlight') {
+    return (
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+        <div style={{
+          position: 'absolute',
+          inset: '-22%',
+          background: type === 'aurora'
+            ? `linear-gradient(115deg, transparent 4%, ${accent}aa 28%, rgba(255,255,255,0.42) 45%, #14b8a699 62%, transparent 88%)`
+            : 'linear-gradient(105deg, transparent 22%, rgba(255,255,255,0.66) 48%, transparent 72%)',
+          filter: type === 'aurora' ? 'blur(12px)' : 'blur(5px)',
+          mixBlendMode: 'screen',
+          animation: 'inviteSweep 4.6s ease-in-out infinite alternate',
+        }} />
+        {type === 'aurora' && (
+          <div style={{
+            position: 'absolute',
+            inset: '-18%',
+            background: `linear-gradient(65deg, transparent 15%, #6366f188 42%, ${accent}77 58%, transparent 82%)`,
+            filter: 'blur(22px)',
+            mixBlendMode: 'screen',
+            animation: 'inviteSweep 6.2s ease-in-out infinite alternate-reverse',
+          }} />
+        )}
+        {type === 'spotlight' && (
+          <div style={{
+            position: 'absolute',
+            inset: '-16%',
+            background: `radial-gradient(circle at 50% 50%, ${accent}66, transparent 45%)`,
+            filter: 'blur(12px)',
+            opacity: 0.9,
+        }} />
+        )}
+      </div>
+    )
+  }
+  if (type === 'fireworks') {
+    return (
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+        {Array.from({ length: 7 }).map((_, i) => (
+          <span key={i} style={{
+            position: 'absolute',
+            left: `${10 + i * 13}%`,
+            top: `${12 + (i % 4) * 16}%`,
+            width: 56,
+            height: 56,
+            borderRadius: '50%',
+            border: `2px solid ${i % 2 ? '#fff' : accent}`,
+            boxShadow: `0 0 22px ${accent}88, inset 0 0 16px ${accent}55`,
+            opacity: 0,
+            animation: `inviteBurst ${1.9 + i * 0.12}s ease-out infinite`,
+            animationDelay: `${i * 0.26}s`,
+          }} />
+        ))}
+      </div>
+    )
+  }
   return (
     <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
       {Array.from({ length: 12 }).map((_, i) => (
@@ -276,6 +332,8 @@ export default function PartyInvitePage() {
         @keyframes inviteFloat { from { transform: translateY(0) rotate(0deg); opacity: .25; } 50% { opacity: .9; } to { transform: translateY(-42px) rotate(18deg); opacity: .25; } }
         @keyframes inviteWave { from { transform: translateX(-16%); } to { transform: translateX(16%); } }
         @keyframes inviteGlow { 0%, 100% { opacity: .25; transform: scale(.85); } 50% { opacity: .9; transform: scale(1.12); } }
+        @keyframes inviteBurst { 0% { transform: scale(.2); opacity: 0; } 28% { opacity: .95; } 100% { transform: scale(2.25); opacity: 0; } }
+        @keyframes inviteSweep { from { transform: translateX(-50%) rotate(-12deg); opacity: .55; } to { transform: translateX(50%) rotate(12deg); opacity: .95; } }
         .party-invite-hero-inner { max-width: 1180px; margin: 0 auto; padding: 86px 28px 52px; min-height: min(760px, 78vh); display: flex; flex-direction: column; justify-content: flex-end; }
         .party-invite-eyebrow { display: inline-flex; align-items: center; gap: 8px; width: fit-content; margin-bottom: 20px; background: rgba(0,0,0,0.46); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.14); border-radius: 999px; padding: 7px 13px; font-size: .76rem; color: rgba(255,255,255,.82); }
         .party-invite-title { margin: 0 0 12px; max-width: 900px; font-size: clamp(2.5rem, 7vw, 6.8rem); font-weight: 950; line-height: .92; color: #fff; letter-spacing: 0; }

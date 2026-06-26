@@ -30,9 +30,41 @@ function CapacityBar({ going, max, accent }) {
   )
 }
 
+function InviteMotion({ type, accent }) {
+  if (!type || type === 'none') return null
+  if (type === 'waves') {
+    return (
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', left: '-25%', right: '-25%', bottom: 12, height: 54, borderRadius: '50%', background: `radial-gradient(ellipse, ${accent}55, transparent 68%)`, animation: 'clubInviteWave 5s ease-in-out infinite alternate' }} />
+      </div>
+    )
+  }
+  return (
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+      {Array.from({ length: 7 }).map((_, i) => (
+        <span key={i} style={{
+          position: 'absolute',
+          left: `${9 + i * 13}%`,
+          top: `${16 + (i % 3) * 18}%`,
+          width: type === 'confetti' ? 7 : 5,
+          height: type === 'confetti' ? 12 : 5,
+          borderRadius: type === 'confetti' ? 2 : '50%',
+          background: i % 2 ? '#fff' : accent,
+          opacity: 0.58,
+          animation: `${type === 'sparkles' || type === 'fireflies' ? 'clubInviteGlow' : 'clubInviteFloat'} ${2.4 + i * 0.2}s ease-in-out infinite`,
+          animationDelay: `${i * 0.14}s`,
+        }} />
+      ))}
+    </div>
+  )
+}
+
 function InviteCard({ invite, userId, onRsvp }) {
   const [responding, setResponding] = useState(false)
   const accent = invite.accent_color || ACCENT_DEFAULTS[invite.activity_type] || '#f43f5e'
+  const style = invite.style || 'glass'
+  const isNeon = style === 'neon'
+  const isMinimal = style === 'minimal'
 
   async function rsvp(status) {
     setResponding(true)
@@ -47,8 +79,11 @@ function InviteCard({ invite, userId, onRsvp }) {
   return (
     <div style={{
       minWidth: 280, maxWidth: 320, flexShrink: 0,
-      background: 'var(--s2)', borderRadius: 16,
-      border: `1.5px solid ${accent}44`,
+      background: isMinimal ? 'var(--s2)' : isNeon ? '#08080d' : 'rgba(255,255,255,0.06)',
+      borderRadius: 16,
+      border: isNeon ? `1.5px solid ${accent}` : isMinimal ? '1px solid var(--s3)' : `1.5px solid ${accent}44`,
+      boxShadow: isNeon ? `0 0 24px ${accent}44` : isMinimal ? 'none' : '0 12px 30px rgba(0,0,0,0.18)',
+      backdropFilter: style === 'glass' ? 'blur(12px)' : 'none',
       overflow: 'hidden', scrollSnapAlign: 'start',
     }}>
       {/* Accent top strip */}
@@ -62,10 +97,13 @@ function InviteCard({ invite, userId, onRsvp }) {
           backgroundSize: 'cover', backgroundPosition: 'center',
           position: 'relative',
         }}>
+          <InviteMotion type={invite.bg_animation} accent={accent} />
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.1), rgba(0,0,0,0.6))' }} />
         </div>
       ) : (
-        <div style={{ height: 100, background: `linear-gradient(135deg, ${accent}44, ${accent}11)` }} />
+        <div style={{ height: 100, background: `linear-gradient(135deg, ${accent}66, #111827)`, position: 'relative', overflow: 'hidden' }}>
+          <InviteMotion type={invite.bg_animation} accent={accent} />
+        </div>
       )}
 
       <div style={{ padding: '14px 16px 16px' }}>
@@ -138,6 +176,11 @@ export default function PartyInviteCarousel({ invites, userId, onRsvp }) {
 
   return (
     <div style={{ marginBottom: 16 }}>
+      <style>{`
+        @keyframes clubInviteFloat { from { transform: translateY(0) rotate(0deg); opacity: .2; } 50% { opacity: .85; } to { transform: translateY(-26px) rotate(18deg); opacity: .2; } }
+        @keyframes clubInviteWave { from { transform: translateX(-18%); } to { transform: translateX(18%); } }
+        @keyframes clubInviteGlow { 0%, 100% { opacity: .25; transform: scale(.85); } 50% { opacity: .9; transform: scale(1.15); } }
+      `}</style>
       <p style={{ margin: '0 0 10px', color: 'var(--t3)', fontSize: '0.78rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
         Pending Invites · {invites.length}
       </p>

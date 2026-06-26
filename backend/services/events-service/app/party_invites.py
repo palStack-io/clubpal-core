@@ -214,6 +214,7 @@ def _check_rate_limit(ip: str) -> None:
     _rsvp_timestamps[ip] = [t for t in _rsvp_timestamps[ip] if now - t < _RSVP_WINDOW]
     if len(_rsvp_timestamps[ip]) >= _RSVP_LIMIT:
         raise HTTPException(status_code=429, detail="Too many RSVPs — try again in a minute")
+    _rsvp_timestamps[ip].append(now)
 
 
 _ALLOWED_IMG_EXT  = {"jpg", "jpeg", "png", "webp", "gif"}
@@ -224,7 +225,6 @@ def _guest_edit_token(guest_id: int, invite_token: str) -> str:
     secret = os.getenv("INTERNAL_API_SECRET", "dev-secret")
     msg = f"{guest_id}:{invite_token}".encode()
     return hmac.new(secret.encode(), msg, hashlib.sha256).hexdigest()[:32]
-    _rsvp_timestamps[ip].append(now)
 
 
 def _fp(ip: str, ua: str) -> str:
@@ -329,7 +329,7 @@ async def get_pending_for_group(
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute("""
-        SELECT pi.token, pi.accent_color, pi.style, pi.cover_image_url,
+        SELECT pi.token, pi.accent_color, pi.style, pi.bg_animation, pi.cover_image_url,
                pi.host_user_id, pi.event_id,
                e.title, e.scheduled_date, e.location, e.max_attendees,
                e.activity_type,
@@ -342,6 +342,32 @@ async def get_pending_for_group(
         WHERE pig.group_id = %s AND ea.status = 'pending'
         ORDER BY pi.created_at DESC
     """, (user_id, group_id))
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+    for row in rows:
+        row["host"] = await _get_host_profile(row["host_user_id"])
+    return rows
+
+
+@host_router.get("/pending-for-user")
+async def get_pending_for_user(
+    user_id: int = Depends(_get_current_user_id),
+):
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT DISTINCT pi.token, pi.accent_color, pi.style, pi.bg_animation, pi.cover_image_url,
+               pi.host_user_id, pi.event_id,
+               e.title, e.scheduled_date, e.location, e.max_attendees,
+               e.activity_type,
+               (SELECT COUNT(*) FROM event_attendees
+                WHERE event_id = pi.event_id AND status = 'going') AS going_count
+        FROM party_invites pi
+        JOIN events e ON e.id = pi.event_id
+        JOIN event_attendees ea ON ea.event_id = pi.event_id AND ea.user_id = %s
+        WHERE ea.status = 'pending'
+        ORDER BY e.scheduled_date ASC NULLS LAST, pi.event_id DESC
+    """, (user_id,))
     rows = [dict(r) for r in cursor.fetchall()]
     conn.close()
     for row in rows:
@@ -500,7 +526,32 @@ async def invite_users(
             if not email:
                 continue
             try:
-                add_member_invite(invite["id"], email=email, user_id=None)
+                profile = {}
+                try:
+                    prof_r = await client.get(
+                        f"{GATEWAY_URL}/internal/users/email-profile",
+                        params={"email": email},
+                        headers={"x-internal-secret": internal},
+                    )
+                    if prof_r.status_code == 200:
+                        profile = prof_r.json() or {}
+                except Exception:
+                    profile = {}
+                matched_user_id = profile.get("id")
+                add_member_invite(invite["id"], email=email, user_id=matched_user_id)
+                if matched_user_id:
+                    _add_pending_attendees(invite["event_id"], [{"user_id": matched_user_id}])
+                    await client.post(
+                        f"{GATEWAY_URL}/internal/notify/push",
+                        json={
+                            "user_id": matched_user_id,
+                            "title": f"You're invited: {event['title']}",
+                            "body": "Tap to RSVP",
+                            "link_type": "party_invite",
+                            "link_id": token,
+                        },
+                        headers={"x-internal-secret": internal},
+                    )
                 await client.post(
                     f"{GATEWAY_URL}/internal/notify/party-invite-email",
                     json={
@@ -514,7 +565,7 @@ async def invite_users(
                     },
                     headers={"x-internal-secret": internal},
                 )
-                added.append({"type": "email", "email": email})
+                added.append({"type": "email", "email": email, "user_id": matched_user_id})
             except Exception:
                 pass
 
@@ -606,7 +657,9 @@ async def get_public_invite(token: str, request: Request):
             "title": event["title"],
             "scheduled_date": event.get("scheduled_date"),
             "location": event.get("location"),
+            "description": event.get("description"),
             "activity_type": event.get("activity_type"),
+            "max_attendees": event.get("max_attendees"),
         },
         "host": host,
         "is_turn_reveal": is_turn_reveal,

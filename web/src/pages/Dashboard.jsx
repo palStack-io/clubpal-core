@@ -13,6 +13,7 @@ import UpcomingEventsCard from '../components/dashboard/UpcomingEventsCard'
 import TurnQueueCard from '../components/dashboard/TurnQueueCard'
 import ActivityFeedCard from '../components/dashboard/ActivityFeedCard'
 import RsvpNeededCard from '../components/dashboard/RsvpNeededCard'
+import PartyInviteCarousel from '../components/party/PartyInviteCarousel'
 import CreateGroupModal from '../components/modals/CreateGroupModal'
 import CreateEventModal from '../components/modals/CreateEventModal'
 import { useTour } from '../components/onboarding/useTour'
@@ -59,6 +60,7 @@ export default function Dashboard() {
   const [pendingPolls, setPendingPolls] = useState([])
   const [myPolls, setMyPolls] = useState([])
   const [rsvpNeeded, setRsvpNeeded] = useState([])
+  const [pendingPartyInvites, setPendingPartyInvites] = useState([])
   const [activityItems, setActivityItems] = useState([])
   const [activityLoading, setActivityLoading] = useState(true)
   const [showCreateGroup, setShowCreateGroup] = useState(false)
@@ -90,6 +92,15 @@ export default function Dashboard() {
       setRsvpNeeded(upcoming.filter(ev =>
         !ev.my_rsvp_status || ev.my_rsvp_status === 'pending' || ev.my_rsvp_status === 'maybe'
       ))
+
+      eventsApi.getMyPendingPartyInvites()
+        .then(data => {
+          const invites = Array.isArray(data) ? data : []
+          setPendingPartyInvites(invites)
+          const inviteEventIds = new Set(invites.map(i => i.event_id))
+          setRsvpNeeded(prev => prev.filter(ev => !inviteEventIds.has(ev.id)))
+        })
+        .catch(() => setPendingPartyInvites([]))
 
       // Check ALL groups for whose turn it is — skip manual-rotation groups
       if (g.length > 0) {
@@ -173,6 +184,7 @@ export default function Dashboard() {
 
   function handleRsvpResponded(eventId) {
     setRsvpNeeded(prev => prev.filter(e => e.id !== eventId))
+    setPendingPartyInvites(prev => prev.filter(i => i.event_id !== eventId))
   }
 
   const primaryGroupObj = groups.find(g => g.id === primaryGroupId)
@@ -281,6 +293,13 @@ export default function Dashboard() {
             </div>
 
             {/* 2. RSVP needed */}
+            {pendingPartyInvites.length > 0 && (
+              <PartyInviteCarousel
+                invites={pendingPartyInvites}
+                userId={user?.id}
+                onRsvp={handleRsvpResponded}
+              />
+            )}
             <div id="tour-rsvp">
               <RsvpNeededCard
                 events={rsvpNeeded}

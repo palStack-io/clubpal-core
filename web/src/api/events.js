@@ -76,6 +76,9 @@ export const eventsApi = {
   getPendingPartyInvites: (groupId) =>
     eventsClient.get('/party-invites/pending-for-group', { params: { group_id: groupId } }).then(r => r.data),
 
+  getMyPendingPartyInvites: () =>
+    eventsClient.get('/party-invites/pending-for-user').then(r => r.data),
+
   createPartyInvite: (data) =>
     eventsClient.post('/party-invites', data).then(r => r.data),
 
@@ -93,4 +96,7 @@ export const eventsApi = {
 
   updatePartyInvite: (token, data) =>
     eventsClient.patch(`/party-invites/${token}`, data).then(r => r.data),
+
+  getPartyInviteCoverUploadUrl: (token, filename, contentType) =>
+    eventsClient.post(`/party-invites/${token}/cover/upload-url`, { filename, content_type: contentType }).then(r => r.data),
 }

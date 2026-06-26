@@ -57,6 +57,35 @@ function styleVars(style, accent) {
   }
 }
 
+function InviteMotion({ type, accent }) {
+  if (!type || type === 'none') return null
+  if (type === 'waves') {
+    return (
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+        <div style={{ position: 'absolute', left: '-25%', right: '-25%', bottom: 24, height: 130, borderRadius: '50%', background: `radial-gradient(ellipse, ${accent}55, transparent 66%)`, animation: 'inviteWave 6s ease-in-out infinite alternate' }} />
+      </div>
+    )
+  }
+  return (
+    <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', overflow: 'hidden' }}>
+      {Array.from({ length: 12 }).map((_, i) => (
+        <span key={i} style={{
+          position: 'absolute',
+          left: `${7 + i * 8}%`,
+          top: `${12 + (i % 4) * 15}%`,
+          width: type === 'confetti' ? 8 : 6,
+          height: type === 'confetti' ? 15 : 6,
+          borderRadius: type === 'confetti' ? 2 : '50%',
+          background: i % 2 ? '#fff' : accent,
+          opacity: 0.62,
+          animation: `${type === 'sparkles' || type === 'fireflies' ? 'inviteGlow' : 'inviteFloat'} ${2.6 + i * 0.18}s ease-in-out infinite`,
+          animationDelay: `${i * 0.16}s`,
+        }} />
+      ))}
+    </div>
+  )
+}
+
 function CapacityBar({ going, max, accent }) {
   if (!max) return null
   const pct = Math.min(100, Math.round((going / max) * 100))
@@ -217,9 +246,15 @@ export default function PartyInvitePage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#08080a', color: '#fff' }}>
+      <style>{`
+        @keyframes inviteFloat { from { transform: translateY(0) rotate(0deg); opacity: .25; } 50% { opacity: .9; } to { transform: translateY(-42px) rotate(18deg); opacity: .25; } }
+        @keyframes inviteWave { from { transform: translateX(-16%); } to { transform: translateX(16%); } }
+        @keyframes inviteGlow { 0%, 100% { opacity: .25; transform: scale(.85); } 50% { opacity: .9; transform: scale(1.12); } }
+      `}</style>
 
       {/* Hero */}
       <div style={{ position: 'relative', minHeight: 300, ...heroBg }}>
+        <InviteMotion type={invite.bg_animation} accent={accent} />
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, rgba(8,8,10,0.95) 100%)' }} />
 
         <div style={{ position: 'relative', padding: '56px 20px 36px', maxWidth: 500, margin: '0 auto' }}>

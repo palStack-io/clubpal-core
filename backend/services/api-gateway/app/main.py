@@ -1986,6 +1986,26 @@ async def internal_get_user_profile(
     }
 
 
+@app.get("/internal/users/email-profile")
+async def internal_get_user_profile_by_email(
+    email: str,
+    x_internal_secret: Optional[str] = Header(None),
+):
+    """Internal-only: fetch a user's profile by email for service-to-service calls."""
+    if not INTERNAL_API_SECRET or x_internal_secret != INTERNAL_API_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    user = get_user_by_email(email.strip().lower())
+    if not user:
+        return {"id": None, "username": None, "full_name": None, "avatar_url": None, "email": email.strip().lower()}
+    return {
+        "id": user["id"],
+        "username": user.get("username"),
+        "full_name": user.get("full_name"),
+        "avatar_url": user.get("avatar_url"),
+        "email": user.get("email", ""),
+    }
+
+
 # ===== Saved Items (Wishlist) =====
 
 class SaveItemRequest(BaseModel):

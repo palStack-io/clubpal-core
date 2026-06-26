@@ -250,11 +250,12 @@ export default function CreatePartyInvite() {
 
       if (coverFile) {
         const urlData = await eventsApi.getPartyInviteCoverUploadUrl(invite.token, coverFile.name, coverFile.type)
-        await fetch(urlData.upload_url, {
+        const uploadRes = await fetch(urlData.upload_url, {
           method: 'PUT',
           headers: { 'Content-Type': coverFile.type },
           body: coverFile,
         })
+        if (!uploadRes.ok) throw new Error(`Cover upload failed (${uploadRes.status})`)
         await eventsApi.updatePartyInvite(invite.token, { cover_image_url: urlData.public_url })
       }
 

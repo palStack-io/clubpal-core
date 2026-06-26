@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import AvatarStack from '../ui/AvatarStack'
 import AnimatedBackground from '../ui/AnimatedBackground'
+import InviteMotion from '../party/InviteMotion'
 import StatusChip from '../ui/StatusChip'
 import { resolveMediaUrl } from '../../utils/resolveMediaUrl'
 
@@ -28,7 +29,7 @@ function formatDate(dateStr) {
   )
 }
 
-export default function EventHeroCard({ event, attendees = [], onBack, actions = [] }) {
+export default function EventHeroCard({ event, attendees = [], onBack, actions = [], partyInvite = null }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
 
@@ -43,9 +44,12 @@ export default function EventHeroCard({ event, attendees = [], onBack, actions =
 
   const type = (event.activity_type || 'dining').toLowerCase()
   const act = ACTIVITY[type] || ACTIVITY.dining
+  const accentColor = partyInvite?.accent_color || act.color
+  const accentRgb = accentColor === act.color ? act.rgb : accentColor.replace('#', '').match(/.{2}/g).map(h => parseInt(h, 16)).join(',')
   const hasCustomBg = event.bg_type && event.bg_type !== 'default'
   const hasCover = Boolean(event.cover_url) && !hasCustomBg
   const textOnDark = hasCustomBg || hasCover
+  const hasInviteMotion = partyInvite?.bg_animation && partyInvite.bg_animation !== 'none'
 
   let statusVariant = 'pending'
   let statusLabel = 'Scheduled'
@@ -115,11 +119,15 @@ export default function EventHeroCard({ event, attendees = [], onBack, actions =
             top: '-30px', right: '-30px',
             width: '160px', height: '160px',
             borderRadius: '50%',
-            background: `radial-gradient(circle, rgba(${act.rgb},0.5), transparent 70%)`,
+            background: `radial-gradient(circle, rgba(${accentRgb},0.5), transparent 70%)`,
             opacity: 0.14,
             pointerEvents: 'none',
           }}
         />
+      )}
+
+      {hasInviteMotion && (
+        <InviteMotion type={partyInvite.bg_animation} accent={partyInvite.accent_color} />
       )}
 
       {/* Top controls row */}
@@ -205,7 +213,7 @@ export default function EventHeroCard({ event, attendees = [], onBack, actions =
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginBottom: '14px' }}>
           <span style={{
             display: 'inline-flex', alignItems: 'center', gap: '3px',
-            background: `${act.color}dd`, color: '#fff',
+            background: `${accentColor}dd`, color: '#fff',
             fontSize: '9px', fontWeight: 900,
             padding: '2px 7px', borderRadius: '100px',
             letterSpacing: '0.5px', textTransform: 'uppercase',
@@ -216,10 +224,10 @@ export default function EventHeroCard({ event, attendees = [], onBack, actions =
           <span
             style={{
               display: 'inline-flex', alignItems: 'center', gap: '4px',
-              background: `rgba(${act.rgb},0.12)`, color: act.color,
+              background: `rgba(${accentRgb},0.12)`, color: accentColor,
               fontSize: '10px', fontWeight: 700,
               padding: '3px 8px', borderRadius: '100px',
-              border: `1px solid rgba(${act.rgb},0.22)`,
+              border: `1px solid rgba(${accentRgb},0.22)`,
             }}
           >
             {act.emoji} {type}

@@ -44,7 +44,7 @@ export default function EventDetail() {
   const [photos, setPhotos] = useState([])
   const [comments, setComments] = useState([])
   const [loading, setLoading] = useState(true)
-  const [partyInviteToken, setPartyInviteToken] = useState(null)
+  const [partyInvite, setPartyInvite] = useState(null)
   const [rsvpLoading, setRsvpLoading] = useState(false)
   const [showEditEvent, setShowEditEvent] = useState(false)
   const [showRateModal, setShowRateModal] = useState(false)
@@ -93,7 +93,7 @@ export default function EventDetail() {
       .then(r => setIsBookmarked((r.data || []).some(s => String(s.item_id) === String(id))))
       .catch(() => setIsBookmarked(false))
     eventsClient.get(`/party-invites/by-event/${id}`)
-      .then(r => setPartyInviteToken(r.data.token))
+      .then(r => setPartyInvite({ token: r.data.token, bg_animation: r.data.bg_animation, accent_color: r.data.accent_color, style: r.data.style }))
       .catch(() => {})
   }, [id])
 
@@ -273,6 +273,7 @@ export default function EventDetail() {
         attendees={attendees}
         onBack={() => navigate(-1)}
         actions={heroActions}
+        partyInvite={partyInvite}
       />
 
       {/* Floating stats */}
@@ -331,8 +332,8 @@ export default function EventDetail() {
 
           {/* Right column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {(isHost || isCreator) && partyInviteToken && (
-              <PartyInviteAdminCard token={partyInviteToken} eventId={id} />
+            {(isHost || isCreator) && partyInvite?.token && (
+              <PartyInviteAdminCard token={partyInvite.token} eventId={id} />
             )}
             {event.bill_split_enabled && (
               <BillSplitStatusCard

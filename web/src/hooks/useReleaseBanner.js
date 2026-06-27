@@ -6,7 +6,6 @@ const STORAGE_KEY = 'lastSeenReleaseVersion'
 export function useReleaseBanner() {
   const [release, setRelease] = useState(null)
   const [visible, setVisible] = useState(false)
-  const [expanded, setExpanded] = useState(false)
 
   useEffect(() => {
     gatewayClient.get('/releases/latest')
@@ -25,8 +24,7 @@ export function useReleaseBanner() {
   const dismiss = () => {
     if (release?.version) localStorage.setItem(STORAGE_KEY, release.version)
     setVisible(false)
-    setExpanded(false)
   }
 
-  return { release, visible, expanded, setExpanded, dismiss }
+  return { release, visible, dismiss }
 }

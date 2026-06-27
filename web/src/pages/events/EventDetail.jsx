@@ -14,6 +14,7 @@ import AnimatedBackground from '../../components/ui/AnimatedBackground'
 import BillSplitModal from '../../components/modals/BillSplitModal'
 import BillSplitStatusCard from '../../components/events/BillSplitStatusCard'
 import PartyInviteAdminCard from '../../components/events/PartyInviteAdminCard'
+import EventBringListCard from '../../components/events/EventBringListCard'
 import EditPublicInviteModal from '../../components/party/EditPublicInviteModal'
 import { eventsApi } from '../../api/events'
 import { ratingsClient, gatewayClient, eventsClient } from '../../api/client'
@@ -346,6 +347,12 @@ export default function EventDetail() {
                 onOpenModal={() => setShowBillSplit(true)}
               />
             )}
+            <EventBringListCard
+              event={event}
+              attendees={attendees}
+              currentUser={user}
+              onUpdated={fetchAll}
+            />
             <AttendanceCard
               attendees={attendees}
               currentUser={user}

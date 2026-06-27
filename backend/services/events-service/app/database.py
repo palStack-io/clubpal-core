@@ -187,6 +187,14 @@ def init_db():
         pass
 
     try:
+        cursor.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS bring_list_enabled BOOLEAN DEFAULT FALSE")
+        cursor.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS bring_list_type TEXT DEFAULT 'freeform'")
+        cursor.execute("ALTER TABLE event_attendees ADD COLUMN IF NOT EXISTS bring_note TEXT")
+        cursor.execute("ALTER TABLE event_attendees ADD COLUMN IF NOT EXISTS claim_item_id INTEGER")
+    except Exception:
+        pass
+
+    try:
         cursor.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS reminder_24h_sent BOOLEAN DEFAULT FALSE")
     except Exception:
         pass
@@ -205,6 +213,18 @@ def init_db():
         cursor.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS rsvp_reminder_sent BOOLEAN DEFAULT FALSE")
     except Exception:
         pass
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS event_bring_items (
+            id SERIAL PRIMARY KEY,
+            event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+            label TEXT NOT NULL,
+            emoji TEXT DEFAULT '',
+            max_claims INTEGER DEFAULT 1,
+            sort_order INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
 
     # Background personalization migrations
     for col, defn in [
@@ -229,6 +249,7 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_history_event ON event_history(event_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_photos_event ON event_photos(event_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_photos_user ON event_photos(user_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_event_bring_items_event ON event_bring_items(event_id)")
 
     conn.commit()
     conn.close()
@@ -318,7 +339,8 @@ def create_event(group_id: int, activity_id: Optional[int], title: str, schedule
                 location: str = None, rsvp_deadline=None, parent_recurring_id: int = None,
                 activity_type: str = None, max_attendees: int = None,
                 cover_url: str = None, bill_split_enabled: bool = False,
-                ratings_enabled: bool = True) -> int:
+                ratings_enabled: bool = True, bring_list_enabled: bool = False,
+                bring_list_type: str = "freeform") -> int:
     """Create a new event."""
     with get_db() as conn:
         cursor = conn.cursor()
@@ -326,11 +348,12 @@ def create_event(group_id: int, activity_id: Optional[int], title: str, schedule
         cursor.execute(
             """INSERT INTO events (group_id, activity_id, activity_type, title, description, scheduled_date,
                                   location, host_user_id, created_by, rsvp_deadline, parent_recurring_id,
-                                  max_attendees, cover_url, bill_split_enabled, ratings_enabled)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+                                  max_attendees, cover_url, bill_split_enabled, ratings_enabled,
+                                  bring_list_enabled, bring_list_type)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
             (group_id, activity_id, activity_type, title, description, scheduled_date, location,
              host_user_id, created_by, rsvp_deadline, parent_recurring_id, max_attendees, cover_url,
-             bill_split_enabled, ratings_enabled)
+             bill_split_enabled, ratings_enabled, bring_list_enabled, bring_list_type)
         )
 
         event_id = cursor.fetchone()['id']
@@ -441,7 +464,8 @@ def update_event(event_id: int, title: str = None, description: str = None,
                 cover_url: str = None, updated_by: int = None,
                 rsvp_deadline=None, max_attendees: int = None,
                 bg_type: str = None, bg_value: str = None, bg_scope: str = None,
-                ratings_enabled: bool = None, bill_split_enabled: bool = None) -> bool:
+                ratings_enabled: bool = None, bill_split_enabled: bool = None,
+                bring_list_enabled: bool = None, bring_list_type: str = None) -> bool:
     """Update event details."""
     with get_db() as conn:
         cursor = conn.cursor()
@@ -519,6 +543,16 @@ def update_event(event_id: int, title: str = None, description: str = None,
             updates.append("bill_split_enabled = %s")
             params.append(bill_split_enabled)
             changes.append(f"bill_split_enabled set to {bill_split_enabled}")
+
+        if bring_list_enabled is not None:
+            updates.append("bring_list_enabled = %s")
+            params.append(bring_list_enabled)
+            changes.append(f"bring_list_enabled set to {bring_list_enabled}")
+
+        if bring_list_type is not None:
+            updates.append("bring_list_type = %s")
+            params.append(bring_list_type)
+            changes.append(f"bring_list_type set to {bring_list_type}")
 
         if not updates:
             return True
@@ -703,6 +737,98 @@ def remove_attendee(event_id: int, user_id: int) -> bool:
         conn.commit()
 
         return success
+
+
+# ===== Event Bring List =====
+
+def create_event_bring_item(event_id: int, label: str, emoji: str = "", max_claims: int = 1, sort_order: int = 0) -> dict:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO event_bring_items (event_id, label, emoji, max_claims, sort_order)
+               VALUES (%s, %s, %s, %s, %s) RETURNING *""",
+            (event_id, label, emoji or "", max_claims or 1, sort_order)
+        )
+        row = dict(cursor.fetchone())
+        conn.commit()
+        return row
+
+
+def delete_event_bring_item(event_id: int, item_id: int) -> bool:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("UPDATE event_attendees SET claim_item_id = NULL WHERE event_id = %s AND claim_item_id = %s", (event_id, item_id))
+        cursor.execute("DELETE FROM event_bring_items WHERE event_id = %s AND id = %s", (event_id, item_id))
+        success = cursor.rowcount > 0
+        conn.commit()
+        return success
+
+
+def update_event_bring_item(event_id: int, item_id: int, label: str = None, emoji: str = None, max_claims: int = None) -> dict:
+    """Update a bring-list item's label/emoji/max_claims. Returns the updated item (with claim info) or None if not found."""
+    sets, params = [], []
+    if label is not None:
+        sets.append("label = %s"); params.append(label)
+    if emoji is not None:
+        sets.append("emoji = %s"); params.append(emoji)
+    if max_claims is not None:
+        sets.append("max_claims = %s"); params.append(max_claims)
+    if sets:
+        with get_db() as conn:
+            cursor = conn.cursor()
+            params.extend([event_id, item_id])
+            cursor.execute(
+                f"UPDATE event_bring_items SET {', '.join(sets)} WHERE event_id = %s AND id = %s",
+                tuple(params)
+            )
+            updated = cursor.rowcount > 0
+            conn.commit()
+        if not updated:
+            return None
+    return next((it for it in get_event_bring_items(event_id) if it["id"] == item_id), None)
+
+
+def get_event_bring_items(event_id: int) -> List[dict]:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """SELECT ebi.*,
+                      COALESCE(COUNT(ea.user_id) FILTER (WHERE ea.claim_item_id = ebi.id), 0) AS claimed_count
+               FROM event_bring_items ebi
+               LEFT JOIN event_attendees ea ON ea.event_id = ebi.event_id AND ea.claim_item_id = ebi.id
+               WHERE ebi.event_id = %s
+               GROUP BY ebi.id
+               ORDER BY ebi.sort_order ASC, ebi.id ASC""",
+            (event_id,)
+        )
+        items = [dict(row) for row in cursor.fetchall()]
+        for item in items:
+            cursor.execute(
+                """SELECT user_id, bring_note FROM event_attendees
+                   WHERE event_id = %s AND claim_item_id = %s
+                   ORDER BY responded_at ASC""",
+                (event_id, item["id"])
+            )
+            item["claimed_by"] = [dict(row) for row in cursor.fetchall()]
+        return items
+
+
+def update_attendee_bring(event_id: int, user_id: int, bring_note: str = None, claim_item_id: int = None) -> dict:
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """INSERT INTO event_attendees (event_id, user_id, status, bring_note, claim_item_id)
+               VALUES (%s, %s, 'going', %s, %s)
+               ON CONFLICT (event_id, user_id)
+               DO UPDATE SET bring_note = EXCLUDED.bring_note,
+                             claim_item_id = EXCLUDED.claim_item_id,
+                             responded_at = CURRENT_TIMESTAMP
+               RETURNING *""",
+            (event_id, user_id, bring_note, claim_item_id)
+        )
+        row = dict(cursor.fetchone())
+        conn.commit()
+        return row
 
 
 def remove_user_from_all_events(user_id: int) -> int:

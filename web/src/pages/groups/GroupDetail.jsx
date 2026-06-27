@@ -20,6 +20,14 @@ import { eventsApi } from '../../api/events'
 import { ratingsApi } from '../../api/ratings'
 import { gatewayClient } from '../../api/client'
 import PartyInviteCarousel from '../../components/party/PartyInviteCarousel'
+import {
+  getDevPartyInvitePreview,
+  getDevPartyInvitePreviewEvents,
+  getDevPartyInvitePreviewGroup,
+  getDevPartyInvitePreviewMembers,
+  getDevPartyInvitePreviewRotation,
+  isDevPartyInvitePreviewEnabled,
+} from '../../utils/devPartyInvitePreview'
 
 async function enrichWithProfiles(items, uidField) {
   if (!items?.length) return items || []
@@ -96,7 +104,16 @@ export default function GroupDetail() {
       } else {
         setRotation(null)
       }
-    } catch {}
+    } catch {
+      if (isDevPartyInvitePreviewEnabled()) {
+        const previewGroup = getDevPartyInvitePreviewGroup(user, id)
+        setGroup(previewGroup)
+        setUpcoming(getDevPartyInvitePreviewEvents())
+        setMembers(getDevPartyInvitePreviewMembers(user))
+        setRotation(getDevPartyInvitePreviewRotation(user))
+        setPendingPartyInvites([getDevPartyInvitePreview(user, previewGroup)])
+      }
+    }
     finally { setLoading(false) }
 
     groupsApi.getActiveInviteCode(id).then(ic => setInviteCode(ic?.code || null)).catch(() => {})
@@ -135,6 +152,12 @@ export default function GroupDetail() {
   const myRole = members.find(m => m.user_id === user?.id)?.role
   const isAdmin = myRole === 'owner' || myRole === 'admin'
   const isMyTurn = rotation?.current_user_id === user?.id
+  const previewPartyInvite = isDevPartyInvitePreviewEnabled() && group
+    ? getDevPartyInvitePreview(user, group)
+    : null
+  const visiblePartyInvites = previewPartyInvite
+    ? [previewPartyInvite, ...pendingPartyInvites.filter(i => i.token !== previewPartyInvite.token)]
+    : pendingPartyInvites
 
   const handleInvite = async (email) => {
     setInviteLoading(true)
@@ -268,10 +291,10 @@ export default function GroupDetail() {
         )}
 
         {/* Pending party invites carousel */}
-        {pendingPartyInvites.length > 0 && (
+        {visiblePartyInvites.length > 0 && (
           <div style={{ position: 'relative', zIndex: 1, marginBottom: 14 }}>
             <PartyInviteCarousel
-              invites={pendingPartyInvites}
+              invites={visiblePartyInvites}
               userId={user?.id}
               onRsvp={(eventId) => {
                 setPendingPartyInvites(prev => prev.filter(i => i.event_id !== eventId))

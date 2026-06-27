@@ -188,7 +188,8 @@ function PinIcon() {
 export default function PartyInvitePage() {
   const { token }  = useParams()
   const [invite, setInvite]   = useState(null)
-  const [guests, setGuests]   = useState({ guests: [], member_groups: [] })
+  const [guests, setGuests]   = useState({ guests: [], member_groups: [], item_brings: {}, free_brings: [] })
+  const [comments, setComments] = useState(null)
   const [guestAccess, setGuestAccess] = useState(null)
   const [guestsLoading, setGuestsLoading] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -218,9 +219,17 @@ export default function PartyInvitePage() {
       })
       setGuests(gst.data)
     } catch {
-      setGuests({ guests: [], member_groups: [] })
+      setGuests({ guests: [], member_groups: [], item_brings: {}, free_brings: [] })
     } finally {
       setGuestsLoading(false)
+    }
+    try {
+      const cmt = await axios.get(`${EVENTS_BASE}/p/${token}/comments`, {
+        params: { guest_id: access.guest_id, edit_token: access.edit_token },
+      })
+      setComments(cmt.data)
+    } catch {
+      setComments(null)
     }
   }
 
@@ -374,26 +383,38 @@ export default function PartyInvitePage() {
               <p className="pi-section-title">What to bring</p>
               {invite.items.map((item, i) => {
                 const taken = item.claim_count >= item.max_claims
+                const claimers = guestAccess ? (guests.item_brings?.[String(item.id)] || []) : []
                 return (
                   <div key={item.id} style={{
-                    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                     padding: '10px 0',
                     borderBottom: i < invite.items.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
                   }}>
-                    <span style={{ color: taken ? 'rgba(255,255,255,0.3)' : '#fff', fontSize: '.88rem' }}>
-                      {item.emoji && <span style={{ marginRight: 6 }}>{item.emoji}</span>}
-                      {item.label}
-                    </span>
-                    <span style={{
-                      fontSize: '.72rem', fontWeight: 700, padding: '3px 10px', borderRadius: 999,
-                      background: taken ? 'rgba(255,255,255,0.05)' : `${accent}20`,
-                      color: taken ? 'rgba(255,255,255,0.2)' : accent,
-                    }}>
-                      {taken ? 'Taken' : `${item.max_claims - item.claim_count} left`}
-                    </span>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: taken ? 'rgba(255,255,255,0.3)' : '#fff', fontSize: '.88rem' }}>
+                        {item.emoji && <span style={{ marginRight: 6 }}>{item.emoji}</span>}
+                        {item.label}
+                      </span>
+                      <span style={{
+                        fontSize: '.72rem', fontWeight: 700, padding: '3px 10px', borderRadius: 999,
+                        background: taken ? 'rgba(255,255,255,0.05)' : `${accent}20`,
+                        color: taken ? 'rgba(255,255,255,0.2)' : accent,
+                      }}>
+                        {taken ? 'Taken' : `${item.max_claims - item.claim_count} left`}
+                      </span>
+                    </div>
+                    {claimers.length > 0 && (
+                      <div style={{ fontSize: '.74rem', color: 'rgba(255,255,255,0.45)', marginTop: 4 }}>
+                        {claimers.map(c => c.note ? `${c.name} (${c.note})` : c.name).join(', ')}
+                      </div>
+                    )}
                   </div>
                 )
               })}
+              {guestAccess && guests.free_brings?.length > 0 && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)', fontSize: '.78rem', color: 'rgba(255,255,255,0.55)' }}>
+                  Also bringing: {guests.free_brings.map(b => b.note ? `${b.name} — ${b.note}` : b.name).join(', ')}
+                </div>
+              )}
             </div>
           )}
 
@@ -419,6 +440,42 @@ export default function PartyInvitePage() {
                 ? <GuestList guests={guests.guests} memberGroups={guests.member_groups} accentColor={accent} />
                 : <p style={{ margin: 0, color: 'rgba(255,255,255,0.4)', fontSize: '.85rem' }}>You're the first one! Invite your friends.</p>
               }
+            </div>
+          )}
+
+          {/* Comments — visible after RSVP, read-only for guests */}
+          {guestAccess && comments && (
+            <div className="pi-card">
+              <p className="pi-section-title">Comments</p>
+              {comments.comments?.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  {comments.comments.map(c => (
+                    <div key={c.id} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                      <div style={{
+                        width: 28, height: 28, borderRadius: '50%', flexShrink: 0,
+                        background: c.author?.avatar_url ? `center/cover url(${c.author.avatar_url})` : `${accent}33`,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: '.7rem', fontWeight: 700, color: accent,
+                      }}>
+                        {!c.author?.avatar_url && (c.author?.full_name?.[0]?.toUpperCase() || '?')}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '.78rem', fontWeight: 700, color: '#fff' }}>{c.author?.full_name || 'Member'}</div>
+                        <div style={{ fontSize: '.85rem', color: 'rgba(255,255,255,0.7)', lineHeight: 1.5 }}>{c.content}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ margin: 0, color: 'rgba(255,255,255,0.4)', fontSize: '.85rem' }}>No comments yet.</p>
+              )}
+              <div style={{
+                marginTop: 14, padding: '12px 14px', borderRadius: 12,
+                background: `${accent}12`, border: `1px solid ${accent}28`,
+                fontSize: '.82rem', color: 'rgba(255,255,255,0.7)',
+              }}>
+                Want to join the conversation? <a href="/register" style={{ color: accent, fontWeight: 700, textDecoration: 'none' }}>Create an account</a> to comment.
+              </div>
             </div>
           )}
         </div>

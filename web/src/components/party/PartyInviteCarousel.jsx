@@ -35,6 +35,10 @@ function InviteBanner({ invite, userId, onRsvp }) {
 
   async function rsvp(status) {
     setResponding(status)
+    if (invite.__preview) {
+      setDone(true)
+      return
+    }
     try {
       await eventsApi.rsvp(invite.event_id, userId, status)
       setDone(true)
@@ -172,6 +176,10 @@ function InviteCard({ invite, userId, onRsvp }) {
 
   async function rsvp(status) {
     setResponding(status)
+    if (invite.__preview) {
+      setDone(true)
+      return
+    }
     try {
       await eventsApi.rsvp(invite.event_id, userId, status)
       setDone(true)

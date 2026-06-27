@@ -18,6 +18,7 @@ from app.models import (
     CommentCreate, CommentResponse, EventHistoryResponse,
     PhotoConfirmRequest, PhotoResponse,
     RecurringScheduleCreate, RecurringScheduleResponse,
+    EventBringItemCreate, EventBringItemResponse, EventBringItemUpdate, EventBringUpdate,
 )
 from app.party_invites_db import init_party_invite_tables
 from app.party_invites import host_router as _party_host_router, public_router as _party_public_router
@@ -25,6 +26,7 @@ from app.database import (
     init_db, get_db, create_event, get_event, get_events_by_group, get_events_by_user,
     get_events_by_host, update_event, delete_event,
     add_attendee, upsert_attendee, get_attendee, get_attendees, update_attendee_status, remove_attendee,
+    create_event_bring_item, update_event_bring_item, delete_event_bring_item, get_event_bring_items, update_attendee_bring,
     remove_user_from_all_events,
     add_comment, get_comment, get_comments, delete_comment, get_event_history,
     add_photo, get_photo, get_photos, delete_photo,
@@ -670,7 +672,20 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(
         cover_url=None,
         bill_split_enabled=event_data.bill_split_enabled,
         ratings_enabled=event_data.ratings_enabled,
+        bring_list_enabled=event_data.bring_list_enabled,
+        bring_list_type=event_data.bring_list_type,
     )
+
+    if event_data.bring_list_enabled:
+        for i, item in enumerate(event_data.bring_items or []):
+            if item.get("label"):
+                create_event_bring_item(
+                    event_id,
+                    item.get("label", ""),
+                    item.get("emoji", ""),
+                    int(item.get("max_claims") or 1),
+                    i,
+                )
 
     # Mirror cover into MinIO under the real event path
     if event_data.banner_url:
@@ -881,6 +896,8 @@ async def update_event_endpoint(event_id: int, event_data: EventUpdate, user_id:
         bg_scope=event_data.bg_scope,
         ratings_enabled=event_data.ratings_enabled,
         bill_split_enabled=event_data.bill_split_enabled,
+        bring_list_enabled=event_data.bring_list_enabled,
+        bring_list_type=event_data.bring_list_type,
     )
 
     if not success:
@@ -1206,6 +1223,84 @@ async def get_attendee_endpoint(event_id: int, user_id: int):
     if not attendee:
         raise HTTPException(status_code=404, detail="Attendee not found")
 
+    return AttendeeResponse(**attendee)
+
+
+@app.get("/events/{event_id}/bring")
+async def get_event_bring_list(event_id: int, _user_id: int = Depends(get_current_user_id)):
+    event = get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    attendees = get_attendees(event_id)
+    return {
+        "enabled": bool(event.get("bring_list_enabled")),
+        "type": event.get("bring_list_type") or "freeform",
+        "items": get_event_bring_items(event_id),
+        "attendees": attendees,
+    }
+
+
+@app.post("/events/{event_id}/bring/items", response_model=EventBringItemResponse, status_code=201)
+async def add_event_bring_item(event_id: int, item: EventBringItemCreate, user_id: int = Depends(get_current_user_id)):
+    event = get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if user_id not in (event.get("host_user_id"), event.get("created_by")):
+        raise HTTPException(status_code=403, detail="Only the host can add bring-list items")
+    row = create_event_bring_item(event_id, item.label, item.emoji, item.max_claims, len(get_event_bring_items(event_id)))
+    row["claimed_count"] = 0
+    row["claimed_by"] = []
+    return EventBringItemResponse(**row)
+
+
+@app.delete("/events/{event_id}/bring/items/{item_id}", status_code=204)
+async def remove_event_bring_item(event_id: int, item_id: int, user_id: int = Depends(get_current_user_id)):
+    event = get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if user_id not in (event.get("host_user_id"), event.get("created_by")):
+        raise HTTPException(status_code=403, detail="Only the host can remove bring-list items")
+    delete_event_bring_item(event_id, item_id)
+    return None
+
+
+@app.patch("/events/{event_id}/bring/items/{item_id}", response_model=EventBringItemResponse)
+async def edit_event_bring_item(event_id: int, item_id: int, body: EventBringItemUpdate, user_id: int = Depends(get_current_user_id)):
+    event = get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if user_id not in (event.get("host_user_id"), event.get("created_by")):
+        raise HTTPException(status_code=403, detail="Only the host can edit bring-list items")
+    existing = next((it for it in get_event_bring_items(event_id) if it["id"] == item_id), None)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Bring-list item not found")
+    if body.max_claims is not None and body.max_claims < existing.get("claimed_count", 0):
+        raise HTTPException(status_code=409, detail="Cannot set max claims below the number already claimed")
+    row = update_event_bring_item(event_id, item_id, label=body.label, emoji=body.emoji, max_claims=body.max_claims)
+    if not row:
+        raise HTTPException(status_code=404, detail="Bring-list item not found")
+    return EventBringItemResponse(**row)
+
+
+@app.patch("/events/{event_id}/bring/me", response_model=AttendeeResponse)
+async def update_my_event_bring(event_id: int, body: EventBringUpdate, user_id: int = Depends(get_current_user_id)):
+    event = get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not event.get("bring_list_enabled"):
+        raise HTTPException(status_code=409, detail="Bring list is not enabled for this event")
+
+    claim_item_id = body.claim_item_id
+    if claim_item_id:
+        items = get_event_bring_items(event_id)
+        item = next((it for it in items if it["id"] == claim_item_id), None)
+        if not item:
+            raise HTTPException(status_code=404, detail="Bring-list item not found")
+        already_claimed_by_me = any(c.get("user_id") == user_id for c in item.get("claimed_by", []))
+        if not already_claimed_by_me and item.get("claimed_count", 0) >= item.get("max_claims", 1):
+            raise HTTPException(status_code=409, detail="That item is already fully claimed")
+
+    attendee = update_attendee_bring(event_id, user_id, body.bring_note, claim_item_id)
     return AttendeeResponse(**attendee)
 
 

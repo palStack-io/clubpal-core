@@ -20,6 +20,7 @@ import { useTour } from '../components/onboarding/useTour'
 import TourOverlay from '../components/onboarding/TourOverlay'
 import { tourSteps } from '../components/onboarding/tourSteps'
 import { useToast } from '../components/ui/Toast'
+import { getDevPartyInvitePreview, isDevPartyInvitePreviewEnabled } from '../utils/devPartyInvitePreview'
 
 function getGreeting() {
   const h = new Date().getHours()
@@ -209,6 +210,12 @@ export default function Dashboard() {
   const turnPosition = activeTurn ? '1st 🔄' : (rotation?.turn_index != null ? ordinal(rotation.turn_index + 1) : '—')
 
   const greeting = `${getGreeting()}, ${user?.full_name?.split(' ')[0] || user?.username} 👋`
+  const previewPartyInvite = isDevPartyInvitePreviewEnabled()
+    ? getDevPartyInvitePreview(user, primaryGroupObj)
+    : null
+  const visiblePartyInvites = previewPartyInvite
+    ? [previewPartyInvite, ...pendingPartyInvites]
+    : pendingPartyInvites
 
   const stats = [
     { label: 'Clubs',      value: loading ? '—' : activeGroups },
@@ -250,52 +257,52 @@ export default function Dashboard() {
       <div className="cp-dashboard-content">
         <div className="cp-dashboard-grid">
 
-          {/* 1. Pick CTA — your turn banner or static placeholder */}
-          <div id="tour-turn" className="cp-dashboard-primary-top">
-            {!loading && activeTurn ? (
-              <PickCTACard
-                turn={activeTurn}
-                groupId={primaryGroupId}
-                onSkip={async () => { await groupsApi.skipRotation(primaryGroupId); await load() }}
-                onAlreadyPicked={async () => { await groupsApi.completeTurn(primaryGroupId); await load() }}
-              />
-            ) : !loading && (
-              <div style={{
-                borderRadius: '16px',
-                border: '1px solid var(--glass)',
-                background: 'var(--s2)',
-                padding: '16px 18px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '14px',
-                opacity: 0.6,
-              }}>
-                <div style={{
-                  width: '48px', height: '48px', borderRadius: '14px', flexShrink: 0,
-                  background: 'var(--s3)', border: '1px solid var(--glass)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '22px',
-                }}>
-                  🔄
-                </div>
-                <div>
-                  <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: '3px' }}>
-                    Rotation
-                  </div>
-                  <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--t2)' }}>
-                    When it's your turn to pick, it'll show here
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
           {/* Left column */}
-          <div className="cp-dashboard-primary-stack">
+          <div className="cp-dashboard-main-stack">
+            {/* 1. Pick CTA — your turn banner or static placeholder */}
+            <div id="tour-turn" className="cp-dashboard-primary-top">
+              {!loading && activeTurn ? (
+                <PickCTACard
+                  turn={activeTurn}
+                  groupId={primaryGroupId}
+                  onSkip={async () => { await groupsApi.skipRotation(primaryGroupId); await load() }}
+                  onAlreadyPicked={async () => { await groupsApi.completeTurn(primaryGroupId); await load() }}
+                />
+              ) : !loading && (
+                <div style={{
+                  borderRadius: '16px',
+                  border: '1px solid var(--glass)',
+                  background: 'var(--s2)',
+                  padding: '16px 18px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '14px',
+                  opacity: 0.6,
+                }}>
+                  <div style={{
+                    width: '48px', height: '48px', borderRadius: '14px', flexShrink: 0,
+                    background: 'var(--s3)', border: '1px solid var(--glass)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '22px',
+                  }}>
+                    🔄
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: '3px' }}>
+                      Rotation
+                    </div>
+                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--t2)' }}>
+                      When it's your turn to pick, it'll show here
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+
             {/* 2. RSVP needed */}
-            {pendingPartyInvites.length > 0 && (
+            {visiblePartyInvites.length > 0 && (
               <PartyInviteCarousel
-                invites={pendingPartyInvites}
+                invites={visiblePartyInvites}
                 userId={user?.id}
                 onRsvp={handleRsvpResponded}
               />

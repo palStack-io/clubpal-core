@@ -8,6 +8,7 @@ import { enrichClient } from '../../api/client'
 import ToggleRow from '../ui/ToggleRow'
 import { resolveActivity, ACTIVITY_LIST } from '../../constants/activities'
 import PartyModeSection from '../party/PartyModeSection'
+import BringListBuilder from '../party/BringListBuilder'
 
 const inputStyle = {
   background: 'var(--s2)',
@@ -85,6 +86,8 @@ export default function CreateEventModal({
   const [maxAttendees, setMaxAttendees] = useState('')
   const [pulseCheck, setPulseCheck] = useState(false)
   const [billSplitEnabled, setBillSplitEnabled] = useState(false)
+  const [eventBringEnabled, setEventBringEnabled] = useState(false)
+  const [eventBringItems, setEventBringItems] = useState([])
   const [ratingsEnabled, setRatingsEnabled] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -178,6 +181,9 @@ export default function CreateEventModal({
         max_attendees: maxAttendees ? parseInt(maxAttendees, 10) : null,
         bill_split_enabled: billSplitEnabled,
         ratings_enabled: ratingsEnabled,
+        bring_list_enabled: eventBringEnabled,
+        bring_list_type: 'freeform',
+        bring_items: eventBringItems,
         // Pass discover item image as default banner (user may have kept or cleared it)
         banner_url: coverUrlOverride || null,
         ...(isRecurring && recurrence.end_date ? {
@@ -627,6 +633,16 @@ export default function CreateEventModal({
           }}
           onFocus={focusBorder}
           onBlur={blurBorder}
+        />
+      </div>
+
+      {/* Bring list for regular events */}
+      <div style={{ borderTop: '1px solid var(--s3)', paddingTop: 18, marginBottom: 12 }}>
+        <BringListBuilder
+          enabled={eventBringEnabled}
+          onToggle={() => setEventBringEnabled(v => !v)}
+          items={eventBringItems}
+          onItemsChange={setEventBringItems}
         />
       </div>
 

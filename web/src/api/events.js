@@ -73,6 +73,21 @@ export const eventsApi = {
   endEvent: (eventId) =>
     eventsClient.post(`/events/${eventId}/end`).then(r => r.data),
 
+  getEventBringList: (eventId) =>
+    eventsClient.get(`/events/${eventId}/bring`).then(r => r.data),
+
+  updateMyEventBring: (eventId, data) =>
+    eventsClient.patch(`/events/${eventId}/bring/me`, data).then(r => r.data),
+
+  addEventBringItem: (eventId, data) =>
+    eventsClient.post(`/events/${eventId}/bring/items`, data).then(r => r.data),
+
+  editEventBringItem: (eventId, itemId, data) =>
+    eventsClient.patch(`/events/${eventId}/bring/items/${itemId}`, data).then(r => r.data),
+
+  deleteEventBringItem: (eventId, itemId) =>
+    eventsClient.delete(`/events/${eventId}/bring/items/${itemId}`).then(r => r.data),
+
   getPendingPartyInvites: (groupId) =>
     eventsClient.get('/party-invites/pending-for-group', { params: { group_id: groupId } }).then(r => r.data),
 

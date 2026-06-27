@@ -30,6 +30,9 @@ class EventCreate(BaseModel):
     parent_recurring_id: Optional[int] = None
     bill_split_enabled: bool = False
     ratings_enabled: bool = True
+    bring_list_enabled: bool = False
+    bring_list_type: str = "freeform"
+    bring_items: List[dict] = Field(default_factory=list)
     # Recurring fields (only used when is_recurring=True)
     is_recurring: bool = False
     recurrence_rule: Optional[str] = None        # weekly | biweekly | monthly
@@ -84,6 +87,8 @@ class EventUpdate(BaseModel):
     bg_scope: Optional[str] = None
     ratings_enabled: Optional[bool] = None
     bill_split_enabled: Optional[bool] = None
+    bring_list_enabled: Optional[bool] = None
+    bring_list_type: Optional[str] = None
 
 
 class EventResponse(BaseModel):
@@ -108,6 +113,8 @@ class EventResponse(BaseModel):
     max_attendees: Optional[int] = None
     bill_split_enabled: bool = False
     ratings_enabled: bool = True
+    bring_list_enabled: bool = False
+    bring_list_type: str = "freeform"
     my_rsvp_status: Optional[str] = None
     attendee_count: int = 0
 
@@ -137,6 +144,36 @@ class AttendeeResponse(BaseModel):
     user_id: int
     status: str
     responded_at: datetime
+    bring_note: Optional[str] = None
+    claim_item_id: Optional[int] = None
+
+
+class EventBringItemCreate(BaseModel):
+    label: str = Field(..., min_length=1, max_length=200)
+    emoji: str = ""
+    max_claims: int = Field(1, ge=1)
+
+
+class EventBringItemResponse(BaseModel):
+    id: int
+    event_id: int
+    label: str
+    emoji: str = ""
+    max_claims: int = 1
+    sort_order: int = 0
+    claimed_count: int = 0
+    claimed_by: List[dict] = Field(default_factory=list)
+
+
+class EventBringItemUpdate(BaseModel):
+    label: Optional[str] = Field(None, min_length=1, max_length=200)
+    emoji: Optional[str] = Field(None, max_length=16)
+    max_claims: Optional[int] = Field(None, ge=1)
+
+
+class EventBringUpdate(BaseModel):
+    bring_note: Optional[str] = Field(None, max_length=500)
+    claim_item_id: Optional[int] = None
 
 
 # Event comment models

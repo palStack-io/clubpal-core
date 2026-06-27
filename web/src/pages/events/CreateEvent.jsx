@@ -11,6 +11,7 @@ import BannerUpload from '../../components/ui/BannerUpload'
 import { FormSection, FormRow, FormGroup, FormInput, FormSelect } from '../../components/ui/Form'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { useToast } from '../../components/ui/Toast'
+import BringListBuilder from '../../components/party/BringListBuilder'
 
 // Maps group activity_type → activity category for filtering
 const ACTIVITY_TYPE_TO_CATEGORY = {
@@ -81,6 +82,8 @@ export default function CreateEvent() {
 
   // Bill split opt-in
   const [billSplitEnabled, setBillSplitEnabled] = useState(false)
+  const [eventBringEnabled, setEventBringEnabled] = useState(false)
+  const [eventBringItems, setEventBringItems] = useState([])
 
   // Banner/cover
   const [coverFile, setCoverFile] = useState(null)
@@ -139,6 +142,9 @@ export default function CreateEvent() {
         description: form.description.trim() || null,
         created_by: user.id,
         bill_split_enabled: billSplitEnabled,
+        bring_list_enabled: eventBringEnabled,
+        bring_list_type: 'freeform',
+        bring_items: eventBringItems,
         // Recurring fields
         is_recurring: isRecurring,
         recurrence_rule: isRecurring ? recurrence.rule : null,
@@ -239,6 +245,15 @@ export default function CreateEvent() {
               style={{ width: '100%', resize: 'none', background: 'var(--s3)', border: '1px solid var(--glass)', borderRadius: '10px', padding: '10px 12px', fontSize: '14px', color: 'var(--t1)', outline: 'none', fontFamily: 'inherit' }}
             />
           </FormGroup>
+        </FormSection>
+
+        <FormSection title="Bring List">
+          <BringListBuilder
+            enabled={eventBringEnabled}
+            onToggle={() => setEventBringEnabled(v => !v)}
+            items={eventBringItems}
+            onItemsChange={setEventBringItems}
+          />
         </FormSection>
 
         {/* Bill Split */}

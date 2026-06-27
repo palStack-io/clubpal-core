@@ -425,11 +425,19 @@ def get_invite_items(party_invite_id: int) -> list:
     )
     items = [dict(r) for r in cursor.fetchall()]
     for item in items:
+        # Count going guests who claimed this item (the public RSVP flow writes guest.claim_item_id),
+        # plus any explicit item-claim rows.
+        cursor.execute(
+            "SELECT COUNT(*) AS cnt FROM party_invite_guests WHERE claim_item_id = %s AND rsvp_status = 'going'",
+            (item["id"],)
+        )
+        guest_claims = int(cursor.fetchone()["cnt"])
         cursor.execute(
             "SELECT COUNT(*) AS cnt FROM party_invite_item_claims WHERE item_id = %s",
             (item["id"],)
         )
-        item["claim_count"] = int(cursor.fetchone()["cnt"])
+        explicit_claims = int(cursor.fetchone()["cnt"])
+        item["claim_count"] = guest_claims + explicit_claims
     conn.close()
     return items
 

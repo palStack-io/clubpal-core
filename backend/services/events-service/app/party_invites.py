@@ -16,7 +16,7 @@ from fastapi import Query
 from pydantic import BaseModel, Field
 
 from app import storage
-from app.database import get_db, get_event, update_event
+from app.database import get_db, get_event, update_event, get_comments
 from app.party_invites_db import (
     create_party_invite, get_party_invite_by_token, get_party_invite_by_event_id,
     update_party_invite, add_group_to_invite, get_invite_groups,
@@ -800,6 +800,19 @@ async def get_public_guests(
         for g in guests_raw if g["rsvp_status"] == "going"
     ]
 
+    # Who's bringing what — group going guests' claims/notes by item (first name only)
+    item_brings: dict = {}
+    free_brings: list = []
+    for g in guests_raw:
+        if g["rsvp_status"] != "going":
+            continue
+        fname = g["name"].split()[0] if g.get("name") else "Guest"
+        note = (g.get("bring_note") or "").strip() or None
+        if g.get("claim_item_id"):
+            item_brings.setdefault(str(g["claim_item_id"]), []).append({"name": fname, "note": note})
+        elif note:
+            free_brings.append({"name": fname, "note": note})
+
     # ClubPal members going per group
     member_groups = []
     for g in groups:
@@ -820,4 +833,53 @@ async def get_public_guests(
         else:
             member_groups.append({"group_id": g["group_id"], "members": []})
 
-    return {"guests": guests_safe, "member_groups": member_groups}
+    return {
+        "guests": guests_safe,
+        "member_groups": member_groups,
+        "item_brings": item_brings,
+        "free_brings": free_brings,
+    }
+
+
+def _verify_guest_access(invite: dict, token: str, guest_id: Optional[int], edit_token: Optional[str]) -> None:
+    """Raise 403 unless the caller is a guest who has RSVPd to this invite."""
+    if not guest_id or not edit_token:
+        raise HTTPException(status_code=403, detail="RSVP first to view this")
+    if not guest_has_rsvpd(invite["id"], guest_id) or not hmac.compare_digest(
+        edit_token, _guest_edit_token(guest_id, token)
+    ):
+        raise HTTPException(status_code=403, detail="Invalid RSVP access")
+
+
+@public_router.get("/{token}/comments")
+async def get_public_comments(
+    token: str,
+    guest_id: Optional[int] = Query(None),
+    edit_token: Optional[str] = Query(None),
+):
+    """Read-only comment thread for a public invite. Gated behind RSVP; guests cannot post."""
+    invite = get_party_invite_by_token(token)
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    _verify_guest_access(invite, token, guest_id, edit_token)
+
+    comments = get_comments(invite["event_id"])
+    profiles: dict = {}
+    for uid in {c["user_id"] for c in comments if c.get("user_id")}:
+        profiles[uid] = await _get_host_profile(uid)
+    return {
+        "comments": [
+            {
+                "id": c["id"],
+                "content": c["content"],
+                "created_at": c.get("created_at"),
+                "author": {
+                    "full_name": profiles.get(c["user_id"], {}).get("full_name"),
+                    "avatar_url": profiles.get(c["user_id"], {}).get("avatar_url"),
+                },
+            }
+            for c in comments
+        ],
+        "can_post": False,
+        "nudge_signup": True,
+    }

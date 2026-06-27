@@ -185,11 +185,15 @@ def init_party_invite_tables():
     # ── Backfill: link existing party_invite_items to canonical event items ───
     # For any invite item not yet mirrored, create a matching event_bring_items
     # row, link it, and enable the event's bring list so the event page shows it.
+    # INNER JOIN events so orphaned invites (event since deleted — party_invites
+    # has no FK on event_id) are skipped; inserting their event_id would violate
+    # the event_bring_items FK and crash startup.
     cursor.execute("""
         SELECT pii.id, pii.party_invite_id, pii.label, pii.emoji,
                pii.max_claims, pii.sort_order, pi.event_id
         FROM party_invite_items pii
         JOIN party_invites pi ON pi.id = pii.party_invite_id
+        JOIN events e ON e.id = pi.event_id
         WHERE pii.event_item_id IS NULL
     """)
     for r in cursor.fetchall():

@@ -7,6 +7,7 @@ const sizes = {
   md: 'max-w-md',
   lg: 'max-w-lg',
   xl: 'max-w-xl',
+  xxl: 'max-w-6xl',
 }
 
 export default function Modal({ isOpen, onClose, title, children, size = 'md', footer }) {

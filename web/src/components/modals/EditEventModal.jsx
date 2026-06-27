@@ -5,7 +5,6 @@ import { eventsApi } from '../../api/events'
 import BackgroundPicker from '../ui/BackgroundPicker'
 import ToggleRow from '../ui/ToggleRow'
 import { resolveActivity } from '../../constants/activities'
-import PartyInviteControls from '../party/PartyInviteControls'
 
 const inputStyle = {
   background: 'var(--s2)',
@@ -66,7 +65,7 @@ function extractDateParts(dateStr) {
   }
 }
 
-export default function EditEventModal({ isOpen, onClose, event, partyInvite = null, onPartyInviteUpdated, onSaved, onCancel }) {
+export default function EditEventModal({ isOpen, onClose, event, onSaved, onCancel }) {
   const [scheduledDate, setScheduledDate] = useState('')
   const [scheduledTime, setScheduledTime] = useState('')
   const [notes, setNotes] = useState('')
@@ -80,7 +79,6 @@ export default function EditEventModal({ isOpen, onClose, event, partyInvite = n
   const [bgScope, setBgScope] = useState('hero')
   const [ratingsEnabled, setRatingsEnabled] = useState(true)
   const [billSplitEnabled, setBillSplitEnabled] = useState(false)
-  const [partyInviteDraft, setPartyInviteDraft] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const coverRef = useRef()
@@ -107,8 +105,7 @@ export default function EditEventModal({ isOpen, onClose, event, partyInvite = n
       setRatingsEnabled(event.ratings_enabled !== false)
       setBillSplitEnabled(event.bill_split_enabled === true)
     }
-    setPartyInviteDraft(partyInvite)
-  }, [event, partyInvite])
+  }, [event])
 
   if (!event) return null
 
@@ -370,20 +367,6 @@ export default function EditEventModal({ isOpen, onClose, event, partyInvite = n
           imageUploading={coverUploading}
         />
       </div>
-
-      {partyInviteDraft?.token && (
-        <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>Party Invite</div>
-          <PartyInviteControls
-            token={partyInviteDraft.token}
-            invite={partyInviteDraft}
-            onInviteUpdated={(updated) => {
-              setPartyInviteDraft(updated)
-              onPartyInviteUpdated?.(updated)
-            }}
-          />
-        </div>
-      )}
 
       <ToggleRow
         value={billSplitEnabled}

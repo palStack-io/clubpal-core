@@ -97,6 +97,15 @@ export const eventsApi = {
   updatePartyInvite: (token, data) =>
     eventsClient.patch(`/party-invites/${token}`, data).then(r => r.data),
 
+  addPartyInviteItem: (token, data) =>
+    eventsClient.post(`/party-invites/${token}/items`, data).then(r => r.data),
+
+  deletePartyInviteItem: (token, itemId) =>
+    eventsClient.delete(`/party-invites/${token}/items/${itemId}`).then(r => r.data),
+
+  sharePartyInviteToGroup: (token, groupId) =>
+    eventsClient.post(`/party-invites/${token}/share-to-group`, { group_id: Number(groupId) }).then(r => r.data),
+
   getPartyInviteCoverUploadUrl: (token, filename, contentType) =>
     eventsClient.post(`/party-invites/${token}/cover/upload-url`, { filename, content_type: contentType }).then(r => r.data),
 }

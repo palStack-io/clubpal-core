@@ -14,6 +14,7 @@ import AnimatedBackground from '../../components/ui/AnimatedBackground'
 import BillSplitModal from '../../components/modals/BillSplitModal'
 import BillSplitStatusCard from '../../components/events/BillSplitStatusCard'
 import PartyInviteAdminCard from '../../components/events/PartyInviteAdminCard'
+import EditPublicInviteModal from '../../components/party/EditPublicInviteModal'
 import { eventsApi } from '../../api/events'
 import { ratingsClient, gatewayClient, eventsClient } from '../../api/client'
 import { useAuth } from '../../contexts/AuthContext'
@@ -47,6 +48,7 @@ export default function EventDetail() {
   const [partyInvite, setPartyInvite] = useState(null)
   const [rsvpLoading, setRsvpLoading] = useState(false)
   const [showEditEvent, setShowEditEvent] = useState(false)
+  const [showEditInvite, setShowEditInvite] = useState(false)
   const [showRateModal, setShowRateModal] = useState(false)
   const [showBillSplit, setShowBillSplit] = useState(false)
   const [showAddAttendees, setShowAddAttendees] = useState(false)
@@ -256,6 +258,8 @@ export default function EventDetail() {
 
   const heroActions = [
     ...(event.status === 'scheduled' && isHost ? [{ label: '✏️ Edit', onClick: () => setShowEditEvent(true) }] : []),
+    ...(partyInvite?.token && (isHost || isCreator) ? [{ label: '✨ Edit Public Invite', onClick: () => setShowEditInvite(true) }] : []),
+    ...((isHost || isCreator) && !partyInvite ? [{ label: '✨ Create Invite', onClick: () => navigate('/events/new/invite') }] : []),
     ...(isScheduled && (isHost || isCreator) ? [{ label: '➕ Add Attendees', onClick: () => setShowAddAttendees(true) }] : []),
     ...(isScheduled && (isHost || isCreator) ? [{ label: '🏁 End Event', onClick: () => setShowEndConfirm(true) }] : []),
     ...(isScheduled && isCreator && !!event.rsvp_deadline ? [{ label: '📣 Send Reminder', onClick: handleRsvpReminder }] : []),
@@ -372,10 +376,15 @@ export default function EventDetail() {
         isOpen={showEditEvent}
         onClose={() => setShowEditEvent(false)}
         event={event}
-        partyInvite={partyInvite}
-        onPartyInviteUpdated={setPartyInvite}
         onSaved={(updatedFields) => { setShowEditEvent(false); if (updatedFields) setEvent(prev => ({ ...prev, ...updatedFields })); fetchAll() }}
         onCancel={handleCancelEvent}
+      />
+      <EditPublicInviteModal
+        isOpen={showEditInvite}
+        onClose={() => setShowEditInvite(false)}
+        token={partyInvite?.token}
+        event={event}
+        onSaved={(updatedInvite) => { if (updatedInvite) setPartyInvite(prev => ({ ...prev, ...updatedInvite })); fetchAll() }}
       />
       <AddEventAttendeesModal
         isOpen={showAddAttendees}

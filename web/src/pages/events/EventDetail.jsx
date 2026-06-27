@@ -372,6 +372,8 @@ export default function EventDetail() {
         isOpen={showEditEvent}
         onClose={() => setShowEditEvent(false)}
         event={event}
+        partyInvite={partyInvite}
+        onPartyInviteUpdated={setPartyInvite}
         onSaved={(updatedFields) => { setShowEditEvent(false); if (updatedFields) setEvent(prev => ({ ...prev, ...updatedFields })); fetchAll() }}
         onCancel={handleCancelEvent}
       />

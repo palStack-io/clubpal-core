@@ -338,7 +338,7 @@ export default function PartyInvitePage() {
         <div style={{ position: 'absolute', right: 4, top: -13, width: 26, height: 26, borderRadius: '50%', background: '#08080a', zIndex: 10 }} />
         <div style={{ borderTop: '1.5px dashed rgba(255,255,255,0.1)' }} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 0' }}>
-          <span style={{ fontSize: '.62rem', color: 'rgba(255,255,255,0.22)', letterSpacing: '.18em', textTransform: 'uppercase' }}>Admit One</span>
+          <span style={{ fontSize: '.62rem', color: 'rgba(255,255,255,0.22)', letterSpacing: '.18em', textTransform: 'uppercase' }}>Party Pass</span>
           <span style={{ fontFamily: "'Space Mono', 'Courier New', monospace", fontSize: '.72rem', fontWeight: 700, color: accent, letterSpacing: '.22em' }}>
             {admitCode}
           </span>

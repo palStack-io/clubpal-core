@@ -146,6 +146,96 @@ def init_party_invite_tables():
         "ALTER TABLE party_invites ADD COLUMN IF NOT EXISTS cover_image_position VARCHAR(50) DEFAULT '50% 50%'"
     )
 
+    # ── Unified bring list ───────────────────────────────────────────────────
+    # Each party_invite_item is mirrored 1:1 to a canonical event_bring_items row.
+    # event_item_id links the two; claims for both surfaces live in a single
+    # event_bring_item_claims table keyed on the event item (shared capacity).
+    cursor.execute(
+        "ALTER TABLE party_invite_items ADD COLUMN IF NOT EXISTS event_item_id "
+        "INTEGER REFERENCES event_bring_items(id) ON DELETE CASCADE"
+    )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_pi_items_event_item "
+        "ON party_invite_items(event_item_id) WHERE event_item_id IS NOT NULL"
+    )
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS event_bring_item_claims (
+            id              SERIAL PRIMARY KEY,
+            event_item_id   INTEGER NOT NULL REFERENCES event_bring_items(id) ON DELETE CASCADE,
+            user_id         INTEGER,
+            guest_id        INTEGER REFERENCES party_invite_guests(id) ON DELETE CASCADE,
+            quantity        INTEGER NOT NULL DEFAULT 1,
+            note            VARCHAR(500),
+            created_at      TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_ebic_item_user "
+        "ON event_bring_item_claims(event_item_id, user_id) WHERE user_id IS NOT NULL"
+    )
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_ebic_item_guest "
+        "ON event_bring_item_claims(event_item_id, guest_id) WHERE guest_id IS NOT NULL"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ebic_item ON event_bring_item_claims(event_item_id)"
+    )
+
+    # ── Backfill: link existing party_invite_items to canonical event items ───
+    # For any invite item not yet mirrored, create a matching event_bring_items
+    # row, link it, and enable the event's bring list so the event page shows it.
+    cursor.execute("""
+        SELECT pii.id, pii.party_invite_id, pii.label, pii.emoji,
+               pii.max_claims, pii.sort_order, pi.event_id
+        FROM party_invite_items pii
+        JOIN party_invites pi ON pi.id = pii.party_invite_id
+        WHERE pii.event_item_id IS NULL
+    """)
+    for r in cursor.fetchall():
+        cursor.execute(
+            """INSERT INTO event_bring_items (event_id, label, emoji, max_claims, sort_order)
+               VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+            (r["event_id"], r["label"], r["emoji"] or "", r["max_claims"] or 1, r["sort_order"] or 0)
+        )
+        ev_item_id = cursor.fetchone()["id"]
+        cursor.execute(
+            "UPDATE party_invite_items SET event_item_id = %s WHERE id = %s",
+            (ev_item_id, r["id"])
+        )
+        cursor.execute(
+            "UPDATE events SET bring_list_enabled = TRUE WHERE id = %s",
+            (r["event_id"],)
+        )
+
+    # ── Backfill: migrate legacy single-claims into the unified claims table ──
+    # Idempotent — ON CONFLICT DO NOTHING against the per-claimant unique indexes.
+    cursor.execute("""
+        INSERT INTO event_bring_item_claims (event_item_id, user_id, quantity)
+        SELECT ea.claim_item_id, ea.user_id, 1
+        FROM event_attendees ea
+        JOIN event_bring_items ebi ON ebi.id = ea.claim_item_id
+        WHERE ea.claim_item_id IS NOT NULL
+        ON CONFLICT DO NOTHING
+    """)
+    cursor.execute("""
+        INSERT INTO event_bring_item_claims (event_item_id, guest_id, quantity)
+        SELECT pii.event_item_id, g.id, 1
+        FROM party_invite_guests g
+        JOIN party_invite_items pii ON pii.id = g.claim_item_id
+        WHERE g.claim_item_id IS NOT NULL AND pii.event_item_id IS NOT NULL
+        ON CONFLICT DO NOTHING
+    """)
+    cursor.execute("""
+        INSERT INTO event_bring_item_claims (event_item_id, user_id, guest_id, quantity, note)
+        SELECT pii.event_item_id, c.clubpal_user_id, c.guest_id, 1, c.note
+        FROM party_invite_item_claims c
+        JOIN party_invite_items pii ON pii.id = c.item_id
+        WHERE pii.event_item_id IS NOT NULL
+          AND (c.clubpal_user_id IS NOT NULL OR c.guest_id IS NOT NULL)
+        ON CONFLICT DO NOTHING
+    """)
+
     conn.commit()
     conn.close()
 
@@ -425,19 +515,16 @@ def get_invite_items(party_invite_id: int) -> list:
     )
     items = [dict(r) for r in cursor.fetchall()]
     for item in items:
-        # Count going guests who claimed this item (the public RSVP flow writes guest.claim_item_id),
-        # plus any explicit item-claim rows.
-        cursor.execute(
-            "SELECT COUNT(*) AS cnt FROM party_invite_guests WHERE claim_item_id = %s AND rsvp_status = 'going'",
-            (item["id"],)
-        )
-        guest_claims = int(cursor.fetchone()["cnt"])
-        cursor.execute(
-            "SELECT COUNT(*) AS cnt FROM party_invite_item_claims WHERE item_id = %s",
-            (item["id"],)
-        )
-        explicit_claims = int(cursor.fetchone()["cnt"])
-        item["claim_count"] = guest_claims + explicit_claims
+        # Unified count: sum of per-person quantities (members + guests) drawn
+        # against the canonical event item's shared capacity.
+        if item.get("event_item_id"):
+            cursor.execute(
+                "SELECT COALESCE(SUM(quantity), 0) AS cnt FROM event_bring_item_claims WHERE event_item_id = %s",
+                (item["event_item_id"],)
+            )
+            item["claim_count"] = int(cursor.fetchone()["cnt"] or 0)
+        else:
+            item["claim_count"] = 0
     conn.close()
     return items
 

@@ -176,6 +176,11 @@ class EventBringUpdate(BaseModel):
     claim_item_id: Optional[int] = None
 
 
+class EventItemClaim(BaseModel):
+    quantity: int = Field(1, ge=0, le=99)  # 0 releases the claim
+    note: Optional[str] = Field(None, max_length=500)
+
+
 # Event comment models
 class CommentCreate(BaseModel):
     content: str = Field(..., min_length=1, max_length=1000)

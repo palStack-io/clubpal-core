@@ -789,13 +789,16 @@ def update_event_bring_item(event_id: int, item_id: int, label: str = None, emoj
 
 
 def get_event_bring_items(event_id: int) -> List[dict]:
+    """Bring-list items with unified claim info. claimed_count is the sum of
+    per-person quantities across BOTH clubPal members and external party guests
+    (event_bring_item_claims), counted against the single shared max_claims."""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
             """SELECT ebi.*,
-                      COALESCE(COUNT(ea.user_id) FILTER (WHERE ea.claim_item_id = ebi.id), 0) AS claimed_count
+                      COALESCE(SUM(c.quantity), 0) AS claimed_count
                FROM event_bring_items ebi
-               LEFT JOIN event_attendees ea ON ea.event_id = ebi.event_id AND ea.claim_item_id = ebi.id
+               LEFT JOIN event_bring_item_claims c ON c.event_item_id = ebi.id
                WHERE ebi.event_id = %s
                GROUP BY ebi.id
                ORDER BY ebi.sort_order ASC, ebi.id ASC""",
@@ -803,13 +806,28 @@ def get_event_bring_items(event_id: int) -> List[dict]:
         )
         items = [dict(row) for row in cursor.fetchall()]
         for item in items:
+            item["claimed_count"] = int(item.get("claimed_count") or 0)
             cursor.execute(
-                """SELECT user_id, bring_note FROM event_attendees
-                   WHERE event_id = %s AND claim_item_id = %s
-                   ORDER BY responded_at ASC""",
-                (event_id, item["id"])
+                """SELECT c.user_id, c.guest_id, c.quantity, c.note, g.name AS guest_name
+                   FROM event_bring_item_claims c
+                   LEFT JOIN party_invite_guests g ON g.id = c.guest_id
+                   WHERE c.event_item_id = %s
+                   ORDER BY c.created_at ASC""",
+                (item["id"],)
             )
-            item["claimed_by"] = [dict(row) for row in cursor.fetchall()]
+            claimers = []
+            for row in cursor.fetchall():
+                row = dict(row)
+                is_guest = row["guest_id"] is not None
+                claimers.append({
+                    "user_id": row["user_id"],
+                    "guest_id": row["guest_id"],
+                    "is_guest": is_guest,
+                    "name": (row["guest_name"].split()[0] if is_guest and row.get("guest_name") else None),
+                    "quantity": int(row["quantity"] or 1),
+                    "note": row["note"],
+                })
+            item["claimed_by"] = claimers
         return items
 
 

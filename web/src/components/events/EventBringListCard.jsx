@@ -5,9 +5,9 @@ import { eventsApi } from '../../api/events'
 export default function EventBringListCard({ event, attendees = [], currentUser, onUpdated }) {
   const [data, setData] = useState(null)
   const [bringNote, setBringNote] = useState('')
-  const [claimItemId, setClaimItemId] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [claimingId, setClaimingId] = useState(null)
 
   // Host/creator management state
   const [newLabel, setNewLabel] = useState('')
@@ -24,7 +24,7 @@ export default function EventBringListCard({ event, attendees = [], currentUser,
     return Object.fromEntries(attendees.map(a => [a.user_id, a.full_name || a.username || `User #${a.user_id}`]))
   }, [attendees])
 
-  // Reload the item list + claim counts (NOT the personal fields — those come from `attendees`)
+  // Reload the item list + claim counts
   async function refresh() {
     const res = await eventsApi.getEventBringList(event.id)
     setData(res)
@@ -37,27 +37,50 @@ export default function EventBringListCard({ event, attendees = [], currentUser,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event?.id, event?.bring_list_enabled])
 
-  // Pre-fill the current user's note + claim from the attendee list (re-syncs after save)
+  // Pre-fill the current user's freeform note from the attendee list
   useEffect(() => {
     const mine = attendees.find(a => String(a.user_id) === String(currentUser?.id))
     setBringNote(mine?.bring_note || '')
-    setClaimItemId(mine?.claim_item_id ? String(mine.claim_item_id) : '')
   }, [attendees, currentUser?.id])
 
   if (!event?.bring_list_enabled) return null
 
-  async function save() {
-    setSaving(true)
+  const items = data?.items || []
+
+  // How many units the current member has claimed on a given item
+  function myQuantity(item) {
+    const mine = (item.claimed_by || []).find(c => !c.is_guest && String(c.user_id) === String(currentUser?.id))
+    return mine?.quantity || 0
+  }
+
+  function claimerLabel(c) {
+    const name = c.is_guest ? `${c.name || 'Guest'} (guest)` : (attendeeNames[c.user_id] || `User #${c.user_id}`)
+    return c.quantity > 1 ? `${name} ×${c.quantity}` : name
+  }
+
+  async function setClaim(itemId, quantity) {
+    setClaimingId(itemId)
     setError('')
     try {
-      await eventsApi.updateMyEventBring(event.id, {
-        bring_note: bringNote.trim() || null,
-        claim_item_id: claimItemId ? Number(claimItemId) : null,
-      })
+      await eventsApi.claimEventBringItem(event.id, itemId, { quantity, note: null })
       await refresh()
       onUpdated && onUpdated()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not save what you are bringing.')
+      setError(err?.response?.data?.detail || 'Could not update your claim.')
+    } finally {
+      setClaimingId(null)
+    }
+  }
+
+  async function saveNote() {
+    setSaving(true)
+    setError('')
+    try {
+      await eventsApi.updateMyEventBring(event.id, { bring_note: bringNote.trim() || null })
+      await refresh()
+      onUpdated && onUpdated()
+    } catch (err) {
+      setError(err?.response?.data?.detail || 'Could not save your note.')
     } finally {
       setSaving(false)
     }
@@ -103,7 +126,6 @@ export default function EventBringListCard({ event, attendees = [], currentUser,
     setManageError('')
     try {
       await eventsApi.deleteEventBringItem(event.id, itemId)
-      if (String(claimItemId) === String(itemId)) setClaimItemId('')
       await refresh()
       onUpdated && onUpdated()
     } catch (err) {
@@ -113,11 +135,16 @@ export default function EventBringListCard({ event, attendees = [], currentUser,
     }
   }
 
-  const items = data?.items || []
+  const stepBtn = (disabled) => ({
+    width: 28, height: 28, borderRadius: 8, border: '1px solid var(--glass)',
+    background: 'var(--s2)', color: disabled ? 'var(--t4)' : 'var(--t1)',
+    fontSize: '1.05rem', lineHeight: 1, cursor: disabled ? 'default' : 'pointer',
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700,
+  })
 
   return (
     <Card>
-      <Card.Header title="Bring List" subtitle="Coordinate what everyone is bringing." />
+      <Card.Header title="Bring List" subtitle="Tap an item to add it to what you'll bring." />
       <Card.Body>
         {/* Host/creator management */}
         {isHost && (
@@ -156,54 +183,81 @@ export default function EventBringListCard({ event, attendees = [], currentUser,
           </div>
         )}
 
+        {/* Tap-to-claim shopping list */}
         {items.length > 0 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
             {items.map(item => {
-              const full = item.claimed_count >= item.max_claims && String(claimItemId) !== String(item.id)
+              const mine = myQuantity(item)
+              const remaining = Math.max(0, item.max_claims - item.claimed_count)
+              const claimed = mine > 0
+              const full = remaining <= 0 && !claimed
+              const busy = claimingId === item.id
+              const others = (item.claimed_by || []).filter(c => c.is_guest || String(c.user_id) !== String(currentUser?.id))
               return (
-                <label key={item.id} style={{
-                  display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 12px',
-                  borderRadius: 12, border: `1px solid ${String(claimItemId) === String(item.id) ? 'var(--rose-border)' : 'var(--glass)'}`,
-                  background: String(claimItemId) === String(item.id) ? 'var(--rose-glow)' : 'var(--s3)',
+                <div key={item.id} style={{
+                  padding: '10px 12px', borderRadius: 12,
+                  border: `1px solid ${claimed ? 'var(--rose-border)' : 'var(--glass)'}`,
+                  background: claimed ? 'var(--rose-glow)' : 'var(--s3)',
                   opacity: full ? 0.55 : 1,
                 }}>
-                  <input
-                    type="radio"
-                    name="event-bring-item"
-                    disabled={full || saving}
-                    checked={String(claimItemId) === String(item.id)}
-                    onChange={() => setClaimItemId(String(item.id))}
-                    style={{ marginTop: 3 }}
-                  />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--t1)' }}>
-                      {item.emoji || '•'} {item.label}
-                    </div>
-                    <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 2 }}>
-                      {item.claimed_count}/{item.max_claims} claimed
-                      {item.claimed_by?.length > 0 && ` · ${item.claimed_by.map(c => attendeeNames[c.user_id] || `User #${c.user_id}`).join(', ')}`}
-                    </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <button
+                      type="button"
+                      disabled={busy || (full && !claimed)}
+                      onClick={() => setClaim(item.id, claimed ? 0 : 1)}
+                      style={{
+                        flex: 1, textAlign: 'left', background: 'none', border: 'none', padding: 0,
+                        cursor: busy || full ? 'default' : 'pointer', color: 'var(--t1)',
+                      }}
+                    >
+                      <div style={{ fontSize: 13, fontWeight: 800 }}>
+                        {item.emoji || '•'} {item.label}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 2 }}>
+                        {item.claimed_count}/{item.max_claims} claimed{full ? ' · full' : remaining > 0 ? ` · ${remaining} left` : ''}
+                      </div>
+                    </button>
+                    {claimed ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <button type="button" disabled={busy} onClick={() => setClaim(item.id, mine - 1)} style={stepBtn(busy)}>−</button>
+                        <span style={{ minWidth: 18, textAlign: 'center', fontWeight: 800, color: 'var(--rose-soft)' }}>{mine}</span>
+                        <button type="button" disabled={busy || remaining <= 0} onClick={() => setClaim(item.id, mine + 1)} style={stepBtn(busy || remaining <= 0)}>+</button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={busy || full}
+                        onClick={() => setClaim(item.id, 1)}
+                        style={{
+                          padding: '7px 14px', borderRadius: 999, border: '1px solid var(--rose-border)',
+                          background: full ? 'var(--s2)' : 'var(--rose)', color: full ? 'var(--t3)' : '#fff',
+                          fontSize: 12, fontWeight: 800, cursor: busy || full ? 'default' : 'pointer', whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {full ? 'Full' : "I'll bring"}
+                      </button>
+                    )}
                   </div>
-                </label>
+                  {others.length > 0 && (
+                    <div style={{ fontSize: 11, color: 'var(--t3)', marginTop: 6 }}>
+                      {others.map(claimerLabel).join(', ')}
+                    </div>
+                  )}
+                </div>
               )
             })}
-            {claimItemId && (
-              <button type="button" onClick={() => setClaimItemId('')} style={{ alignSelf: 'flex-start', background: 'none', border: 'none', color: 'var(--t3)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>
-                Clear item claim
-              </button>
-            )}
           </div>
         )}
 
         <label style={{ display: 'block', fontSize: 11, fontWeight: 700, color: 'var(--t3)', marginBottom: 6 }}>
-          What are you bringing?
+          Anything else you're bringing?
         </label>
         <textarea
           value={bringNote}
           onChange={e => setBringNote(e.target.value)}
           placeholder="Homemade dip, folding chairs, extra ice..."
           style={{
-            width: '100%', minHeight: 74, resize: 'vertical', borderRadius: 12,
+            width: '100%', minHeight: 64, resize: 'vertical', borderRadius: 12,
             border: '1px solid var(--glass)', background: 'var(--s3)', color: 'var(--t1)',
             padding: '10px 12px', fontFamily: 'inherit', fontSize: 13, outline: 'none',
           }}
@@ -212,7 +266,7 @@ export default function EventBringListCard({ event, attendees = [], currentUser,
         <button
           type="button"
           disabled={saving}
-          onClick={save}
+          onClick={saveNote}
           style={{
             marginTop: 10, width: '100%', borderRadius: 10, border: '1px solid var(--rose-border)',
             background: 'var(--rose)', color: '#fff', padding: '10px 12px',
@@ -220,7 +274,7 @@ export default function EventBringListCard({ event, attendees = [], currentUser,
             opacity: saving ? 0.7 : 1,
           }}
         >
-          {saving ? 'Saving...' : 'Save bring details'}
+          {saving ? 'Saving...' : 'Save note'}
         </button>
       </Card.Body>
     </Card>

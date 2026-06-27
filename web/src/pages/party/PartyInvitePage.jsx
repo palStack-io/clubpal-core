@@ -188,12 +188,14 @@ function PinIcon() {
 export default function PartyInvitePage() {
   const { token }  = useParams()
   const [invite, setInvite]   = useState(null)
-  const [guests, setGuests]   = useState({ guests: [], member_groups: [], item_brings: {}, free_brings: [] })
+  const [guests, setGuests]   = useState({ guests: [], member_groups: [], item_brings: {}, my_claims: {}, free_brings: [] })
   const [comments, setComments] = useState(null)
   const [guestAccess, setGuestAccess] = useState(null)
   const [guestsLoading, setGuestsLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
+  const [claimBusy, setClaimBusy] = useState(null)
+  const [claimError, setClaimError] = useState('')
 
   useEffect(() => {
     axios.get(`${EVENTS_BASE}/p/${token}`).then(inv => {
@@ -219,7 +221,7 @@ export default function PartyInvitePage() {
       })
       setGuests(gst.data)
     } catch {
-      setGuests({ guests: [], member_groups: [], item_brings: {}, free_brings: [] })
+      setGuests({ guests: [], member_groups: [], item_brings: {}, my_claims: {}, free_brings: [] })
     } finally {
       setGuestsLoading(false)
     }
@@ -237,6 +239,27 @@ export default function PartyInvitePage() {
     const access = { guest_id: data.guest_id, edit_token: data.edit_token }
     setGuestAccess(access)
     loadGuests(access)
+  }
+
+  async function claimItem(itemId, quantity) {
+    if (!guestAccess) return
+    setClaimBusy(itemId)
+    setClaimError('')
+    try {
+      await axios.put(`${EVENTS_BASE}/p/${token}/items/${itemId}/claim`, {
+        guest_id: guestAccess.guest_id,
+        edit_token: guestAccess.edit_token,
+        quantity,
+      })
+      // Refresh item counts (invite) and who's-bringing-what (guests)
+      const inv = await axios.get(`${EVENTS_BASE}/p/${token}`)
+      setInvite(inv.data)
+      await loadGuests(guestAccess)
+    } catch (e) {
+      setClaimError(e?.response?.data?.detail || 'Could not update your claim.')
+    } finally {
+      setClaimBusy(null)
+    }
   }
 
   if (loading) return (
@@ -377,39 +400,83 @@ export default function PartyInvitePage() {
             </div>
           )}
 
-          {/* Bring list */}
+          {/* Bring list — tap to claim once you've RSVP'd */}
           {invite.bring_list_enabled && invite.items?.length > 0 && (
             <div className="pi-card">
               <p className="pi-section-title">What to bring</p>
+              {!guestAccess && (
+                <p style={{ margin: '0 0 12px', fontSize: '.78rem', color: 'rgba(255,255,255,0.45)' }}>
+                  RSVP to claim what you'll bring.
+                </p>
+              )}
               {invite.items.map((item, i) => {
-                const taken = item.claim_count >= item.max_claims
+                const mine = guestAccess ? (guests.my_claims?.[String(item.id)]?.quantity || 0) : 0
+                const remaining = Math.max(0, item.max_claims - item.claim_count)
+                const claimed = mine > 0
+                const full = remaining <= 0 && !claimed
+                const busy = claimBusy === item.id
                 const claimers = guestAccess ? (guests.item_brings?.[String(item.id)] || []) : []
+                const stepStyle = (disabled) => ({
+                  width: 26, height: 26, borderRadius: 7, border: '1px solid rgba(255,255,255,0.18)',
+                  background: 'rgba(255,255,255,0.06)', color: disabled ? 'rgba(255,255,255,0.3)' : '#fff',
+                  fontSize: '1rem', lineHeight: 1, cursor: disabled ? 'default' : 'pointer', fontWeight: 700,
+                })
                 return (
                   <div key={item.id} style={{
                     padding: '10px 0',
                     borderBottom: i < invite.items.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none',
                   }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: taken ? 'rgba(255,255,255,0.3)' : '#fff', fontSize: '.88rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                      <span style={{ color: full ? 'rgba(255,255,255,0.3)' : '#fff', fontSize: '.88rem' }}>
                         {item.emoji && <span style={{ marginRight: 6 }}>{item.emoji}</span>}
                         {item.label}
+                        <span style={{ marginLeft: 8, fontSize: '.72rem', color: 'rgba(255,255,255,0.4)' }}>
+                          {item.claim_count}/{item.max_claims}
+                        </span>
                       </span>
-                      <span style={{
-                        fontSize: '.72rem', fontWeight: 700, padding: '3px 10px', borderRadius: 999,
-                        background: taken ? 'rgba(255,255,255,0.05)' : `${accent}20`,
-                        color: taken ? 'rgba(255,255,255,0.2)' : accent,
-                      }}>
-                        {taken ? 'Taken' : `${item.max_claims - item.claim_count} left`}
-                      </span>
+                      {!guestAccess ? (
+                        <span style={{
+                          fontSize: '.72rem', fontWeight: 700, padding: '3px 10px', borderRadius: 999,
+                          background: full ? 'rgba(255,255,255,0.05)' : `${accent}20`,
+                          color: full ? 'rgba(255,255,255,0.2)' : accent,
+                        }}>
+                          {full ? 'Taken' : `${remaining} left`}
+                        </span>
+                      ) : claimed ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                          <button type="button" disabled={busy} onClick={() => claimItem(item.id, mine - 1)} style={stepStyle(busy)}>−</button>
+                          <span style={{ minWidth: 16, textAlign: 'center', fontWeight: 800, color: accent }}>{mine}</span>
+                          <button type="button" disabled={busy || remaining <= 0} onClick={() => claimItem(item.id, mine + 1)} style={stepStyle(busy || remaining <= 0)}>+</button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={busy || full}
+                          onClick={() => claimItem(item.id, 1)}
+                          style={{
+                            fontSize: '.72rem', fontWeight: 800, padding: '6px 13px', borderRadius: 999,
+                            border: 'none', whiteSpace: 'nowrap',
+                            background: full ? 'rgba(255,255,255,0.05)' : accent,
+                            color: full ? 'rgba(255,255,255,0.25)' : '#fff',
+                            cursor: busy || full ? 'default' : 'pointer',
+                          }}
+                        >
+                          {full ? 'Taken' : "I'll bring"}
+                        </button>
+                      )}
                     </div>
                     {claimers.length > 0 && (
                       <div style={{ fontSize: '.74rem', color: 'rgba(255,255,255,0.45)', marginTop: 4 }}>
-                        {claimers.map(c => c.note ? `${c.name} (${c.note})` : c.name).join(', ')}
+                        {claimers.map(c => {
+                          const q = c.quantity > 1 ? ` ×${c.quantity}` : ''
+                          return c.note ? `${c.name}${q} (${c.note})` : `${c.name}${q}`
+                        }).join(', ')}
                       </div>
                     )}
                   </div>
                 )
               })}
+              {claimError && <div style={{ color: '#fca5a5', fontSize: '.74rem', marginTop: 8 }}>{claimError}</div>}
               {guestAccess && guests.free_brings?.length > 0 && (
                 <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.06)', fontSize: '.78rem', color: 'rgba(255,255,255,0.55)' }}>
                   Also bringing: {guests.free_brings.map(b => b.note ? `${b.name} — ${b.note}` : b.name).join(', ')}

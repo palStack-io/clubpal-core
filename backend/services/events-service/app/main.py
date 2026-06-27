@@ -19,7 +19,9 @@ from app.models import (
     PhotoConfirmRequest, PhotoResponse,
     RecurringScheduleCreate, RecurringScheduleResponse,
     EventBringItemCreate, EventBringItemResponse, EventBringItemUpdate, EventBringUpdate,
+    EventItemClaim,
 )
+from app import bring_sync
 from app.party_invites_db import init_party_invite_tables
 from app.party_invites import host_router as _party_host_router, public_router as _party_public_router
 from app.database import (
@@ -1247,9 +1249,7 @@ async def add_event_bring_item(event_id: int, item: EventBringItemCreate, user_i
         raise HTTPException(status_code=404, detail="Event not found")
     if user_id not in (event.get("host_user_id"), event.get("created_by")):
         raise HTTPException(status_code=403, detail="Only the host can add bring-list items")
-    row = create_event_bring_item(event_id, item.label, item.emoji, item.max_claims, len(get_event_bring_items(event_id)))
-    row["claimed_count"] = 0
-    row["claimed_by"] = []
+    row = bring_sync.create_linked_item(event_id, item.label, item.emoji, item.max_claims)
     return EventBringItemResponse(**row)
 
 
@@ -1260,7 +1260,7 @@ async def remove_event_bring_item(event_id: int, item_id: int, user_id: int = De
         raise HTTPException(status_code=404, detail="Event not found")
     if user_id not in (event.get("host_user_id"), event.get("created_by")):
         raise HTTPException(status_code=403, detail="Only the host can remove bring-list items")
-    delete_event_bring_item(event_id, item_id)
+    bring_sync.delete_linked_item(event_id, item_id)
     return None
 
 
@@ -1276,7 +1276,7 @@ async def edit_event_bring_item(event_id: int, item_id: int, body: EventBringIte
         raise HTTPException(status_code=404, detail="Bring-list item not found")
     if body.max_claims is not None and body.max_claims < existing.get("claimed_count", 0):
         raise HTTPException(status_code=409, detail="Cannot set max claims below the number already claimed")
-    row = update_event_bring_item(event_id, item_id, label=body.label, emoji=body.emoji, max_claims=body.max_claims)
+    row = bring_sync.update_linked_item(event_id, item_id, label=body.label, emoji=body.emoji, max_claims=body.max_claims)
     if not row:
         raise HTTPException(status_code=404, detail="Bring-list item not found")
     return EventBringItemResponse(**row)
@@ -1290,18 +1290,35 @@ async def update_my_event_bring(event_id: int, body: EventBringUpdate, user_id: 
     if not event.get("bring_list_enabled"):
         raise HTTPException(status_code=409, detail="Bring list is not enabled for this event")
 
-    claim_item_id = body.claim_item_id
-    if claim_item_id:
-        items = get_event_bring_items(event_id)
-        item = next((it for it in items if it["id"] == claim_item_id), None)
-        if not item:
+    # Freeform "what I'm bringing" note lives on the attendee row.
+    attendee = update_attendee_bring(event_id, user_id, body.bring_note, None)
+    # Legacy single-item pick (older clients) → register as a unified claim.
+    if body.claim_item_id:
+        if not any(it["id"] == body.claim_item_id for it in get_event_bring_items(event_id)):
             raise HTTPException(status_code=404, detail="Bring-list item not found")
-        already_claimed_by_me = any(c.get("user_id") == user_id for c in item.get("claimed_by", []))
-        if not already_claimed_by_me and item.get("claimed_count", 0) >= item.get("max_claims", 1):
-            raise HTTPException(status_code=409, detail="That item is already fully claimed")
-
-    attendee = update_attendee_bring(event_id, user_id, body.bring_note, claim_item_id)
+        try:
+            bring_sync.set_claim(body.claim_item_id, user_id=user_id, quantity=1, note=body.bring_note)
+        except ValueError as e:
+            raise HTTPException(status_code=409, detail=str(e))
     return AttendeeResponse(**attendee)
+
+
+@app.put("/events/{event_id}/bring/items/{item_id}/claim", response_model=EventBringItemResponse)
+async def claim_event_bring_item(event_id: int, item_id: int, body: EventItemClaim, user_id: int = Depends(get_current_user_id)):
+    """Tap-to-claim for members: set (or release, with quantity 0) my quantity on a
+    bring item, against the shared capacity (members + party guests)."""
+    event = get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if not event.get("bring_list_enabled"):
+        raise HTTPException(status_code=409, detail="Bring list is not enabled for this event")
+    if not any(it["id"] == item_id for it in get_event_bring_items(event_id)):
+        raise HTTPException(status_code=404, detail="Bring-list item not found")
+    try:
+        item = bring_sync.set_claim(item_id, user_id=user_id, quantity=body.quantity, note=body.note)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return EventBringItemResponse(**item)
 
 
 @app.patch("/events/{event_id}/attendees/{user_id}", response_model=AttendeeResponse)

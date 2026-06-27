@@ -79,6 +79,9 @@ export const eventsApi = {
   updateMyEventBring: (eventId, data) =>
     eventsClient.patch(`/events/${eventId}/bring/me`, data).then(r => r.data),
 
+  claimEventBringItem: (eventId, itemId, data) =>
+    eventsClient.put(`/events/${eventId}/bring/items/${itemId}/claim`, data).then(r => r.data),
+
   addEventBringItem: (eventId, data) =>
     eventsClient.post(`/events/${eventId}/bring/items`, data).then(r => r.data),
 

@@ -16,7 +16,8 @@ from fastapi import Query
 from pydantic import BaseModel, Field
 
 from app import storage
-from app.database import get_db, get_event, update_event, get_comments
+from app import bring_sync
+from app.database import get_db, get_event, update_event, get_comments, get_event_bring_items
 from app.party_invites_db import (
     create_party_invite, get_party_invite_by_token, get_party_invite_by_event_id,
     update_party_invite, add_group_to_invite, get_invite_groups,
@@ -209,6 +210,13 @@ class GuestRsvpPatch(BaseModel):
     plus_ones: Optional[int] = Field(None, ge=0, le=20)
 
 
+class GuestItemClaim(BaseModel):
+    guest_id: int
+    edit_token: str
+    quantity: int = Field(1, ge=0, le=99)  # 0 releases the claim
+    note: Optional[str] = Field(None, max_length=500)
+
+
 # ── Simple in-memory rate limiter ─────────────────────────────────────────────
 
 _rsvp_timestamps: dict = defaultdict(list)
@@ -295,14 +303,41 @@ async def create_party_invite_endpoint(
         conn.close()
         invite["cover_image_url"] = event_cover
 
+    # Bring list: enable it on the event so the event page shows it, and mirror
+    # items into canonical event_bring_items (linked) so both surfaces share one list.
+    update_event(body.event_id, bring_list_enabled=bring_enabled)
+
+    # Mirror any pre-existing event bring items into the invite (event created
+    # first, invite attached later) so the public page matches the event page.
+    existing_event_items = get_event_bring_items(body.event_id)
+    conn = get_db()
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT event_item_id FROM party_invite_items WHERE party_invite_id = %s AND event_item_id IS NOT NULL",
+        (invite["id"],)
+    )
+    linked_ids = {r["event_item_id"] for r in cur.fetchall()}
+    for it in existing_event_items:
+        if it["id"] not in linked_ids:
+            cur.execute(
+                """INSERT INTO party_invite_items
+                       (party_invite_id, label, emoji, max_claims, sort_order, event_item_id)
+                   VALUES (%s, %s, %s, %s, %s, %s)""",
+                (invite["id"], it["label"], it.get("emoji") or "", it["max_claims"], it["sort_order"], it["id"])
+            )
+    conn.commit()
+    conn.close()
+
+    # Add the invite's own items as new linked pairs (event item + invite mirror).
     for i, item in enumerate(body.items):
-        create_invite_item(
-            party_invite_id=invite["id"],
-            label=item.get("label", ""),
-            emoji=item.get("emoji", ""),
-            max_claims=item.get("max_claims", 1),
-            sort_order=i,
-        )
+        if item.get("label"):
+            bring_sync.create_linked_item(
+                body.event_id,
+                item.get("label", ""),
+                item.get("emoji", ""),
+                int(item.get("max_claims") or 1),
+                len(existing_event_items) + i,
+            )
 
     for group_id in body.group_ids:
         members = await _get_group_members(group_id)
@@ -430,7 +465,7 @@ async def add_item(
         raise HTTPException(status_code=404, detail="Invite not found")
     if invite["host_user_id"] != user_id:
         raise HTTPException(status_code=403, detail="Not your invite")
-    return create_invite_item(invite["id"], body.label, body.emoji, body.max_claims, body.sort_order)
+    return bring_sync.add_item_from_invite(invite, body.label, body.emoji, body.max_claims, body.sort_order)
 
 
 @host_router.delete("/{token}/items/{item_id}", status_code=204)
@@ -443,7 +478,7 @@ async def remove_item(
         raise HTTPException(status_code=404, detail="Invite not found")
     if invite["host_user_id"] != user_id:
         raise HTTPException(status_code=403, detail="Not your invite")
-    delete_invite_item(item_id, invite["id"])
+    bring_sync.delete_item_from_invite(invite, item_id)
 
 
 @host_router.post("/{token}/share-to-group")
@@ -725,6 +760,15 @@ async def public_rsvp(token: str, body: GuestRsvpCreate, request: Request):
         email_opt_in=body.email_opt_in,
         plus_ones=body.plus_ones,
     )
+    # Register an RSVP-time item pick as a unified claim (shared capacity).
+    if body.claim_item_id:
+        ev_item = bring_sync.event_item_for_invite_item(body.claim_item_id, invite["id"])
+        if ev_item:
+            try:
+                bring_sync.set_claim(ev_item, guest_id=guest["id"], quantity=1, note=body.bring_note)
+            except ValueError:
+                pass
+
     if body.email_opt_in:
         upsert_email_notification(
             invite["id"],
@@ -769,9 +813,43 @@ async def update_public_rsvp(token: str, guest_id: int, body: GuestRsvpPatch):
         raise HTTPException(status_code=403, detail="Invalid edit token")
     kwargs = {k: v for k, v in body.dict().items() if v is not None and k != "edit_token"}
     updated = update_guest_rsvp(guest_id, **kwargs)
+    # Mirror a single-item pick into the unified claims table.
+    if body.claim_item_id:
+        ev_item = bring_sync.event_item_for_invite_item(body.claim_item_id, invite["id"])
+        if ev_item:
+            try:
+                bring_sync.set_claim(ev_item, guest_id=guest_id, quantity=1, note=body.bring_note)
+            except ValueError:
+                pass
     return {
         "ok": True,
         "guest": {k: updated[k] for k in ("id", "rsvp_status", "bring_note", "claim_item_id")},
+    }
+
+
+@public_router.put("/{token}/items/{item_id}/claim")
+async def public_claim_item(token: str, item_id: int, body: GuestItemClaim):
+    """Tap-to-claim for guests: set (or release, with quantity 0) the requesting
+    guest's quantity on a bring item, against the shared capacity."""
+    invite = get_party_invite_by_token(token)
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    if not guest_has_rsvpd(invite["id"], body.guest_id) or not hmac.compare_digest(
+        body.edit_token, _guest_edit_token(body.guest_id, token)
+    ):
+        raise HTTPException(status_code=403, detail="Invalid RSVP access")
+    ev_item = bring_sync.event_item_for_invite_item(item_id, invite["id"])
+    if not ev_item:
+        raise HTTPException(status_code=404, detail="Item not found")
+    try:
+        item = bring_sync.set_claim(ev_item, guest_id=body.guest_id, quantity=body.quantity, note=body.note)
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return {
+        "ok": True,
+        "item_id": item_id,
+        "claimed_count": item["claimed_count"] if item else 0,
+        "max_claims": item["max_claims"] if item else 0,
     }
 
 
@@ -800,17 +878,48 @@ async def get_public_guests(
         for g in guests_raw if g["rsvp_status"] == "going"
     ]
 
-    # Who's bringing what — group going guests' claims/notes by item (first name only)
+    # Who's bringing what — unified claims (members + guests) grouped by invite item id.
+    # my_claims carries the requesting guest's own quantities so the UI can show steppers.
+    items = get_invite_items(invite["id"])
+    event_to_invite = {it["event_item_id"]: it["id"] for it in items if it.get("event_item_id")}
     item_brings: dict = {}
+    my_claims: dict = {}
+    if event_to_invite:
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """SELECT c.event_item_id, c.user_id, c.guest_id, c.quantity, c.note,
+                          g.name AS guest_name, g.rsvp_status AS guest_status
+                   FROM event_bring_item_claims c
+                   LEFT JOIN party_invite_guests g ON g.id = c.guest_id
+                   WHERE c.event_item_id = ANY(%s)
+                   ORDER BY c.created_at ASC""",
+                (list(event_to_invite.keys()),)
+            )
+            for r in cursor.fetchall():
+                r = dict(r)
+                inv_id = event_to_invite.get(r["event_item_id"])
+                if not inv_id:
+                    continue
+                if r["guest_id"] is not None:
+                    name = r["guest_name"].split()[0] if r.get("guest_name") else "Guest"
+                else:
+                    name = "A member"
+                qty = int(r["quantity"] or 1)
+                item_brings.setdefault(str(inv_id), []).append(
+                    {"name": name, "note": r["note"], "quantity": qty}
+                )
+                if r["guest_id"] == guest_id:
+                    my_claims[str(inv_id)] = {"quantity": qty, "note": r["note"]}
+
+    # Freeform "also bringing" notes from going guests who didn't claim a specific item.
     free_brings: list = []
     for g in guests_raw:
         if g["rsvp_status"] != "going":
             continue
         fname = g["name"].split()[0] if g.get("name") else "Guest"
         note = (g.get("bring_note") or "").strip() or None
-        if g.get("claim_item_id"):
-            item_brings.setdefault(str(g["claim_item_id"]), []).append({"name": fname, "note": note})
-        elif note:
+        if note and not g.get("claim_item_id"):
             free_brings.append({"name": fname, "note": note})
 
     # ClubPal members going per group
@@ -837,6 +946,7 @@ async def get_public_guests(
         "guests": guests_safe,
         "member_groups": member_groups,
         "item_brings": item_brings,
+        "my_claims": my_claims,
         "free_brings": free_brings,
     }
 

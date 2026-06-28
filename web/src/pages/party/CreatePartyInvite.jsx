@@ -106,6 +106,7 @@ export default function CreatePartyInvite() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const coverRef = useRef(null)
+  const inviteSearchSeqRef = useRef(0)
   const [groups, setGroups] = useState([])
   const [groupsLoading, setGroupsLoading] = useState(false)
   const [groupsError, setGroupsError] = useState('')
@@ -135,6 +136,7 @@ export default function CreatePartyInvite() {
   const [coverPosition, setCoverPosition] = useState('50% 50%')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [warning, setWarning] = useState('')
   const [createdToken, setCreatedToken] = useState(null)
 
   useEffect(() => {
@@ -175,11 +177,14 @@ export default function CreatePartyInvite() {
   async function searchInvitees(value) {
     setInviteQuery(value)
     if (value.trim().length < 2) { setInviteResults([]); return }
+    const searchSeq = ++inviteSearchSeqRef.current
     try {
       const r = await gatewayClient.get('/users/search', { params: { username: value.trim() } })
-      setInviteResults(Array.isArray(r.data) ? r.data : [])
+      if (inviteSearchSeqRef.current === searchSeq) {
+        setInviteResults(Array.isArray(r.data) ? r.data : [])
+      }
     } catch {
-      setInviteResults([])
+      if (inviteSearchSeqRef.current === searchSeq) setInviteResults([])
     }
   }
 
@@ -228,6 +233,7 @@ export default function CreatePartyInvite() {
 
   async function publish() {
     setError('')
+    setWarning('')
     if (!form.title.trim()) { setError('Event name is required.'); return }
     if (!user?.id) { setError('Please sign in again before creating an invite.'); return }
 
@@ -264,27 +270,37 @@ export default function CreatePartyInvite() {
         items: form.items,
       })
 
+      const warnings = []
       if (coverFile) {
-        const urlData = await eventsApi.getPartyInviteCoverUploadUrl(invite.token, coverFile.name, coverFile.type)
-        const uploadRes = await fetch(urlData.upload_url, {
-          method: 'PUT',
-          headers: { 'Content-Type': coverFile.type },
-          body: coverFile,
-        })
-        if (!uploadRes.ok) throw new Error(`Cover upload failed (${uploadRes.status})`)
-        await eventsApi.updatePartyInvite(invite.token, {
-          cover_image_url: urlData.public_url,
-          cover_image_position: coverPosition,
-        })
+        try {
+          const urlData = await eventsApi.getPartyInviteCoverUploadUrl(invite.token, coverFile.name, coverFile.type)
+          const uploadRes = await fetch(urlData.upload_url, {
+            method: 'PUT',
+            headers: { 'Content-Type': coverFile.type },
+            body: coverFile,
+          })
+          if (!uploadRes.ok) throw new Error(`Cover upload failed (${uploadRes.status})`)
+          await eventsApi.updatePartyInvite(invite.token, {
+            cover_image_url: urlData.public_url,
+            cover_image_position: coverPosition,
+          })
+        } catch {
+          warnings.push('The invite was created, but the cover image upload did not finish.')
+        }
       }
 
       if (directInvitees.length > 0) {
-        await eventsApi.inviteUsersToParty(invite.token, {
-          user_ids: directInvitees.filter(p => p.type === 'user').map(p => p.id),
-          emails: directInvitees.filter(p => p.type === 'email').map(p => p.email),
-        })
+        try {
+          await eventsApi.inviteUsersToParty(invite.token, {
+            user_ids: directInvitees.filter(p => p.type === 'user').map(p => p.id),
+            emails: directInvitees.filter(p => p.type === 'email').map(p => p.email),
+          })
+        } catch {
+          warnings.push('The invite exists, but some direct invites may need to be resent from manage invite.')
+        }
       }
 
+      setWarning(warnings.join(' '))
       setCreatedToken(invite.token)
     } catch (err) {
       const detail = err?.response?.data?.detail
@@ -307,6 +323,11 @@ export default function CreatePartyInvite() {
             <p style={{ margin: '0 0 14px', color: 'var(--t3)', fontSize: '0.92rem', lineHeight: 1.5 }}>
               This public link is ready to share. Selected clubs and direct invitees will see the same banner and invite styling on their dashboards and club pages.
             </p>
+            {warning && (
+              <div style={{ marginBottom: 16, padding: 12, borderRadius: 12, background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.28)', color: '#fbbf24', fontSize: '0.9rem' }}>
+                {warning}
+              </div>
+            )}
             <div style={{ padding: 14, borderRadius: 12, background: 'var(--s3)', border: '1px solid var(--glass)', marginBottom: 16 }}>
               <code style={{ color: 'var(--t1)', fontSize: '0.9rem', wordBreak: 'break-all' }}>{shareUrl}</code>
             </div>

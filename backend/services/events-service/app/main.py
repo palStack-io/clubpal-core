@@ -762,23 +762,24 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(
     except Exception as e:
         logger.warning(f"Could not auto-RSVP creator for event {event_id}: {e}")
 
-    # Add all other group members as "pending" so the event appears on their dashboards
-    try:
-        async with httpx.AsyncClient(timeout=5) as client:
-            r = await client.get(
-                f"{GROUPS_SERVICE_URL}/internal/groups/{event_data.group_id}/members",
-                headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
-            )
-            if r.status_code == 200:
-                for member in r.json():
-                    uid = member.get("user_id")
-                    if uid and uid not in already_rsvped:
-                        try:
-                            upsert_attendee(event_id, uid, "pending")
-                        except Exception as e:
-                            logger.warning(f"Could not add pending attendee {uid} for event {event_id}: {e}")
-    except Exception as e:
-        logger.warning(f"Could not fetch group members to add pending attendees for event {event_id}: {e}")
+    # Add all other group members as "pending" so the event appears on their dashboards.
+    if event_data.group_id is not None:
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                r = await client.get(
+                    f"{GROUPS_SERVICE_URL}/internal/groups/{event_data.group_id}/members",
+                    headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
+                )
+                if r.status_code == 200:
+                    for member in r.json():
+                        uid = member.get("user_id")
+                        if uid and uid not in already_rsvped:
+                            try:
+                                upsert_attendee(event_id, uid, "pending")
+                            except Exception as e:
+                                logger.warning(f"Could not add pending attendee {uid} for event {event_id}: {e}")
+        except Exception as e:
+            logger.warning(f"Could not fetch group members to add pending attendees for event {event_id}: {e}")
 
     # Increment hosted-events counter in ratings service
     try:
@@ -800,16 +801,17 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(
             deadline_str = event_data.rsvp_deadline.strftime('%A, %b %-d at %-I:%M %p')
         except Exception:
             deadline_str = str(event_data.rsvp_deadline)
-    await _notify_group_members(
-        group_id=event_data.group_id,
-        event_id=event_id,
-        event_title=event_data.title,
-        event_date=sched_str,
-        event_type='created',
-        deadline=deadline_str,
-        creator_id=creator_id,
-        has_rsvp=bool(event_data.rsvp_deadline),
-    )
+    if event_data.group_id is not None:
+        await _notify_group_members(
+            group_id=event_data.group_id,
+            event_id=event_id,
+            event_title=event_data.title,
+            event_date=sched_str,
+            event_type='created',
+            deadline=deadline_str,
+            creator_id=creator_id,
+            has_rsvp=bool(event_data.rsvp_deadline),
+        )
 
     event = get_event(event_id)
     return EventResponse(**event)
@@ -823,10 +825,13 @@ async def get_event_endpoint(event_id: int, user_id: int = Depends(get_current_u
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
 
-    if not await _is_group_member(event["group_id"], user_id):
-        raise HTTPException(status_code=403, detail="You are not a member of this group")
+    if event["group_id"] is not None:
+        if not await _is_group_member(event["group_id"], user_id):
+            raise HTTPException(status_code=403, detail="You are not a member of this group")
 
-    await _sync_event_attendees_with_group_members(event_id, event["group_id"])
+        await _sync_event_attendees_with_group_members(event_id, event["group_id"])
+    elif user_id not in (event.get("created_by"), event.get("host_user_id")) and not get_attendee(event_id, user_id):
+        raise HTTPException(status_code=403, detail="You are not an attendee of this event")
 
     # Get attendees
     attendees = get_attendees(event_id)

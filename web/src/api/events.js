@@ -118,6 +118,9 @@ export const eventsApi = {
   addPartyInviteItem: (token, data) =>
     eventsClient.post(`/party-invites/${token}/items`, data).then(r => r.data),
 
+  editPartyInviteItem: (token, itemId, data) =>
+    eventsClient.patch(`/party-invites/${token}/items/${itemId}`, data).then(r => r.data),
+
   deletePartyInviteItem: (token, itemId) =>
     eventsClient.delete(`/party-invites/${token}/items/${itemId}`).then(r => r.data),
 

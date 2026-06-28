@@ -297,6 +297,7 @@ export default function PartyInvitePage() {
       <style>{`:root { --pi-card-bg: ${vars.cardBg}; --pi-card-border: ${vars.cardBorder}; --pi-card-shadow: ${vars.cardShadow}; --pi-card-blur: ${cardBlur}; }`}</style>
       <style>{`
         .pi-wrap { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+        .pi-hero { background-repeat: no-repeat; }
         .pi-hero-inner { padding: 100px 24px 56px; max-width: 960px; margin: 0 auto; display: flex; flex-direction: column; justify-content: flex-end; min-height: min(680px, 80vh); }
         .pi-eyebrow { display: inline-flex; align-items: center; gap: 7px; width: fit-content; margin-bottom: 18px; background: rgba(0,0,0,0.5); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.16); border-radius: 999px; padding: 6px 14px; font-size: .72rem; font-weight: 700; color: rgba(255,255,255,.9); letter-spacing: .04em; text-transform: uppercase; }
         .pi-title { margin: 0 0 14px; font-size: clamp(2.6rem, 7vw, 5.8rem); font-weight: 950; line-height: .9; color: #fff; letter-spacing: -1px; text-shadow: 0 2px 20px rgba(0,0,0,0.5); }
@@ -310,7 +311,8 @@ export default function PartyInvitePage() {
         .pi-section-title { margin: 0 0 14px; font-size: .85rem; font-weight: 800; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: .08em; }
         .pi-perforated { position: relative; padding: 0 24px; max-width: 960px; margin: 0 auto; }
         @media (max-width: 780px) {
-          .pi-hero-inner { padding: 70px 20px 40px; min-height: 520px; }
+          .pi-hero.pi-has-cover { background-size: contain !important; background-position: top center !important; background-color: #08080a; }
+          .pi-hero-inner { padding: clamp(220px, 64vw, 320px) 20px 40px; min-height: auto; }
           .pi-title { font-size: clamp(2.2rem, 14vw, 3.6rem); }
           .pi-content { padding: 16px 20px 60px; grid-template-columns: 1fr; }
           .pi-right { position: static; order: -1; }
@@ -319,7 +321,7 @@ export default function PartyInvitePage() {
       `}</style>
 
       {/* ─── Hero ─── */}
-      <div style={{ position: 'relative', overflow: 'hidden', ...heroBg }}>
+      <div className={`pi-hero${invite.cover_image_url ? ' pi-has-cover' : ''}`} style={{ position: 'relative', overflow: 'hidden', ...heroBg }}>
         <InviteMotion type={invite.bg_animation} accent={accent} />
         {/* layered gradient: top-dim → transparent → heavy bottom fade */}
         <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,0.22) 0%, rgba(0,0,0,0.08) 35%, rgba(0,0,0,0.55) 70%, rgba(8,8,10,1) 100%)' }} />

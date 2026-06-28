@@ -317,15 +317,17 @@ def update_party_invite(token: str, **kwargs) -> Optional[dict]:
     return dict(row) if row else None
 
 
-def add_group_to_invite(party_invite_id: int, group_id: int) -> None:
+def add_group_to_invite(party_invite_id: int, group_id: int) -> bool:
     conn = get_db()
     cursor = conn.cursor()
     cursor.execute(
         "INSERT INTO party_invite_groups (party_invite_id, group_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
         (party_invite_id, group_id)
     )
+    added = cursor.rowcount > 0
     conn.commit()
     conn.close()
+    return added
 
 
 def get_invite_groups(party_invite_id: int) -> list:

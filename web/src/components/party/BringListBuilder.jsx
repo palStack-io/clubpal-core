@@ -5,14 +5,31 @@ export default function BringListBuilder({ enabled, onToggle, items, onItemsChan
   const [emoji, setEmoji]     = useState('')
   const [maxClaims, setMax]   = useState(1)
 
+  function normalizeItem(item) {
+    return {
+      ...item,
+      label: (item.label || '').trim(),
+      emoji: (item.emoji || '').trim(),
+      max_claims: Math.max(1, Number(item.max_claims) || 1),
+    }
+  }
+
   function addItem() {
     if (!label.trim()) return
-    onItemsChange([...items, { label: label.trim(), emoji, max_claims: maxClaims }])
+    onItemsChange([...items, normalizeItem({ label, emoji, max_claims: maxClaims })])
     setLabel(''); setEmoji(''); setMax(1)
   }
 
   function removeItem(i) {
     onItemsChange(items.filter((_, idx) => idx !== i))
+  }
+
+  function updateItem(i, patch) {
+    onItemsChange(items.map((item, idx) => {
+      if (idx !== i) return item
+      const nextItem = { ...item, ...patch }
+      return patch.max_claims !== undefined ? normalizeItem(nextItem) : nextItem
+    }))
   }
 
   return (
@@ -36,11 +53,28 @@ export default function BringListBuilder({ enabled, onToggle, items, onItemsChan
       {enabled && (
         <div>
           {items.map((item, i) => (
-            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8, padding: '8px 12px', background: 'var(--s3)', borderRadius: 8 }}>
-              <span style={{ flex: 1, color: 'var(--t1)', fontSize: '0.9rem' }}>
-                {item.emoji} {item.label} <span style={{ color: 'var(--t3)', fontSize: '0.8rem' }}>×{item.max_claims}</span>
-              </span>
-              <button type="button" onClick={() => removeItem(i)} style={{ color: 'var(--rose)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', lineHeight: 1 }}>×</button>
+            <div key={item.id || i} style={{ display: 'grid', gridTemplateColumns: '56px minmax(0, 1fr) 72px auto', gap: 8, alignItems: 'end', marginBottom: 8, padding: '10px 12px', background: 'var(--s3)', borderRadius: 10 }}>
+              <input
+                placeholder="🍕"
+                value={item.emoji || ''}
+                onChange={e => updateItem(i, { emoji: e.target.value })}
+                style={{ width: '100%', padding: '10px 8px', borderRadius: 8, border: '1px solid var(--s2)', background: 'var(--s2)', color: 'var(--t1)', textAlign: 'center', fontSize: '1rem' }}
+              />
+              <input
+                placeholder="Item name"
+                value={item.label || ''}
+                onChange={e => updateItem(i, { label: e.target.value })}
+                style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--s2)', background: 'var(--s2)', color: 'var(--t1)' }}
+              />
+              <input
+                type="number"
+                min={1}
+                max={20}
+                value={Number(item.max_claims) || 1}
+                onChange={e => updateItem(i, { max_claims: Number(e.target.value) || 1 })}
+                style={{ width: '100%', padding: '10px 8px', borderRadius: 8, border: '1px solid var(--s2)', background: 'var(--s2)', color: 'var(--t1)', textAlign: 'center' }}
+              />
+              <button type="button" onClick={() => removeItem(i)} style={{ color: 'var(--rose)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '1.1rem', lineHeight: 1, paddingBottom: 10 }}>×</button>
             </div>
           ))}
           <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>

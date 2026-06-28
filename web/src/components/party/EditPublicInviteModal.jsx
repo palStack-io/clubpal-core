@@ -89,6 +89,7 @@ export default function EditPublicInviteModal({ isOpen, onClose, token, event, o
   const { user } = useAuth()
   const coverRef = useRef(null)
   const searchTimer = useRef(null)
+  const searchSeqRef = useRef(0)
   const [invite, setInvite] = useState(null)
   const [initialItems, setInitialItems] = useState([])
   const [groups, setGroups] = useState([])
@@ -128,6 +129,11 @@ export default function EditPublicInviteModal({ isOpen, onClose, token, event, o
       setInvite(data)
       setInitialItems(items)
       setGroups(Array.isArray(groupRows) ? groupRows : groupRows?.groups || [])
+      setGroupSelect('')
+      setInviteQuery('')
+      setInviteResults([])
+      setEmailInput('')
+      setPendingInvitees([])
       setCoverPreview('')
       setCoverFile(null)
       setForm({
@@ -164,6 +170,12 @@ export default function EditPublicInviteModal({ isOpen, onClose, token, event, o
   const bannerSrc = coverPreview || form.cover_image_url
 
   const setField = (key, value) => setForm(prev => ({ ...prev, [key]: value }))
+  const normalizeItem = (item) => ({
+    ...item,
+    label: (item.label || '').trim(),
+    emoji: (item.emoji || '').trim(),
+    max_claims: Math.max(1, Number(item.max_claims) || 1),
+  })
 
   const pickCover = (e) => {
     const file = e.target.files?.[0]
@@ -182,12 +194,15 @@ export default function EditPublicInviteModal({ isOpen, onClose, token, event, o
       setInviteResults([])
       return
     }
+    const searchSeq = ++searchSeqRef.current
     searchTimer.current = setTimeout(async () => {
       try {
         const r = await gatewayClient.get('/users/search', { params: { username: q.trim() } })
-        setInviteResults(Array.isArray(r.data) ? r.data : [])
+        if (searchSeqRef.current === searchSeq) {
+          setInviteResults(Array.isArray(r.data) ? r.data : [])
+        }
       } catch {
-        setInviteResults([])
+        if (searchSeqRef.current === searchSeq) setInviteResults([])
       }
     }, 300)
   }
@@ -242,11 +257,32 @@ export default function EditPublicInviteModal({ isOpen, onClose, token, event, o
         bring_list_type: form.bring_list_type,
       })
 
-      const currentIds = new Set(form.items.filter(item => item.id).map(item => Number(item.id)))
+      const normalizedItems = form.items
+        .map(item => normalizeItem(item))
+        .filter(item => item.label)
+      const existingItemsById = new Map(initialItems
+        .filter(item => item.id)
+        .map(item => [Number(item.id), normalizeItem(item)]))
+      const currentIds = new Set(normalizedItems.filter(item => item.id).map(item => Number(item.id)))
       await Promise.all(initialItems
         .filter(item => item.id && !currentIds.has(Number(item.id)))
         .map(item => eventsApi.deletePartyInviteItem(token, item.id)))
-      await Promise.all(form.items
+      await Promise.all(normalizedItems
+        .filter(item => item.id && existingItemsById.has(Number(item.id)))
+        .filter(item => {
+          const existing = existingItemsById.get(Number(item.id))
+          return existing && (
+            existing.label !== item.label ||
+            existing.emoji !== item.emoji ||
+            existing.max_claims !== item.max_claims
+          )
+        })
+        .map(item => eventsApi.editPartyInviteItem(token, item.id, {
+          label: item.label,
+          emoji: item.emoji || '',
+          max_claims: Number(item.max_claims) || 1,
+        })))
+      await Promise.all(normalizedItems
         .filter(item => !item.id)
         .map((item, index) => eventsApi.addPartyInviteItem(token, {
           label: item.label,

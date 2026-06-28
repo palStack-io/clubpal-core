@@ -88,6 +88,26 @@ async def _get_group_rotation(group_id: int) -> dict:
     return {}
 
 
+async def _get_group_membership(group_id: int, user_id: int) -> Optional[dict]:
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(f"{GROUPS_SERVICE_URL}/groups/{group_id}/members/{user_id}")
+            if r.status_code == 200:
+                return r.json()
+    except Exception:
+        pass
+    return None
+
+
+async def _assert_group_share_permission(group_id: int, user_id: int) -> None:
+    membership = await _get_group_membership(group_id, user_id)
+    if not membership or membership.get("role") not in {"owner", "admin"}:
+        raise HTTPException(
+            status_code=403,
+            detail="Only club owners and admins can share party invites to that club",
+        )
+
+
 async def _get_host_profile(host_user_id: int) -> dict:
     try:
         async with httpx.AsyncClient(timeout=3.0) as client:
@@ -182,6 +202,12 @@ class InviteItemCreate(BaseModel):
     emoji: str = ""
     max_claims: int = Field(1, ge=1)
     sort_order: int = 0
+
+
+class InviteItemPatch(BaseModel):
+    label: Optional[str] = Field(None, min_length=1, max_length=200)
+    emoji: Optional[str] = None
+    max_claims: Optional[int] = Field(None, ge=1)
 
 
 class ShareToGroupRequest(BaseModel):
@@ -479,6 +505,33 @@ async def add_item(
     return bring_sync.add_item_from_invite(invite, body.label, body.emoji, body.max_claims, body.sort_order)
 
 
+@host_router.patch("/{token}/items/{item_id}")
+async def patch_item(
+    token: str, item_id: int, body: InviteItemPatch,
+    user_id: int = Depends(_get_current_user_id),
+):
+    invite = get_party_invite_by_token(token)
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    if invite["host_user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Not your invite")
+    event_item_id = bring_sync.event_item_for_invite_item(item_id, invite["id"])
+    if not event_item_id:
+        raise HTTPException(status_code=404, detail="Invite item not found")
+    updated = bring_sync.update_linked_item(
+        invite["event_id"],
+        event_item_id,
+        label=body.label,
+        emoji=body.emoji,
+        max_claims=body.max_claims,
+    )
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Invite item not found")
+    items = get_invite_items(invite["id"])
+    row = next((item for item in items if int(item["id"]) == item_id), None)
+    return row or updated
+
+
 @host_router.delete("/{token}/items/{item_id}", status_code=204)
 async def remove_item(
     token: str, item_id: int,
@@ -502,12 +555,15 @@ async def share_to_group(
         raise HTTPException(status_code=404, detail="Invite not found")
     if invite["host_user_id"] != user_id:
         raise HTTPException(status_code=403, detail="Not your invite")
-    add_group_to_invite(invite["id"], body.group_id)
+    await _assert_group_share_permission(body.group_id, user_id)
+    added = add_group_to_invite(invite["id"], body.group_id)
+    if not added:
+        return {"ok": True, "group_id": body.group_id, "already_shared": True}
     event = get_event(invite["event_id"])
     members = await _get_group_members(body.group_id)
     _add_pending_attendees(invite["event_id"], members)
     await _notify_invite_to_group(body.group_id, invite["event_id"], event["title"], token)
-    return {"ok": True, "group_id": body.group_id}
+    return {"ok": True, "group_id": body.group_id, "already_shared": False}
 
 
 @host_router.post("/{token}/cover/upload-url")
@@ -544,9 +600,16 @@ async def invite_users(
     event = get_event(invite["event_id"])
     internal = os.getenv("INTERNAL_API_SECRET", "")
     added = []
+    failed = []
+    seen_user_ids = set()
+    seen_emails = set()
+    seen_direct_emails = set()
 
     async with httpx.AsyncClient(timeout=5.0) as client:
         for uid in body.user_ids:
+            if uid in seen_user_ids:
+                continue
+            seen_user_ids.add(uid)
             try:
                 prof_r = await client.get(
                     f"{GATEWAY_URL}/internal/users/{uid}/profile",
@@ -557,7 +620,9 @@ async def invite_users(
                 profile = prof_r.json()
                 email = profile.get("email", "")
                 if not email:
+                    failed.append({"type": "user", "user_id": uid, "error": "User has no email"})
                     continue
+                seen_emails.add(email.strip().lower())
                 add_member_invite(invite["id"], email=email, user_id=uid)
                 upsert_email_notification(
                     invite["id"],
@@ -579,14 +644,16 @@ async def invite_users(
                     headers={"x-internal-secret": internal},
                 )
                 added.append({"type": "user", "user_id": uid, "email": email})
-            except Exception:
-                pass
+            except Exception as exc:
+                failed.append({"type": "user", "user_id": uid, "error": str(exc)[:200] or "Failed to invite user"})
 
         app_url = os.getenv("APP_URL", "http://localhost:3000")
         for email in body.emails:
             email = email.strip().lower()
-            if not email:
+            if not email or email in seen_emails:
                 continue
+            seen_emails.add(email)
+            seen_direct_emails.add(email)
             try:
                 profile = {}
                 try:
@@ -651,9 +718,18 @@ async def invite_users(
                     status="failed",
                     last_error="Failed to send invite email",
                 )
-                pass
+                failed.append({"type": "email", "email": email, "error": "Failed to send invite email"})
 
-    return {"added": added}
+    return {
+        "added": added,
+        "failed": failed,
+        "summary": {
+            "attempted_users": len(seen_user_ids),
+            "attempted_emails": len(seen_direct_emails),
+            "added": len(added),
+            "failed": len(failed),
+        },
+    }
 
 
 @host_router.get("/{token}/member-invites")

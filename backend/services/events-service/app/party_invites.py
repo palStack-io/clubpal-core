@@ -155,6 +155,7 @@ class PartyInviteCreate(BaseModel):
     style: str = "glass"
     cover_image_url: Optional[str] = None
     cover_image_position: Optional[str] = None
+    date_display: Optional[str] = None  # host-local, tz-labelled date string for invite emails
     items: List[dict] = Field(default_factory=list)
 
 
@@ -302,6 +303,16 @@ async def create_party_invite_endpoint(
         conn.commit()
         conn.close()
         invite["cover_image_url"] = event_cover
+
+    # Store the host-local, tz-labelled date string for invite emails
+    if body.date_display:
+        conn = get_db()
+        cur  = conn.cursor()
+        cur.execute("UPDATE party_invites SET date_display = %s WHERE id = %s",
+                    (body.date_display, invite["id"]))
+        conn.commit()
+        conn.close()
+        invite["date_display"] = body.date_display
 
     # Bring list: enable it on the event so the event page shows it, and mirror
     # items into canonical event_bring_items (linked) so both surfaces share one list.
@@ -616,7 +627,7 @@ async def invite_users(
                         "to_email": email,
                         "event_title": event["title"],
                         "host_name": "",
-                        "scheduled_date": str(event.get("scheduled_date") or ""),
+                        "scheduled_date": invite.get("date_display") or str(event.get("scheduled_date") or ""),
                         "location": event.get("location") or "",
                         "accent_color": invite.get("accent_color") or "#f43f5e",
                         "rsvp_url": f"{app_url}/p/{token}",

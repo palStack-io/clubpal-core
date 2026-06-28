@@ -13,7 +13,7 @@ class EventStatus(str, Enum):
 
 # Event models
 class EventCreate(BaseModel):
-    group_id: int
+    group_id: Optional[int] = None  # None = group-less event (e.g. public party invite, link-only)
     activity_id: Optional[int] = None
     activity_type: Optional[str] = None
     title: str = Field(..., min_length=1, max_length=200)
@@ -93,7 +93,7 @@ class EventUpdate(BaseModel):
 
 class EventResponse(BaseModel):
     id: int
-    group_id: int
+    group_id: Optional[int] = None
     activity_id: Optional[int] = None
     activity_type: Optional[str] = None
     title: str

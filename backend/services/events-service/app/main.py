@@ -643,7 +643,8 @@ async def get_activity_name(activity_id: int) -> Optional[str]:
 @app.post("/events", response_model=EventResponse, status_code=201)
 async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(get_current_user_id)):
     """Create a new event. If is_recurring=True, also registers a recurring schedule."""
-    if not await _is_group_member(event_data.group_id, user_id):
+    # Group-less events (e.g. public party invites / link-only) skip the membership check
+    if event_data.group_id is not None and not await _is_group_member(event_data.group_id, user_id):
         raise HTTPException(status_code=403, detail="Not a member of this group")
 
     # creator may be passed explicitly from the web UI payload
@@ -652,10 +653,14 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(
     # Determine host user
     host_user_id = event_data.host_user_id
     if not host_user_id:
-        rotation_user_id = await get_rotation_user(event_data.group_id)
-        if not rotation_user_id:
-            raise HTTPException(status_code=400, detail="Could not determine host from rotation")
-        host_user_id = rotation_user_id
+        if event_data.group_id is not None:
+            rotation_user_id = await get_rotation_user(event_data.group_id)
+            if not rotation_user_id:
+                raise HTTPException(status_code=400, detail="Could not determine host from rotation")
+            host_user_id = rotation_user_id
+        else:
+            # No group → host defaults to the creator
+            host_user_id = creator_id
 
     # Create the event first (no cover yet — we need event_id for proper MinIO path)
     event_id = create_event(

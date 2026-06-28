@@ -145,6 +145,11 @@ def init_party_invite_tables():
     cursor.execute(
         "ALTER TABLE party_invites ADD COLUMN IF NOT EXISTS cover_image_position VARCHAR(50) DEFAULT '50% 50%'"
     )
+    # Host-local, timezone-labelled display string for the event date (used in invite emails
+    # so the time matches what the host saw in the app, not the raw UTC timestamp)
+    cursor.execute(
+        "ALTER TABLE party_invites ADD COLUMN IF NOT EXISTS date_display VARCHAR(100)"
+    )
 
     # ── Unified bring list ───────────────────────────────────────────────────
     # Each party_invite_item is mirrored 1:1 to a canonical event_bring_items row.

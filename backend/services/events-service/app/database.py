@@ -60,7 +60,7 @@ def init_db():
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS events (
             id SERIAL PRIMARY KEY,
-            group_id INTEGER NOT NULL,
+            group_id INTEGER,
             activity_id INTEGER,
             activity_type TEXT,
             title TEXT NOT NULL,
@@ -211,6 +211,12 @@ def init_db():
 
     try:
         cursor.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS rsvp_reminder_sent BOOLEAN DEFAULT FALSE")
+    except Exception:
+        pass
+
+    # group_id is nullable for group-less events (e.g. public party invites / link-only)
+    try:
+        cursor.execute("ALTER TABLE events ALTER COLUMN group_id DROP NOT NULL")
     except Exception:
         pass
 

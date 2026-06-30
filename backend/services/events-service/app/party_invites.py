@@ -647,7 +647,14 @@ async def invite_users(
             except Exception as exc:
                 failed.append({"type": "user", "user_id": uid, "error": str(exc)[:200] or "Failed to invite user"})
 
-        app_url = os.getenv("APP_URL", "http://localhost:3000")
+        app_url = os.getenv("APP_URL", "https://clubapp.palstack.io")
+        _raw_sched = event.get("scheduled_date")
+        _sched_fallback = ""
+        if _raw_sched:
+            try:
+                _sched_fallback = _raw_sched.strftime('%A, %b %-d, %Y at %-I:%M %p UTC')
+            except Exception:
+                _sched_fallback = str(_raw_sched)
         for email in body.emails:
             email = email.strip().lower()
             if not email or email in seen_emails:
@@ -694,7 +701,7 @@ async def invite_users(
                         "to_email": email,
                         "event_title": event["title"],
                         "host_name": "",
-                        "scheduled_date": invite.get("date_display") or str(event.get("scheduled_date") or ""),
+                        "scheduled_date": invite.get("date_display") or _sched_fallback,
                         "location": event.get("location") or "",
                         "accent_color": invite.get("accent_color") or "#f43f5e",
                         "rsvp_url": f"{app_url}/p/{token}",

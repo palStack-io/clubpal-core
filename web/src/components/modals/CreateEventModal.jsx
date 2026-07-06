@@ -197,13 +197,7 @@ export default function CreateEventModal({
       // Upload cover file if user picked one (overrides the discover image)
       if (coverFile) {
         try {
-          const urlData = await eventsApi.getCoverUploadUrl(event.id, coverFile.name, coverFile.type)
-          await fetch(urlData.upload_url, {
-            method: 'PUT',
-            headers: { 'Content-Type': coverFile.type },
-            body: coverFile,
-          })
-          await eventsApi.update(event.id, { cover_url: urlData.public_url })
+          await eventsApi.uploadCover(event.id, coverFile)
         } catch { /* non-fatal */ }
       }
       if (pulseCheck) {

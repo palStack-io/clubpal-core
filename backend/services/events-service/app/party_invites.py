@@ -11,7 +11,7 @@ import httpx
 from collections import defaultdict
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Header, Depends, Request
+from fastapi import APIRouter, HTTPException, Header, Depends, Request, UploadFile, File
 from fastapi import Query
 from pydantic import BaseModel, Field
 
@@ -585,6 +585,31 @@ async def cover_upload_url(
     upload_url = storage.presigned_upload_url(storage.BUCKET_EVENTS, object_name, body.content_type)
     public_url = storage.public_object_url(storage.BUCKET_EVENTS, object_name)
     return {"upload_url": upload_url, "public_url": public_url, "object_name": object_name}
+
+
+@host_router.post("/{token}/cover/upload")
+async def upload_cover(
+    token: str,
+    file: UploadFile = File(...),
+    user_id: int = Depends(_get_current_user_id),
+):
+    invite = get_party_invite_by_token(token)
+    if not invite:
+        raise HTTPException(status_code=404, detail="Invite not found")
+    if invite["host_user_id"] != user_id:
+        raise HTTPException(status_code=403, detail="Not your invite")
+    content = await file.read()
+    ext = (file.filename or "cover.jpg").rsplit(".", 1)[-1].lower()
+    if ext not in _ALLOWED_IMG_EXT:
+        raise HTTPException(status_code=400, detail="Invalid file extension")
+    content_type = file.content_type or "image/jpeg"
+    if content_type not in _ALLOWED_IMG_MIME:
+        raise HTTPException(status_code=400, detail="Invalid content type")
+    object_name = f"party-invites/{token}/cover.{ext}"
+    public_url = storage.upload_bytes(storage.BUCKET_EVENTS, object_name, content, content_type)
+    update_party_invite(token, cover_image_url=public_url)
+    update_event(invite["event_id"], cover_url=public_url)
+    return {"cover_image_url": public_url}
 
 
 @host_router.post("/{token}/invite-users")

@@ -30,7 +30,7 @@ from app.models import (
 from app.database import (
     init_db, create_user, get_user_count, get_user_by_username, get_user_by_email,
     get_user_by_id, verify_password, update_last_login, create_session,
-    get_user_by_session, delete_session, cleanup_expired_sessions,
+    get_user_by_session, delete_session, cleanup_expired_sessions, refresh_session,
     create_invite_token, get_invite_by_token, mark_invite_accepted, get_pending_invites_for_group,
     create_verification_token, verify_email_token, update_user_email_verified,
     create_reset_token, verify_reset_token, update_user_password,
@@ -65,7 +65,7 @@ def _apply_session_cookie(response: Response, token: str) -> None:
         httponly=True,
         secure=_IS_PRODUCTION,   # Secure flag in production (HTTPS), off in dev (HTTP)
         samesite="strict",
-        max_age=2592000,          # 30 days
+        max_age=7776000,          # 90 days
         path="/",
     )
 
@@ -592,6 +592,33 @@ async def logout(
         delete_session(authorization.removeprefix("Bearer "))
     response.delete_cookie("session_token", path="/")
     return {"message": "Logged out successfully"}
+
+
+@app.post("/auth/refresh", response_model=SessionResponse)
+async def refresh_session_endpoint(
+    response: Response,
+    authorization: Optional[str] = Header(None),
+):
+    """Silently renew a session token without requiring a full re-login."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+
+    token = authorization[len("Bearer "):]
+    new_token, user_id, expires_at = refresh_session(token)
+    if not new_token or not user_id:
+        raise HTTPException(status_code=401, detail="Session expired or not found")
+
+    user = get_user_by_id(user_id)
+    if not user or not user.get("is_active", 1):
+        raise HTTPException(status_code=401, detail="Account is disabled or not found")
+
+    _apply_session_cookie(response, new_token)
+
+    return SessionResponse(
+        user=user_to_response(user),
+        session_token=new_token,
+        expires_at=expires_at,
+    )
 
 
 @app.get("/auth/me", response_model=UserResponse)
@@ -1515,7 +1542,7 @@ class EventNotifyRequest(BaseModel):
     creator_name: Optional[str] = None
     creator_id: Optional[int] = None   # used to look up name + exclude from poll notifs
     event_id: int = 0
-    type: str = "created"      # "created" | "recurring" | "reminder" | "rsvp_reminder" | "rsvp_deadline_final" | "poll" | "invite" | "event_cancelled" | "event_edit" | "social_rsvp" | "rating_prompt" | "bill_split_assigned" | "bill_split_claiming"
+    type: str = "created"      # "created" | "recurring" | "reminder" | "rsvp_reminder" | "rsvp_deadline_final" | "poll" | "poll_result" | "invite" | "event_cancelled" | "event_edit" | "social_rsvp" | "rating_prompt" | "bill_split_assigned" | "bill_split_claiming"
     hours_until: Optional[int] = None
     deadline: Optional[str] = None
     going_count: Optional[int] = None
@@ -1525,6 +1552,10 @@ class EventNotifyRequest(BaseModel):
     amount: Optional[float] = None      # for bill_split_assigned
     payer_name: Optional[str] = None    # for bill_split_assigned
     claim_token: Optional[str] = None   # for bill_split_claiming
+    winner_text: Optional[str] = None   # for poll_result
+    result_summary: Optional[str] = None
+    responded_count: Optional[int] = None
+    total_count: Optional[int] = None
 
 
 @app.post("/internal/notify/rotation", status_code=202)
@@ -1719,6 +1750,22 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                         group_name, creator_name, req.group_id or 0,
                     )
 
+            elif req.type == "poll_result":
+                result_line = req.result_summary or "No responses yet"
+                winner_line = req.winner_text or "No responses yet"
+                create_notification(
+                    uid, "poll",
+                    f"📊 Poll result: {req.event_title}",
+                    f"Winner: {winner_line}",
+                    link_type="group", link_id=req.group_id,
+                )
+                if prefs["notify_events"] and user.get("email"):
+                    email_service.send_poll_result(
+                        user["email"], name, req.event_title, group_name,
+                        winner_line, result_line, req.responded_count or 0,
+                        req.total_count or 0, req.group_id or 0,
+                    )
+
             elif req.type == "rsvp_deadline_final":
                 create_notification(uid, "event", f"📊 Final RSVP: {req.event_title}",
                                     f"{req.going_count or 0} going · {req.maybe_count or 0} maybe",
@@ -1892,6 +1939,10 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
         if req.type == "poll":
             await _send_push(push_tokens, f"🗳️ Vote in {group_name}",
                              f"{creator_name}: {req.event_title}?",
+                             {"link_type": "group", "link_id": req.group_id})
+        elif req.type == "poll_result":
+            await _send_push(push_tokens, f"📊 Poll result: {req.event_title}",
+                             f"Winner: {req.winner_text or 'No responses yet'}",
                              {"link_type": "group", "link_id": req.group_id})
         elif req.type in ("created", "recurring"):
             await _send_push(push_tokens, f"📅 {group_name}",

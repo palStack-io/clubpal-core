@@ -1416,7 +1416,12 @@ class UploadUrlResponse(BaseModel):
 
 
 @app.post("/events/{event_id}/cover/upload")
-async def upload_event_cover(event_id: int, file: UploadFile = File(...), user_id: int = Depends(get_current_user_id)):
+async def upload_event_cover(
+    event_id: int,
+    file: UploadFile = File(...),
+    apply_cover: bool = True,
+    user_id: int = Depends(get_current_user_id),
+):
     """Upload an event cover image directly (no presigned URL required)."""
     event = get_event(event_id)
     if not event:
@@ -1429,7 +1434,8 @@ async def upload_event_cover(event_id: int, file: UploadFile = File(...), user_i
     object_name = f"events/{event_id}/cover-{uuid.uuid4().hex[:8]}.{ext}"
     ct_map = {"jpg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp"}
     public_url = storage.upload_bytes(storage.BUCKET_EVENTS, object_name, content, ct_map[ext])
-    update_event(event_id, cover_url=public_url)
+    if apply_cover:
+        update_event(event_id, cover_url=public_url)
     return {"cover_url": public_url}
 
 
@@ -1474,6 +1480,35 @@ async def get_photo_upload_url(event_id: int, request: EventImageUploadRequest, 
     public_url = storage.public_object_url(storage.BUCKET_EVENTS, object_name)
 
     return UploadUrlResponse(upload_url=upload_url, public_url=public_url, object_name=object_name)
+
+
+@app.post("/events/{event_id}/photos/upload", response_model=PhotoResponse, status_code=201)
+async def upload_event_photo(
+    event_id: int,
+    file: UploadFile = File(...),
+    caption: Optional[str] = None,
+    user_id: int = Depends(get_current_user_id),
+):
+    """Upload a member photo directly and save it to the event gallery."""
+    if not get_event(event_id):
+        raise HTTPException(status_code=404, detail="Event not found")
+    content = await file.read(_COVER_MAX_BYTES + 1)
+    if len(content) > _COVER_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+    ext = _detect_cover_type(content)
+    content = _strip_exif(content, ext)
+    object_name = f"events/{event_id}/photos/{user_id}/{uuid.uuid4().hex}.{ext}"
+    ct_map = {"jpg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp"}
+    public_url = storage.upload_bytes(storage.BUCKET_EVENTS, object_name, content, ct_map[ext])
+    photo_id = add_photo(
+        event_id=event_id,
+        user_id=user_id,
+        object_key=object_name,
+        public_url=public_url,
+        caption=caption,
+    )
+    photo = get_photo(photo_id)
+    return PhotoResponse(**photo)
 
 
 @app.post("/events/{event_id}/photos/confirm", response_model=PhotoResponse, status_code=201)

@@ -19,6 +19,14 @@ export const authApi = {
   getAvatarUploadUrl: (filename, contentType = 'image/jpeg') =>
     gatewayClient.post('/users/me/avatar/upload-url', { filename, content_type: contentType }).then(r => r.data),
 
+  uploadAvatar: (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return gatewayClient.post('/users/me/avatar/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+  },
+
   forgotPassword: (email) =>
     gatewayClient.post('/auth/forgot-password', { email }).then(r => r.data),
 

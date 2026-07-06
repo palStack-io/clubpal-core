@@ -261,18 +261,10 @@ function ProfileSection({ user }) {
 
     try {
       const file = await compressImage(raw)
-      // 1. Get presigned upload URL from backend
-      const { upload_url, public_url } = await authApi.getAvatarUploadUrl(file.name, file.type)
-      // 2. Upload directly to MinIO via presigned URL
-      await fetch(upload_url, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      })
-      // 3. Save the public URL to user profile
-      const r = await gatewayClient.patch('/users/me', { avatar_url: public_url })
+      const data = await authApi.uploadAvatar(file)
+      const r = await gatewayClient.patch('/users/me', { avatar_url: data.avatar_url })
       updateUser(r.data)
-      setPhotoUrl(public_url)
+      setPhotoUrl(data.avatar_url)
       setPhotoPreview(null)
       URL.revokeObjectURL(localUrl)
     } catch (err) {

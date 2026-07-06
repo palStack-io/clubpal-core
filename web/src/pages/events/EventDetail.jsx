@@ -138,18 +138,7 @@ export default function EventDetail() {
   const handlePhotoUpload = async (files) => {
     for (const file of files) {
       try {
-        const { upload_url, public_url, object_name } = await eventsApi.getPhotoUploadUrl(
-          id,
-          file.name,
-          file.type
-        )
-        const res = await fetch(upload_url, {
-          method: 'PUT',
-          headers: { 'Content-Type': file.type },
-          body: file,
-        })
-        if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
-        await eventsApi.confirmPhoto(id, { object_key: object_name, public_url })
+        await eventsApi.uploadPhoto(id, file)
       } catch {
         // continue uploading remaining files
       }

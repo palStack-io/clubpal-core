@@ -279,16 +279,8 @@ export default function EditGroupModal({
     if (!file) return
     setBannerUploading(true)
     try {
-      // Use groupsApi (groupsClient → /api/groups) not gatewayClient
-      const urlData = await groupsApi.getBannerUploadUrl(group.id, file.name, file.type)
-      const res = await fetch(urlData.upload_url, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      })
-      if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
-      await groupsApi.update(group.id, { banner_url: urlData.public_url })
-      setBannerPreview(urlData.public_url)
+      const data = await groupsApi.uploadBanner(group.id, file)
+      setBannerPreview(data.banner_url)
     } catch {
       // silent
     } finally {
@@ -300,14 +292,8 @@ export default function EditGroupModal({
   const handleBgImageUpload = async (file) => {
     setBannerUploading(true)
     try {
-      const urlData = await groupsApi.getBannerUploadUrl(group.id, file.name, file.type)
-      const res = await fetch(urlData.upload_url, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      })
-      if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
-      setForm(f => ({ ...f, bg_type: 'image', bg_value: urlData.public_url }))
+      const data = await groupsApi.uploadBanner(group.id, file, { applyBanner: false })
+      setForm(f => ({ ...f, bg_type: 'image', bg_value: data.banner_url }))
     } catch {
       // silent
     } finally {

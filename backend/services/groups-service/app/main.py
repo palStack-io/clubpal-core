@@ -679,7 +679,12 @@ async def get_banner_upload_url(group_id: int, request: BannerUploadRequest, use
 
 
 @app.post("/groups/{group_id}/banner/upload")
-async def upload_group_banner(group_id: int, file: UploadFile = File(...), user_id: int = Depends(get_current_user_id)):
+async def upload_group_banner(
+    group_id: int,
+    file: UploadFile = File(...),
+    apply_banner: bool = True,
+    user_id: int = Depends(get_current_user_id),
+):
     """Upload a group banner image directly (no presigned URL required)."""
     if not get_group(group_id):
         raise HTTPException(status_code=404, detail="Group not found")
@@ -689,7 +694,8 @@ async def upload_group_banner(group_id: int, file: UploadFile = File(...), user_
     object_name = f"groups/{group_id}/banner-{uuid.uuid4().hex[:8]}.{ext}"
     content = await file.read()
     public_url = storage.upload_bytes(storage.BUCKET_EVENTS, object_name, content, file.content_type or "image/jpeg")
-    update_group(group_id, banner_url=public_url)
+    if apply_banner:
+        update_group(group_id, banner_url=public_url)
     return {"banner_url": public_url}
 
 
@@ -800,6 +806,75 @@ def _poll_to_model(poll: dict, summary: dict) -> PollResponseModel:
     )
 
 
+def _poll_option_labels(poll: dict) -> dict:
+    import json as _json
+    custom_opts = poll.get('custom_options')
+    if isinstance(custom_opts, str):
+        try:
+            custom_opts = _json.loads(custom_opts)
+        except Exception:
+            custom_opts = None
+    if custom_opts:
+        return {
+            opt.get('value', f"opt_{i}"): f"{opt.get('emoji', '').strip()} {opt.get('label', '')}".strip()
+            for i, opt in enumerate(custom_opts)
+        }
+    return {
+        'in': "🙌 I'm in",
+        'done_loved': "❤️ Done it, loved it",
+        'done_pass': "👎 Done it, pass",
+        'cant_make_it': "🚫 Can't make it",
+    }
+
+
+def _poll_result_payload(poll: dict, member_count: int) -> dict:
+    summary = _build_poll_summary(poll['id'], poll['created_by'], member_count)
+    labels = _poll_option_labels(poll)
+    counts = summary.get('counts') or {}
+    sorted_counts = sorted(counts.items(), key=lambda item: (-item[1], labels.get(item[0], item[0])))
+    top_count = sorted_counts[0][1] if sorted_counts else 0
+    winners = [labels.get(key, key) for key, count in sorted_counts if count == top_count and count > 0]
+    winner_text = ", ".join(winners) if winners else "No responses yet"
+    result_summary = " · ".join(f"{labels.get(key, key)}: {count}" for key, count in sorted_counts)
+    return {
+        "winner_text": winner_text,
+        "result_summary": result_summary or "No responses yet",
+        "responded": summary.get('responded', 0),
+        "total_members": summary.get('total_members', member_count),
+    }
+
+
+async def _notify_poll_results(poll: dict) -> None:
+    group = get_group(poll['group_id'])
+    member_count = group['member_count'] if group else 0
+    payload = _poll_result_payload(poll, member_count)
+    async with httpx.AsyncClient() as client:
+        try:
+            await client.post(
+                f"{GATEWAY_SERVICE_URL}/internal/notify/event",
+                json={
+                    "group_id": poll['group_id'],
+                    "type": "poll_result",
+                    "event_title": poll['activity_name'],
+                    "event_id": poll['id'],
+                    "creator_id": poll.get('created_by'),
+                    "winner_text": payload["winner_text"],
+                    "result_summary": payload["result_summary"],
+                    "responded_count": payload["responded"],
+                    "total_count": payload["total_members"],
+                },
+                headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
+                timeout=5.0,
+            )
+        except Exception:
+            pass
+
+
+async def _close_expired_polls_with_results() -> None:
+    for poll in auto_close_expired_polls():
+        await _notify_poll_results(poll)
+
+
 # ===== Poll Endpoints =====
 
 @app.post("/groups/{group_id}/polls", response_model=PollResponseModel, status_code=201)
@@ -860,7 +935,7 @@ async def list_group_polls(group_id: int, user_id: int = Depends(get_current_use
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
 
-    auto_close_expired_polls()
+    await _close_expired_polls_with_results()
 
     polls = get_polls_for_group(group_id)
     member_count = group['member_count']
@@ -916,12 +991,15 @@ async def close_poll_endpoint(poll_id: int, user_id: int = Depends(get_current_u
         raise HTTPException(status_code=404, detail="Poll not found")
     if poll['created_by'] != user_id:
         raise HTTPException(status_code=403, detail="Only the creator can close this poll")
+    if poll['status'] != 'open':
+        raise HTTPException(status_code=400, detail="Poll is already closed")
 
     close_poll(poll_id)
 
     group = get_group(poll['group_id'])
     member_count = group['member_count'] if group else 0
     poll = get_poll(poll_id)
+    await _notify_poll_results(poll)
     summary = _build_poll_summary(poll_id, user_id, member_count)
     return _poll_to_model(poll, summary)
 
@@ -974,7 +1052,7 @@ async def convert_poll_endpoint(poll_id: int, data: PollConvert, user_id: int = 
 @app.get("/users/{user_id}/polls/pending", response_model=List[PollResponseModel])
 async def get_pending_polls(user_id: int):
     """Get open polls the user hasn't responded to yet (excluding ones they created)."""
-    auto_close_expired_polls()
+    await _close_expired_polls_with_results()
     polls = get_pending_polls_for_user(user_id)
     result = []
     for p in polls:
@@ -988,7 +1066,7 @@ async def get_pending_polls(user_id: int):
 @app.get("/users/{user_id}/polls/created", response_model=List[PollResponseModel])
 async def get_my_polls(user_id: int):
     """Get open polls created by the user, with response progress."""
-    auto_close_expired_polls()
+    await _close_expired_polls_with_results()
     polls = get_my_active_polls(user_id)
     result = []
     for p in polls:

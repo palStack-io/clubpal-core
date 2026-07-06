@@ -166,15 +166,9 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
   const handleBgImageUpload = async (file) => {
     setCoverUploading(true)
     try {
-      const urlData = await eventsApi.getCoverUploadUrl(event.id, file.name, file.type)
-      const res = await fetch(urlData.upload_url, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      })
-      if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
+      const data = await eventsApi.uploadCover(event.id, file, { applyCover: false })
       setBgType('image')
-      setBgValue(urlData.public_url)
+      setBgValue(data.cover_url)
     } catch {
       // silent
     } finally {
@@ -187,15 +181,8 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
     if (!file) return
     setCoverUploading(true)
     try {
-      const urlData = await eventsApi.getCoverUploadUrl(event.id, file.name, file.type)
-      const res = await fetch(urlData.upload_url, {
-        method: 'PUT',
-        headers: { 'Content-Type': file.type },
-        body: file,
-      })
-      if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
-      await eventsApi.update(event.id, { cover_url: urlData.public_url })
-      setCoverPreview(urlData.public_url)
+      const data = await eventsApi.uploadCover(event.id, file)
+      setCoverPreview(data.cover_url)
     } catch {
       // silent
     } finally {

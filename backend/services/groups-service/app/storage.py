@@ -72,6 +72,19 @@ def public_object_url(bucket: str, object_name: str) -> str:
     return f"{MINIO_PUBLIC_URL}/{bucket}/{object_name}"
 
 
+def upload_bytes(bucket: str, object_name: str, data: bytes,
+                 content_type: str = "application/octet-stream") -> str:
+    """Upload raw bytes and return the public URL."""
+    client.put_object(
+        bucket,
+        object_name,
+        io.BytesIO(data),
+        length=len(data),
+        content_type=content_type,
+    )
+    return public_object_url(bucket, object_name)
+
+
 def delete_object(bucket: str, object_name: str):
     """Delete an object from storage. Silently ignores missing objects."""
     try:

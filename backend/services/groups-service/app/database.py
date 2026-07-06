@@ -1039,16 +1039,18 @@ def convert_poll(poll_id: int, event_id: int) -> bool:
         return success
 
 
-def auto_close_expired_polls() -> int:
-    """Close open polls that have passed their deadline. Returns count closed."""
+def auto_close_expired_polls() -> List[dict]:
+    """Close open polls that have passed their deadline. Returns closed polls."""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "UPDATE group_polls SET status = 'closed' WHERE status = 'open' AND deadline < CURRENT_TIMESTAMP"
+            """UPDATE group_polls SET status = 'closed'
+               WHERE status = 'open' AND deadline < CURRENT_TIMESTAMP
+               RETURNING *"""
         )
-        count = cursor.rowcount
+        rows = cursor.fetchall()
         conn.commit()
-        return count
+        return [dict(row) for row in rows]
 
 
 def update_poll(poll_id: int, *, activity_name: str = None, note: str = None, deadline=None) -> bool:
@@ -1288,5 +1290,4 @@ def get_pending_join_requests_count(group_id: int) -> int:
         cursor.execute("SELECT COUNT(*) AS cnt FROM join_requests WHERE group_id = %s AND status = 'pending'", (group_id,))
         row = cursor.fetchone()
         return row["cnt"] if row else 0
-
 

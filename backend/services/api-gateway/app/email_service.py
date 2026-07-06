@@ -348,6 +348,28 @@ class EmailService:
         )
         return self._send(to_email, subject, _base(subject, content, self.app_url))
 
+    def send_poll_result(self, to_email: str, username: str, activity_name: str,
+                         group_name: str, winner_text: str, result_summary: str,
+                         responded_count: int, total_count: int, group_id: int) -> bool:
+        """Notify group member that a poll has closed with final results."""
+        url = f"{self.app_url}/groups/{group_id}"
+        subject = f"📊 Poll result: {activity_name}"
+        content = (
+            _h1(f"Poll closed: {activity_name}")
+            + _p(f"Hey <strong>{username}</strong>,")
+            + _p(f"The poll in <strong>{group_name}</strong> has closed. Here are the final results:")
+            + f"""
+<div style="background:#f9f9fb;border-left:3px solid #f43f5e;border-radius:0 8px 8px 0;
+            padding:14px 18px;margin:20px 0;">
+  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">Winner: {winner_text}</p>
+  <p style="margin:8px 0 0;font-size:13px;color:#444;">{result_summary}</p>
+  <p style="margin:10px 0 0;font-size:12px;color:#777;">{responded_count} of {total_count} responded</p>
+</div>"""
+            + _btn("View Poll →", url, "#f43f5e")
+            + _note(f"You're receiving this because you're a member of <strong>{group_name}</strong>.")
+        )
+        return self._send(to_email, subject, _base(subject, content, self.app_url))
+
     def send_quota_alert(self, to_email: str, api_name: str,
                          today_calls: int, daily_limit: int,
                          approve_url: str) -> bool:

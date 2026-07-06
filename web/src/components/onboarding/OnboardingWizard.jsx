@@ -137,9 +137,8 @@ export default function OnboardingWizard() {
     setUploading(true)
     try {
       const file = await compressImage(raw)
-      const { upload_url, public_url } = await authApi.getAvatarUploadUrl(file.name, file.type)
-      await fetch(upload_url, { method: 'PUT', headers: { 'Content-Type': file.type }, body: file })
-      setPhotoUrl(public_url)
+      const data = await authApi.uploadAvatar(file)
+      setPhotoUrl(data.avatar_url)
       setPhotoPreview(null)
       URL.revokeObjectURL(localUrl)
     } catch {

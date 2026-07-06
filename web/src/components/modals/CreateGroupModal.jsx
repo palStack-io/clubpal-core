@@ -125,14 +125,7 @@ export default function CreateGroupModal({ isOpen, onClose, onCreated }) {
       // Upload banner if selected
       if (bannerFile) {
         try {
-          const urlData = await groupsApi.getBannerUploadUrl(group.id, bannerFile.name, bannerFile.type)
-          const res = await fetch(urlData.upload_url, {
-            method: 'PUT',
-            headers: { 'Content-Type': bannerFile.type },
-            body: bannerFile,
-          })
-          if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
-          await groupsApi.update(group.id, { banner_url: urlData.public_url })
+          await groupsApi.uploadBanner(group.id, bannerFile)
         } catch { /* non-fatal */ }
       }
       for (const inv of invites) {

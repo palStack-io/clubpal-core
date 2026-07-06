@@ -5,16 +5,7 @@ import Card from '../ui/Card'
 import Button from '../ui/Button'
 
 async function uploadReceiptAsEventPhoto(eventId, file) {
-  const { upload_url, public_url, object_name } = await eventsApi.getPhotoUploadUrl(
-    eventId, file.name, file.type
-  )
-  const res = await fetch(upload_url, {
-    method: 'PUT',
-    headers: { 'Content-Type': file.type },
-    body: file,
-  })
-  if (!res.ok) throw new Error(`Upload failed: ${res.status}`)
-  await eventsApi.confirmPhoto(eventId, { object_key: object_name, public_url })
+  await eventsApi.uploadPhoto(eventId, file)
 }
 
 export default function ReceiptUpload({ eventId, onOCRComplete, onManualEntry, onBack }) {

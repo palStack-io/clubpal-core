@@ -52,8 +52,26 @@ export const eventsApi = {
   getCoverUploadUrl: (eventId, filename, contentType) =>
     eventsClient.post(`/events/${eventId}/cover/upload-url`, { filename, content_type: contentType }).then(r => r.data),
 
+  uploadCover: (eventId, file, { applyCover = true } = {}) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return eventsClient.post(`/events/${eventId}/cover/upload`, formData, {
+      params: { apply_cover: applyCover },
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+  },
+
   getPhotoUploadUrl: (eventId, filename, contentType) =>
     eventsClient.post(`/events/${eventId}/photos/upload-url`, { filename, content_type: contentType }).then(r => r.data),
+
+  uploadPhoto: (eventId, file, caption = null) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return eventsClient.post(`/events/${eventId}/photos/upload`, formData, {
+      params: caption ? { caption } : {},
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+  },
 
   confirmPhoto: (eventId, data) =>
     eventsClient.post(`/events/${eventId}/photos/confirm`, data).then(r => r.data),
@@ -129,4 +147,12 @@ export const eventsApi = {
 
   getPartyInviteCoverUploadUrl: (token, filename, contentType) =>
     eventsClient.post(`/party-invites/${token}/cover/upload-url`, { filename, content_type: contentType }).then(r => r.data),
+
+  uploadPartyInviteCover: (token, file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return eventsClient.post(`/party-invites/${token}/cover/upload`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+  },
 }

@@ -10,6 +10,8 @@ from passlib.context import CryptContext
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto", bcrypt__rounds=12)
+SESSION_EXPIRY_DAYS = int(os.getenv("SESSION_EXPIRY_DAYS", "90"))
+SESSION_REFRESH_GRACE_DAYS = int(os.getenv("SESSION_REFRESH_GRACE_DAYS", "14"))
 
 
 def _hash_session_token(token: str) -> str:
@@ -503,13 +505,13 @@ def update_user_password(user_id: int, new_password: str):
 
 # Session functions
 def create_session(user_id: int) -> tuple[str, datetime]:
-    """Create a new session token (30-day expiry)."""
+    """Create a new session token."""
     with get_db() as conn:
         cursor = conn.cursor()
 
         session_token = secrets.token_urlsafe(32)
         token_hash = _hash_session_token(session_token)
-        expires_at = datetime.utcnow() + timedelta(days=30)
+        expires_at = datetime.utcnow() + timedelta(days=SESSION_EXPIRY_DAYS)
 
         cursor.execute(
             "INSERT INTO sessions (user_id, session_token, expires_at) VALUES (%s, %s, %s)",
@@ -552,13 +554,48 @@ def delete_session(session_token: str):
 
 
 def cleanup_expired_sessions():
-    """Remove expired sessions."""
+    """Remove sessions that are too old to refresh."""
     with get_db() as conn:
         cursor = conn.cursor()
 
-        cursor.execute("DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP")
+        cursor.execute(
+            "DELETE FROM sessions WHERE expires_at <= CURRENT_TIMESTAMP - (%s || ' days')::interval",
+            (SESSION_REFRESH_GRACE_DAYS,),
+        )
 
         conn.commit()
+
+
+def refresh_session(session_token: str) -> tuple:
+    """Refresh a session token while it is valid or within the grace period."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        token_hash = _hash_session_token(session_token)
+        cursor.execute(
+            """
+            SELECT user_id FROM sessions
+            WHERE session_token = %s
+              AND expires_at > NOW() - (%s || ' days')::interval
+            """,
+            (token_hash, SESSION_REFRESH_GRACE_DAYS),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None, None, None
+
+        user_id = row["user_id"]
+        new_token = secrets.token_urlsafe(32)
+        new_token_hash = _hash_session_token(new_token)
+        new_expires_at = datetime.utcnow() + timedelta(days=SESSION_EXPIRY_DAYS)
+
+        cursor.execute(
+            "UPDATE sessions SET session_token = %s, expires_at = %s WHERE session_token = %s",
+            (new_token_hash, new_expires_at, token_hash),
+        )
+        conn.commit()
+
+        return new_token, user_id, new_expires_at
 
 
 # Invite token functions

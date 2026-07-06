@@ -52,6 +52,15 @@ export const groupsApi = {
   getBannerUploadUrl: (groupId, filename, contentType) =>
     groupsClient.post(`/groups/${groupId}/banner/upload-url`, { filename, content_type: contentType }).then(r => r.data),
 
+  uploadBanner: (groupId, file, { applyBanner = true } = {}) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return groupsClient.post(`/groups/${groupId}/banner/upload`, formData, {
+      params: { apply_banner: applyBanner },
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(r => r.data)
+  },
+
   getComments: (groupId) =>
     groupsClient.get(`/groups/${groupId}/comments`).then(r => r.data),
 

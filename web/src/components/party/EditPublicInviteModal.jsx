@@ -236,14 +236,8 @@ export default function EditPublicInviteModal({ isOpen, onClose, token, event, o
     try {
       let coverUrl = form.cover_image_url.trim() || null
       if (coverFile) {
-        const urlData = await eventsApi.getPartyInviteCoverUploadUrl(token, coverFile.name, coverFile.type)
-        const res = await fetch(urlData.upload_url, {
-          method: 'PUT',
-          headers: { 'Content-Type': coverFile.type },
-          body: coverFile,
-        })
-        if (!res.ok) throw new Error(`Cover upload failed (${res.status})`)
-        coverUrl = urlData.public_url
+        const data = await eventsApi.uploadPartyInviteCover(token, coverFile)
+        coverUrl = data.cover_image_url
       }
 
       const updated = await eventsApi.updatePartyInvite(token, {

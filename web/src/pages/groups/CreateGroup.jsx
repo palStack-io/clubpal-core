@@ -15,14 +15,8 @@ import { useToast } from '../../components/ui/Toast'
 const ROTATION_TYPE_MAP = { sequential: 'round_robin', random: 'random', manual: 'none' }
 
 async function uploadBanner(groupId, file) {
-  const urlData = await groupsApi.getBannerUploadUrl(groupId, file.name, file.type)
-  await fetch(urlData.upload_url, {
-    method: 'PUT',
-    headers: { 'Content-Type': file.type },
-    body: file,
-  })
-  await groupsApi.update(groupId, { banner_url: urlData.public_url })
-  return urlData.public_url
+  const data = await groupsApi.uploadBanner(groupId, file)
+  return data.banner_url
 }
 
 export default function CreateGroup() {

@@ -40,14 +40,8 @@ const DAYS_OF_WEEK = [
 ]
 
 async function uploadCover(eventId, file) {
-  const urlData = await eventsApi.getCoverUploadUrl(eventId, file.name, file.type)
-  await fetch(urlData.upload_url, {
-    method: 'PUT',
-    headers: { 'Content-Type': file.type },
-    body: file,
-  })
-  await eventsApi.update(eventId, { cover_url: urlData.public_url })
-  return urlData.public_url
+  const data = await eventsApi.uploadCover(eventId, file)
+  return data.cover_url
 }
 
 export default function CreateEvent() {

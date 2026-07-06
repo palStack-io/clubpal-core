@@ -10,7 +10,7 @@ MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "clubpal")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "clubpalpassword")
 MINIO_PUBLIC_URL = os.getenv("MINIO_PUBLIC_URL", "/storage")
 MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
-MINIO_REGION = os.getenv("MINIO_REGION", "us-east-1")
+MINIO_REGION = os.getenv("MINIO_REGION", "garage")
 
 BUCKET_CACHE = "clubpal-cache"
 

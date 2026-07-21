@@ -5,15 +5,15 @@ import { groupsApi } from '../api/groups'
 import { eventsApi } from '../api/events'
 
 import AppShell from '../components/shell/AppShell'
-import PageHero from '../components/shell/PageHero'
+import Topbar from '../components/shell/Topbar'
 import Button from '../components/ui/Button'
-import PickCTACard from '../components/dashboard/PickCTACard'
+import HeroCarousel from '../components/dashboard/HeroCarousel'
+import AttentionBand from '../components/dashboard/AttentionBand'
+import MyClubsCard from '../components/dashboard/MyClubsCard'
 import PendingPollsCard from '../components/dashboard/PendingPollsCard'
 import UpcomingEventsCard from '../components/dashboard/UpcomingEventsCard'
 import TurnQueueCard from '../components/dashboard/TurnQueueCard'
 import ActivityFeedCard from '../components/dashboard/ActivityFeedCard'
-import RsvpNeededCard from '../components/dashboard/RsvpNeededCard'
-import PartyInviteCarousel from '../components/party/PartyInviteCarousel'
 import CreateGroupModal from '../components/modals/CreateGroupModal'
 import CreateEventModal from '../components/modals/CreateEventModal'
 import { useTour } from '../components/onboarding/useTour'
@@ -217,21 +217,39 @@ export default function Dashboard() {
     ? [previewPartyInvite, ...pendingPartyInvites]
     : pendingPartyInvites
 
+  const subtitle = `${activeGroups} club${activeGroups !== 1 ? 's' : ''} · ${events.length} upcoming`
+
   const stats = [
     { label: 'Clubs',      value: loading ? '—' : activeGroups },
     { label: 'Upcoming',   value: loading ? '—' : events.length },
     { label: 'This Month', value: loading ? '—' : monthEvents },
-    { label: 'Turn',       value: loading ? '—' : turnPosition },
+    { label: activeTurn ? 'Your Turn' : 'Turn', value: loading ? '—' : turnPosition, highlight: !!activeTurn },
   ]
+
+  // Hero carousel — invites first, then confirmed upcoming events, greeting fallback.
+  // Exclude events that already surface elsewhere: pending invites (their own slides)
+  // and un-RSVP'd events (they live in the attention band, per design) — no duplicates.
+  const inviteEventIds = new Set(visiblePartyInvites.map(i => i.event_id))
+  const rsvpNeededIds = new Set(rsvpNeeded.map(e => e.id))
+  const heroEvents = [...events]
+    .filter(ev => !inviteEventIds.has(ev.id) && !rsvpNeededIds.has(ev.id))
+    .sort((a, b) => new Date(a.scheduled_date || 0) - new Date(b.scheduled_date || 0))
+  const heroSlides = [
+    ...visiblePartyInvites.map(inv => ({ kind: 'invite', invite: inv, key: `inv-${inv.token || inv.event_id}` })),
+    ...heroEvents.map(ev => ({ kind: 'event', event: ev, key: `ev-${ev.id}` })),
+  ]
+  if (heroSlides.length === 0) {
+    heroSlides.push({
+      kind: 'greeting',
+      title: "Let's plan something ✨",
+      subtitle: 'Your upcoming events and invites will headline here.',
+      key: 'greet',
+    })
+  }
 
   return (
     <AppShell activeRoute="/dashboard" user={user} groupCount={groups.length}>
-      <PageHero
-        label="clubPal"
-        title={greeting}
-        subtitle={`${activeGroups} club${activeGroups !== 1 ? 's' : ''} · ${events.length} upcoming`}
-        hasStats
-      >
+      <Topbar title={greeting}>
         <Button
           variant="ghost" size="sm"
           onClick={() => navigate('/events/new/invite')}
@@ -241,17 +259,37 @@ export default function Dashboard() {
         </Button>
         <Button variant="ghost" size="sm" onClick={() => setShowCreateEvent(true)}>+ Event</Button>
         <Button variant="primary" size="sm" onClick={() => setShowCreateGroup(true)}>+ Club</Button>
-      </PageHero>
+      </Topbar>
+
+      {/* Cinematic hero carousel */}
+      <HeroCarousel id="tour-hero" slides={heroSlides} userId={user?.id} onRsvp={handleRsvpResponded} />
 
       {/* Floating stats */}
       <div className="cp-dashboard-stats">
         {stats.map(stat => (
-          <div key={stat.label} className="cp-stat-tile">
+          <div key={stat.label} className={`cp-stat-tile${stat.highlight ? ' turn' : ''}`}>
             <div className="cp-stat-tile-value">{stat.value}</div>
             <div className="cp-stat-tile-label">{stat.label}</div>
           </div>
         ))}
       </div>
+
+      {/* Attention band — action-first: your turn + RSVP needed.
+          Only mounted (with its tour anchor) when there's something to act on,
+          so the guided tour skips it gracefully when the band is empty. */}
+      {!loading && (activeTurn || rsvpNeeded.length > 0) && (
+        <div id="tour-turn" className="cp-dashboard-content" style={{ paddingBottom: 0 }}>
+          <AttentionBand
+            activeTurn={activeTurn}
+            primaryGroupId={primaryGroupId}
+            onSkip={async () => { await groupsApi.skipRotation(primaryGroupId); await load() }}
+            onAlreadyPicked={async () => { await groupsApi.completeTurn(primaryGroupId); await load() }}
+            rsvpNeeded={rsvpNeeded}
+            userId={user?.id}
+            onRsvpResponded={handleRsvpResponded}
+          />
+        </div>
+      )}
 
       {/* Main content */}
       <div className="cp-dashboard-content">
@@ -259,63 +297,14 @@ export default function Dashboard() {
 
           {/* Left column */}
           <div className="cp-dashboard-main-stack">
-            {/* 1. Pick CTA — your turn banner or static placeholder */}
-            <div id="tour-turn" className="cp-dashboard-primary-top">
-              {!loading && activeTurn ? (
-                <PickCTACard
-                  turn={activeTurn}
-                  groupId={primaryGroupId}
-                  onSkip={async () => { await groupsApi.skipRotation(primaryGroupId); await load() }}
-                  onAlreadyPicked={async () => { await groupsApi.completeTurn(primaryGroupId); await load() }}
-                />
-              ) : !loading && (
-                <div style={{
-                  borderRadius: '16px',
-                  border: '1px solid var(--glass)',
-                  background: 'var(--s2)',
-                  padding: '16px 18px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '14px',
-                  opacity: 0.6,
-                }}>
-                  <div style={{
-                    width: '48px', height: '48px', borderRadius: '14px', flexShrink: 0,
-                    background: 'var(--s3)', border: '1px solid var(--glass)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: '22px',
-                  }}>
-                    🔄
-                  </div>
-                  <div>
-                    <div style={{ fontSize: '10px', fontWeight: 700, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: '3px' }}>
-                      Rotation
-                    </div>
-                    <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--t2)' }}>
-                      When it's your turn to pick, it'll show here
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* 2. RSVP needed */}
-            {visiblePartyInvites.length > 0 && (
-              <PartyInviteCarousel
-                invites={visiblePartyInvites}
-                userId={user?.id}
-                onRsvp={handleRsvpResponded}
-              />
-            )}
-            <div id="tour-rsvp">
-              <RsvpNeededCard
-                events={rsvpNeeded}
-                userId={user?.id}
-                onResponded={handleRsvpResponded}
+            <div id="tour-clubs">
+              <MyClubsCard
+                groups={groups}
+                loading={loading}
+                onCreate={() => setShowCreateGroup(true)}
               />
             </div>
 
-            {/* 3. Pending polls + my active polls */}
             <div id="tour-polls">
               <PendingPollsCard
                 polls={pendingPolls}
@@ -325,7 +314,6 @@ export default function Dashboard() {
                 onRespond={handlePollRespond}
               />
             </div>
-
           </div>
 
           {/* Right column */}
@@ -338,7 +326,6 @@ export default function Dashboard() {
                 currentUser={user}
               />
             </div>
-            {/* 4. Upcoming events — under turn queue */}
             <div id="tour-events">
               <UpcomingEventsCard events={events} loading={loading} onNewEvent={() => setShowCreateEvent(true)} />
             </div>

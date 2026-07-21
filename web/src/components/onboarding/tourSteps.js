@@ -42,12 +42,28 @@ export const tourSteps = [
   },
   // ── Dashboard ────────────────────────────────────────────
   {
+    zoneId: 'tour-hero',
+    place: 'below',
+    arrow: 'top',
+    label: 'Your plans',
+    title: 'Everything coming up',
+    body: 'Swipe through your upcoming events and party invites right here. See an invite? Accept or decline it without leaving the dashboard.',
+  },
+  {
     zoneId: 'tour-turn',
     place: 'below',
     arrow: 'top',
     label: 'Your turn',
     title: "When it's your turn",
     body: 'This banner appears when your club is waiting on you. Tap "Browse" to find a spot or "Poll club" to let everyone weigh in first.',
+  },
+  {
+    zoneId: 'tour-clubs',
+    place: 'below',
+    arrow: 'top',
+    label: 'Your clubs',
+    title: 'Jump into a club',
+    body: 'Each of your clubs shows up as a card. Tap one to open its page — members, rotation, and events.',
   },
   {
     zoneId: 'tour-queue',

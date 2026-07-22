@@ -54,6 +54,8 @@ class GroupResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     member_count: int
+    visit_count: Optional[int] = 0
+    last_visited_at: Optional[datetime] = None
 
 
 class GroupDetailResponse(GroupResponse):

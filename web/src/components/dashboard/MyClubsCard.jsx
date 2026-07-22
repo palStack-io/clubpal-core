@@ -24,7 +24,13 @@ export default function MyClubsCard({ groups = [], loading = false, onCreate }) 
     )
   }
 
-  const shown = groups.slice(0, 4)
+  // Most-visited first: by visit_count, then most-recently-visited, then default order
+  const shown = [...groups]
+    .sort((a, b) =>
+      (b.visit_count || 0) - (a.visit_count || 0) ||
+      new Date(b.last_visited_at || 0) - new Date(a.last_visited_at || 0)
+    )
+    .slice(0, 4)
 
   return (
     <div>

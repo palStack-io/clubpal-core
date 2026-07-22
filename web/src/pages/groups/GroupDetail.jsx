@@ -149,6 +149,9 @@ export default function GroupDetail() {
 
   useEffect(() => { fetchAll() }, [id])
 
+  // Record the visit (fire-and-forget) so most-visited ordering stays fresh
+  useEffect(() => { if (id) groupsApi.recordVisit(id) }, [id])
+
   const myRole = members.find(m => m.user_id === user?.id)?.role
   const isAdmin = myRole === 'owner' || myRole === 'admin'
   const isMyTurn = rotation?.current_user_id === user?.id

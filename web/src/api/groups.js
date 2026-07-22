@@ -10,6 +10,10 @@ export const groupsApi = {
   getUserGroups: (userId) =>
     groupsClient.get(`/users/${userId}/groups`).then(r => r.data),
 
+  // Record that the current user opened this group (powers most-visited ordering).
+  recordVisit: (groupId) =>
+    groupsClient.post(`/groups/${groupId}/visit`).then(r => r.data).catch(() => null),
+
   update: (id, data) =>
     groupsClient.patch(`/groups/${id}`, data).then(r => r.data),
 

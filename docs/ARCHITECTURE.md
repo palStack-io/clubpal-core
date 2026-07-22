@@ -59,6 +59,7 @@ Owns social graph and hosting rotation:
 - Custom backgrounds: `bg_type`, `bg_value`, `bg_scope` columns for group personalisation
 - Group banner/cover image: issues pre-signed MinIO PUT URLs
 - **Group Pulse (pre-event polls)**: picker creates a poll for an activity; group members tap one of four responses (in / done_loved / done_pass / cant_make_it); results are hidden until the user has responded; picker can convert a poll directly into a scheduled event or link it to an existing recurring series
+- **Most-visited ordering** (added July 2026): `group_members.visit_count` + `last_visited_at` track how often/recently each member opens a club; `POST /groups/{group_id}/visit` bumps them (no-op for non-members); the web dashboard and My Clubs list order clubs most-visited first
 
 ### Events Service (`:8003`)
 Owns everything about a scheduled outing:

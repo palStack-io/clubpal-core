@@ -78,9 +78,13 @@ export default function GroupsList() {
       .catch(() => { setGroups([]); setLoading(false) })
   }, [user?.id])
 
-  const filtered = filter === 'all'
-    ? groups
+  const filtered = (filter === 'all'
+    ? [...groups]
     : groups.filter(g => g.activity_type?.toLowerCase() === filter)
+  ).sort((a, b) =>
+    (b.visit_count || 0) - (a.visit_count || 0) ||
+    new Date(b.last_visited_at || 0) - new Date(a.last_visited_at || 0)
+  )
 
   // Count per activity for stats
   const activityCounts = PILLS.slice(1).reduce((acc, p) => {

@@ -20,7 +20,7 @@ from app.models import (
     JoinRequestResponse, JoinRequestAction,
 )
 from app.database import (
-    init_db, create_group, get_group, get_groups_by_user, update_group, delete_group,
+    init_db, create_group, get_group, get_groups_by_user, record_group_visit, update_group, delete_group,
     add_member, get_member, get_members, update_member_role, remove_member, remove_user_from_all_groups,
     is_member, is_admin_or_owner, get_rotation_state, advance_rotation,
     reset_rotation, set_rotation_turn, skip_rotation, reorder_rotation,
@@ -140,6 +140,14 @@ async def get_group_endpoint(group_id: int, user_id: int = Depends(get_current_u
     member_responses = [MemberResponse(**member) for member in members]
 
     return GroupDetailResponse(**group, members=member_responses)
+
+
+@app.post("/groups/{group_id}/visit")
+async def record_group_visit_endpoint(group_id: int, user_id: int = Depends(get_current_user_id)):
+    """Record that the current user opened this group (for most-visited ordering).
+    No-op if the caller is not a member."""
+    ok = record_group_visit(group_id, user_id)
+    return {"ok": ok}
 
 
 @app.get("/users/{user_id}/groups", response_model=List[GroupResponse])

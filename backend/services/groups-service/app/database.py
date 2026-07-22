@@ -92,6 +92,8 @@ def init_db():
         ("groups", "banner_url", "TEXT"),
         ("groups", "activity_type", "TEXT"),
         ("group_members", "rotation_order", "INTEGER DEFAULT NULL"),
+        ("group_members", "visit_count", "INTEGER DEFAULT 0"),
+        ("group_members", "last_visited_at", "TIMESTAMP DEFAULT NULL"),
     ]:
         try:
             cursor.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {col} {definition}")
@@ -325,18 +327,39 @@ def get_groups_by_user(user_id: int) -> List[dict]:
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT g.*, COUNT(gm2.id) as member_count
+            SELECT g.*, COUNT(gm2.id) as member_count,
+                   gm.visit_count, gm.last_visited_at
             FROM groups g
             JOIN group_members gm ON g.id = gm.group_id
             LEFT JOIN group_members gm2 ON g.id = gm2.group_id
             WHERE gm.user_id = %s
-            GROUP BY g.id
+            GROUP BY g.id, gm.visit_count, gm.last_visited_at
             ORDER BY g.created_at DESC
         """, (user_id,))
 
         rows = cursor.fetchall()
 
         return [dict(row) for row in rows]
+
+
+def record_group_visit(group_id: int, user_id: int) -> bool:
+    """Increment this user's visit count for a group and stamp last_visited_at.
+
+    No-op (returns False) if the user is not a member of the group.
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            UPDATE group_members
+            SET visit_count = COALESCE(visit_count, 0) + 1,
+                last_visited_at = CURRENT_TIMESTAMP
+            WHERE group_id = %s AND user_id = %s
+            """,
+            (group_id, user_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
 
 
 def update_group(group_id: int, name: str = None, description: str = None,

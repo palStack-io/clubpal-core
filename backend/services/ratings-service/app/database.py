@@ -112,6 +112,17 @@ def init_db():
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_ratings_rated ON ratings(rated_user_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_ratings_score ON ratings(score)")
 
+    # Realign the id sequence with existing rows: if it ever falls behind (e.g. a
+    # restore or manual insert), new inserts collide with existing ids (ratings_pkey
+    # duplicate key) instead of using the next free value.
+    cursor.execute("""
+        SELECT setval(
+            pg_get_serial_sequence('ratings', 'id'),
+            COALESCE((SELECT MAX(id) FROM ratings), 0) + 1,
+            false
+        )
+    """)
+
     conn.commit()
     conn.close()
 

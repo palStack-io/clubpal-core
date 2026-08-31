@@ -49,8 +49,6 @@ export const eventsApi = {
   getHistory: (eventId) =>
     eventsClient.get(`/events/${eventId}/history`).then(r => r.data),
 
-  getCoverUploadUrl: (eventId, filename, contentType) =>
-    eventsClient.post(`/events/${eventId}/cover/upload-url`, { filename, content_type: contentType }).then(r => r.data),
 
   uploadCover: (eventId, file, { applyCover = true } = {}) => {
     const formData = new FormData()
@@ -61,8 +59,6 @@ export const eventsApi = {
     }).then(r => r.data)
   },
 
-  getPhotoUploadUrl: (eventId, filename, contentType) =>
-    eventsClient.post(`/events/${eventId}/photos/upload-url`, { filename, content_type: contentType }).then(r => r.data),
 
   uploadPhoto: (eventId, file, caption = null) => {
     const formData = new FormData()
@@ -73,8 +69,6 @@ export const eventsApi = {
     }).then(r => r.data)
   },
 
-  confirmPhoto: (eventId, data) =>
-    eventsClient.post(`/events/${eventId}/photos/confirm`, data).then(r => r.data),
 
   getPhotos: (eventId) =>
     eventsClient.get(`/events/${eventId}/photos`).then(r => r.data),

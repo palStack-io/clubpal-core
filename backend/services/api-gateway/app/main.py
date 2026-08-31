@@ -264,10 +264,6 @@ async def startup():
     scheduler.add_job(_send_reengagement_notifications, 'cron', day_of_week='mon', hour=10, minute=0,
                       id='reengagement', replace_existing=True)
     scheduler.start()
-    _MINIO_DEFAULT_PAIRS = {("clubpal", "clubpalpassword"), ("minioadmin", "minioadmin"), ("minio", "minio")}
-    if _IS_PRODUCTION and (os.getenv("MINIO_ACCESS_KEY", ""), os.getenv("MINIO_SECRET_KEY", "")) in _MINIO_DEFAULT_PAIRS:
-        import sys
-        print("CRITICAL: Default MinIO credentials detected in production — change MINIO_ACCESS_KEY and MINIO_SECRET_KEY", file=sys.stderr)
     print("API Gateway started")
 
 
@@ -994,16 +990,6 @@ async def set_password(
 
 # ===== Storage Endpoints =====
 
-class AvatarUploadRequest(BaseModel):
-    filename: str
-    content_type: str = "image/jpeg"
-
-class UploadUrlResponse(BaseModel):
-    upload_url: str
-    public_url: str
-    object_name: str
-
-
 _AVATAR_MAX_BYTES = 5 * 1024 * 1024  # 5 MB
 _ALLOWED_IMAGE_MAGIC = {
     b"\xff\xd8\xff": "jpg",       # JPEG
@@ -1052,27 +1038,6 @@ async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depen
     public_url = storage.upload_bytes(storage.BUCKET_AVATARS, object_name, content, mime)
     update_user_profile(current_user["id"], avatar_url=public_url)
     return {"avatar_url": public_url}
-
-
-@app.post("/users/me/avatar/upload-url", response_model=UploadUrlResponse)
-async def get_avatar_upload_url(request: AvatarUploadRequest,
-                                current_user: dict = Depends(get_current_user)):
-    """Get a pre-signed URL to upload a user avatar directly to object storage."""
-    ext = request.filename.rsplit(".", 1)[-1].lower() if "." in request.filename else "jpg"
-    object_name = f"user-{current_user['id']}-{uuid.uuid4().hex[:8]}.{ext}"
-
-    upload_url = storage.presigned_upload_url(
-        storage.BUCKET_AVATARS,
-        object_name,
-        content_type=request.content_type,
-    )
-    public_url = storage.public_object_url(storage.BUCKET_AVATARS, object_name)
-
-    return UploadUrlResponse(
-        upload_url=upload_url,
-        public_url=public_url,
-        object_name=object_name,
-    )
 
 
 # ===== Admin Endpoints =====

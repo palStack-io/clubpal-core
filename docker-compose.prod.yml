@@ -15,7 +15,7 @@
 #   echo $GITHUB_TOKEN | docker login ghcr.io -u palstack-io --password-stdin
 #
 # Required .env variables:
-#   POSTGRES_PASSWORD, GARAGE_RPC_SECRET, GARAGE_SECRET_KEY, INTERNAL_API_SECRET, STORAGE_PUBLIC_URL
+#   POSTGRES_PASSWORD, INTERNAL_API_SECRET, STORAGE_PUBLIC_URL
 
 services:
 
@@ -42,102 +42,6 @@ services:
       retries: 5
 
   # ===========================================
-  # Garage — S3-compatible Object Storage
-  # S3 API: internal via nginx /storage/
-  # ===========================================
-  garage:
-    image: dxflrs/garage:v1.0.0
-    container_name: clubpal-garage
-    environment:
-      GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:?Set GARAGE_RPC_SECRET in .env}
-      GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY:-clubpal}
-      GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY:?Set GARAGE_SECRET_KEY in .env}
-    entrypoint: >
-      /bin/sh -c "
-      cat > /etc/garage.toml << 'TOML'
-      metadata_dir = \"/var/lib/garage/meta\"
-      data_dir = \"/var/lib/garage/data\"
-      replication_factor = 1
-
-      [rpc]
-      secret = \"PLACEHOLDER_RPC\"
-      bind_addr = \"0.0.0.0:3901\"
-      public_addr = \"garage:3901\"
-
-      [s3_api]
-      s3_region = \"us-east-1\"
-      api_bind_addr = \"0.0.0.0:3900\"
-      root_domain = \".s3.localhost\"
-
-      [s3_web]
-      bind_addr = \"0.0.0.0:3902\"
-      root_domain = \".web.localhost\"
-      index = \"index.html\"
-
-      [admin]
-      api_bind_addr = \"0.0.0.0:3903\"
-      TOML
-      sed -i \"s/PLACEHOLDER_RPC/$$GARAGE_RPC_SECRET/\" /etc/garage.toml &&
-      exec /garage server"
-    volumes:
-      - garage_meta:/var/lib/garage/meta
-      - garage_data:/var/lib/garage/data
-    networks:
-      - clubpal-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3903/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-
-  garage-setup:
-    image: python:3.12-alpine
-    container_name: clubpal-garage-setup
-    depends_on:
-      garage:
-        condition: service_healthy
-    networks:
-      - clubpal-network
-    environment:
-      GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY:-clubpal}
-      GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY}
-    entrypoint: >
-      /bin/sh -c "
-      pip install requests -q &&
-      python3 -c \"
-      import os, time, requests, sys
-      ADMIN = 'http://garage:3903'
-      KEY = os.environ['GARAGE_ACCESS_KEY']
-      SECRET = os.environ['GARAGE_SECRET_KEY']
-      for i in range(30):
-          try:
-              if requests.get(f'{ADMIN}/health', timeout=2).status_code == 200: break
-          except: pass
-          time.sleep(2)
-      else:
-          print('Garage not ready', file=sys.stderr); sys.exit(1)
-      status = requests.get(f'{ADMIN}/v1/status').json()
-      node_id = next(iter(status.get('nodes', {})))
-      print(f'Node: {node_id}')
-      requests.post(f'{ADMIN}/v1/layout', json={node_id: {'zone': 'dc1', 'capacity': 10000000000}})
-      layout = requests.get(f'{ADMIN}/v1/layout').json()
-      version = layout.get('version', 0) + 1
-      requests.post(f'{ADMIN}/v1/layout/apply', json={'version': version})
-      print(f'Layout v{version} applied')
-      r = requests.post(f'{ADMIN}/v1/key', json={'name': 'main', 'importKeyId': KEY, 'importSecretKey': SECRET})
-      print(f'Key: {r.status_code}')
-      for name in ['clubpal-avatars', 'clubpal-events', 'clubpal-cache']:
-          r = requests.post(f'{ADMIN}/v1/bucket', json={'globalAlias': name})
-          bid = r.json().get('id') or requests.get(f'{ADMIN}/v1/bucket', params={'globalAlias': name}).json()['id']
-          requests.post(f'{ADMIN}/v1/bucket/allow', json={'bucketId': bid, 'accessKeyId': KEY, 'read': True, 'write': True, 'owner': True})
-          print(f'Bucket {name} ready')
-      print('Done')
-      \""
-    restart: on-failure
-
-  # ===========================================
   # Nginx — Web UI + API Reverse Proxy
   # Single public port: 9000 → 80 (override with APP_PORT)
   # ===========================================
@@ -148,6 +52,7 @@ services:
       - "${APP_PORT:-9000}:80"
     volumes:
       - ./nginx/logs:/var/log/nginx
+      - storage_data:/data/storage:ro
     networks:
       - clubpal-network
     depends_on:
@@ -157,8 +62,6 @@ services:
       - ratings-service
       - activities-service
       - enrichment-service
-      - bill-split-service
-      - garage
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
@@ -186,20 +89,18 @@ services:
       - FROM_NAME=${FROM_NAME:-clubPal}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:9000}
-      - MINIO_ENDPOINT=${GARAGE_ENDPOINT:-garage:3900}
-      - MINIO_ACCESS_KEY=${GARAGE_ACCESS_KEY:-clubpal}
-      - MINIO_SECRET_KEY=${GARAGE_SECRET_KEY}
-      - MINIO_PUBLIC_URL=${STORAGE_PUBLIC_URL:?Set STORAGE_PUBLIC_URL in .env}
+      - STORAGE_ROOT=/data/storage
+      - STORAGE_PUBLIC_URL=${STORAGE_PUBLIC_URL:?Set STORAGE_PUBLIC_URL in .env}
       - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:?Set INTERNAL_API_SECRET in .env}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - OIDC_PROVIDERS=${OIDC_PROVIDERS:-}
       - CORS_ORIGINS=${CORS_ORIGINS:-https://clubapp.palstack.io}
+    volumes:
+      - storage_data:/data/storage
     networks:
       - clubpal-network
     depends_on:
       db:
-        condition: service_healthy
-      garage:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -219,19 +120,17 @@ services:
       - "8002"
     environment:
       - DATABASE_URL=postgresql://clubpal:${POSTGRES_PASSWORD}@db:5432/clubpal_groups
-      - MINIO_ENDPOINT=${GARAGE_ENDPOINT:-garage:3900}
-      - MINIO_ACCESS_KEY=${GARAGE_ACCESS_KEY:-clubpal}
-      - MINIO_SECRET_KEY=${GARAGE_SECRET_KEY}
-      - MINIO_PUBLIC_URL=${STORAGE_PUBLIC_URL:?Set STORAGE_PUBLIC_URL in .env}
+      - STORAGE_ROOT=/data/storage
+      - STORAGE_PUBLIC_URL=${STORAGE_PUBLIC_URL:?Set STORAGE_PUBLIC_URL in .env}
       - GATEWAY_SERVICE_URL=http://api-gateway:8001
       - EVENTS_SERVICE_URL=http://events-service:8003
       - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:?Set INTERNAL_API_SECRET in .env}
+    volumes:
+      - storage_data:/data/storage
     networks:
       - clubpal-network
     depends_on:
       db:
-        condition: service_healthy
-      garage:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -251,14 +150,14 @@ services:
       - "8003"
     environment:
       - DATABASE_URL=postgresql://clubpal:${POSTGRES_PASSWORD}@db:5432/clubpal_events
-      - MINIO_ENDPOINT=${GARAGE_ENDPOINT:-garage:3900}
-      - MINIO_ACCESS_KEY=${GARAGE_ACCESS_KEY:-clubpal}
-      - MINIO_SECRET_KEY=${GARAGE_SECRET_KEY}
-      - MINIO_PUBLIC_URL=${STORAGE_PUBLIC_URL:?Set STORAGE_PUBLIC_URL in .env}
+      - STORAGE_ROOT=/data/storage
+      - STORAGE_PUBLIC_URL=${STORAGE_PUBLIC_URL:?Set STORAGE_PUBLIC_URL in .env}
       - GROUPS_SERVICE_URL=http://groups-service:8002
       - ACTIVITIES_SERVICE_URL=http://activities-service:8005
       - GATEWAY_URL=http://api-gateway:8001
       - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:?Set INTERNAL_API_SECRET in .env}
+    volumes:
+      - storage_data:/data/storage
     networks:
       - clubpal-network
     depends_on:
@@ -267,8 +166,6 @@ services:
       groups-service:
         condition: service_healthy
       activities-service:
-        condition: service_healthy
-      garage:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -342,10 +239,8 @@ services:
       - TMDB_API_KEY=${TMDB_API_KEY:-}
       - IGDB_CLIENT_ID=${IGDB_CLIENT_ID:-}
       - IGDB_CLIENT_SECRET=${IGDB_CLIENT_SECRET:-}
-      - MINIO_ENDPOINT=${GARAGE_ENDPOINT:-garage:3900}
-      - MINIO_ACCESS_KEY=${GARAGE_ACCESS_KEY:-clubpal}
-      - MINIO_SECRET_KEY=${GARAGE_SECRET_KEY}
-      - MINIO_PUBLIC_URL=${STORAGE_PUBLIC_URL:?Set STORAGE_PUBLIC_URL in .env}
+      - STORAGE_ROOT=/data/storage
+      - STORAGE_PUBLIC_URL=${STORAGE_PUBLIC_URL:?Set STORAGE_PUBLIC_URL in .env}
       - CACHE_TTL_SEARCH=${CACHE_TTL_SEARCH:-86400}
       - CACHE_TTL_DETAIL=${CACHE_TTL_DETAIL:-604800}
       - CACHE_TTL_GEOCODE=${CACHE_TTL_GEOCODE:-2592000}
@@ -358,12 +253,12 @@ services:
       - FROM_NAME=${FROM_NAME:-clubPal}
       - ADMIN_EMAIL=${ADMIN_EMAIL:-}
       - FRONTEND_URL=${FRONTEND_URL:-http://localhost:9000}
+    volumes:
+      - storage_data:/data/storage
     networks:
       - clubpal-network
     depends_on:
       db:
-        condition: service_healthy
-      garage:
         condition: service_healthy
       api-gateway:
         condition: service_healthy
@@ -375,42 +270,6 @@ services:
       retries: 3
       start_period: 15s
 
-  # ===========================================
-  # Bill Split Service — Receipt OCR, splits, settlement emails
-  # ===========================================
-  bill-split-service:
-    image: ghcr.io/palstack-io/clubpal-bill-split-service:${IMAGE_TAG:-latest}
-    container_name: clubpal-bill-split-service
-    expose:
-      - "8007"
-    environment:
-      - DATABASE_URL=postgresql://clubpal:${POSTGRES_PASSWORD}@db:5432/clubpal_billsplit
-      - API_GATEWAY_URL=http://api-gateway:8001
-      - EVENTS_SERVICE_URL=http://events-service:8003
-      - INTERNAL_API_SECRET=${INTERNAL_API_SECRET:?Set INTERNAL_API_SECRET in .env}
-      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - SMTP_USER=${SMTP_USER:-}
-      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
-      - FROM_EMAIL=${FROM_EMAIL:-noreply@palstack.io}
-      - FROM_NAME=${FROM_NAME:-clubPal}
-      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:9000}
-    networks:
-      - clubpal-network
-    depends_on:
-      db:
-        condition: service_healthy
-      api-gateway:
-        condition: service_healthy
-      events-service:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8007/health')"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
 
 networks:
   clubpal-network:
@@ -418,5 +277,4 @@ networks:
 
 volumes:
   pgdata:
-  garage_meta:
-  garage_data:
+  storage_data:

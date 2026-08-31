@@ -11,10 +11,7 @@
 # BEFORE DEPLOYING:
 #   1. Replace every  CHANGEME  value with your own secret / key.
 #   2. Update APP_HOST to your server's public domain or IP.
-#   3. Generate required Garage secrets:
-#        CHANGEME_GARAGE_RPC  →  openssl rand -hex 32
-#        CHANGEME_GARAGE_SECRET → openssl rand -base64 32
-#   4. Optional env vars (SMTP, OAuth, external APIs) can be left blank —
+#   3. Optional env vars (SMTP, OAuth, external APIs) can be left blank —
 #      features that need them will simply be disabled at runtime.
 #
 # IMAGE TAGS
@@ -67,105 +64,10 @@ services:
       PGPASSWORD: CHANGEME_DB_PASSWORD           # ← must match db above
     entrypoint: >
       /bin/sh -c "
-      for db in clubpal_gateway clubpal_groups clubpal_events clubpal_ratings clubpal_activities clubpal_enrichment clubpal_billsplit; do
+      for db in clubpal_gateway clubpal_groups clubpal_events clubpal_ratings clubpal_activities clubpal_enrichment; do
         psql -h db -U clubpal -tc \"SELECT 1 FROM pg_database WHERE datname='$$db'\" | grep -q 1 ||
         psql -h db -U clubpal -c \"CREATE DATABASE $$db\";
       done"
-    restart: on-failure
-
-  # ===========================================================================
-  # Garage — S3-compatible object storage (avatars, event photos, enrichment cache)
-  # ===========================================================================
-  garage:
-    image: dxflrs/garage:v1.0.0
-    container_name: clubpal-garage
-    environment:
-      GARAGE_RPC_SECRET: CHANGEME_GARAGE_RPC     # ← openssl rand -hex 32
-      GARAGE_ACCESS_KEY: clubpal
-      GARAGE_SECRET_KEY: CHANGEME_GARAGE_SECRET  # ← openssl rand -base64 32
-    entrypoint: >
-      /bin/sh -c "
-      cat > /etc/garage.toml << 'TOML'
-      metadata_dir = \"/var/lib/garage/meta\"
-      data_dir = \"/var/lib/garage/data\"
-      replication_factor = 1
-
-      [rpc]
-      secret = \"PLACEHOLDER_RPC\"
-      bind_addr = \"0.0.0.0:3901\"
-      public_addr = \"garage:3901\"
-
-      [s3_api]
-      s3_region = \"garage\"
-      api_bind_addr = \"0.0.0.0:3900\"
-      root_domain = \".s3.localhost\"
-
-      [s3_web]
-      bind_addr = \"0.0.0.0:3902\"
-      root_domain = \".web.localhost\"
-      index = \"index.html\"
-
-      [admin]
-      api_bind_addr = \"0.0.0.0:3903\"
-      TOML
-      sed -i \"s/PLACEHOLDER_RPC/$$GARAGE_RPC_SECRET/\" /etc/garage.toml &&
-      exec /garage server"
-    volumes:
-      - garage_meta:/var/lib/garage/meta
-      - garage_data:/var/lib/garage/data
-    networks:
-      - clubpal-network
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3903/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-
-  garage-setup:
-    image: python:3.12-alpine
-    container_name: clubpal-garage-setup
-    depends_on:
-      garage:
-        condition: service_healthy
-    networks:
-      - clubpal-network
-    environment:
-      GARAGE_ACCESS_KEY: clubpal
-      GARAGE_SECRET_KEY: CHANGEME_GARAGE_SECRET  # ← must match garage above
-    entrypoint: >
-      /bin/sh -c "
-      pip install requests -q &&
-      python3 -c \"
-      import os, time, requests, sys
-      ADMIN = 'http://garage:3903'
-      KEY = os.environ['GARAGE_ACCESS_KEY']
-      SECRET = os.environ['GARAGE_SECRET_KEY']
-      for i in range(30):
-          try:
-              if requests.get(f'{ADMIN}/health', timeout=2).status_code == 200: break
-          except: pass
-          time.sleep(2)
-      else:
-          print('Garage not ready', file=sys.stderr); sys.exit(1)
-      status = requests.get(f'{ADMIN}/v1/status').json()
-      node_id = next(iter(status.get('nodes', {})))
-      print(f'Node: {node_id}')
-      requests.post(f'{ADMIN}/v1/layout', json={node_id: {'zone': 'dc1', 'capacity': 10000000000}})
-      layout = requests.get(f'{ADMIN}/v1/layout').json()
-      version = layout.get('version', 0) + 1
-      requests.post(f'{ADMIN}/v1/layout/apply', json={'version': version})
-      print(f'Layout v{version} applied')
-      r = requests.post(f'{ADMIN}/v1/key', json={'name': 'main', 'importKeyId': KEY, 'importSecretKey': SECRET})
-      print(f'Key: {r.status_code}')
-      for name in ['clubpal-avatars', 'clubpal-events', 'clubpal-cache']:
-          r = requests.post(f'{ADMIN}/v1/bucket', json={'globalAlias': name})
-          bid = r.json().get('id') or requests.get(f'{ADMIN}/v1/bucket', params={'globalAlias': name}).json()['id']
-          requests.post(f'{ADMIN}/v1/bucket/allow', json={'bucketId': bid, 'accessKeyId': KEY, 'read': True, 'write': True, 'owner': True})
-          print(f'Bucket {name} ready')
-      print('Done')
-      \""
     restart: on-failure
 
   # ===========================================================================
@@ -178,6 +80,7 @@ services:
       - "9000:80"
     volumes:
       - ./nginx/logs:/var/log/nginx
+      - storage_data:/data/storage:ro
     networks:
       - clubpal-network
     depends_on:
@@ -187,8 +90,6 @@ services:
       - ratings-service
       - activities-service
       - enrichment-service
-      - bill-split-service
-      - garage
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/health"]
@@ -209,11 +110,9 @@ services:
       # ── Database ──────────────────────────────────────────────────────────
       DATABASE_URL: postgresql://clubpal:CHANGEME_DB_PASSWORD@db:5432/clubpal_gateway
 
-      # ── Garage (S3-compatible) ─────────────────────────────────────────────
-      MINIO_ENDPOINT: garage:3900
-      MINIO_ACCESS_KEY: clubpal
-      MINIO_SECRET_KEY: CHANGEME_GARAGE_SECRET
-      MINIO_PUBLIC_URL: http://your-server-ip:9000/storage  # ← public URL
+      # ── Storage (local filesystem, shared volume) ──────────────────────────
+      STORAGE_ROOT: /data/storage
+      STORAGE_PUBLIC_URL: http://your-server-ip:9000/storage  # ← public URL
 
       # ── App URLs ──────────────────────────────────────────────────────────
       FRONTEND_URL: http://your-server-ip:9000              # ← public URL
@@ -235,12 +134,12 @@ services:
       # ── OAuth / OIDC (optional — leave blank to disable) ──────────────────
       GOOGLE_CLIENT_ID: ""
       OIDC_PROVIDERS: ""              # JSON array of OIDC provider configs
+    volumes:
+      - storage_data:/data/storage
     networks:
       - clubpal-network
     depends_on:
       db:
-        condition: service_healthy
-      garage:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -260,19 +159,17 @@ services:
       - "8002"
     environment:
       DATABASE_URL: postgresql://clubpal:CHANGEME_DB_PASSWORD@db:5432/clubpal_groups
-      MINIO_ENDPOINT: garage:3900
-      MINIO_ACCESS_KEY: clubpal
-      MINIO_SECRET_KEY: CHANGEME_GARAGE_SECRET
-      MINIO_PUBLIC_URL: http://your-server-ip:9000/storage  # ← public URL
+      STORAGE_ROOT: /data/storage
+      STORAGE_PUBLIC_URL: http://your-server-ip:9000/storage  # ← public URL
       GATEWAY_SERVICE_URL: http://api-gateway:8001
       EVENTS_SERVICE_URL: http://events-service:8003
       INTERNAL_API_SECRET: CHANGEME_INTERNAL_SECRET
+    volumes:
+      - storage_data:/data/storage
     networks:
       - clubpal-network
     depends_on:
       db:
-        condition: service_healthy
-      garage:
         condition: service_healthy
       api-gateway:
         condition: service_healthy
@@ -294,14 +191,14 @@ services:
       - "8003"
     environment:
       DATABASE_URL: postgresql://clubpal:CHANGEME_DB_PASSWORD@db:5432/clubpal_events
-      MINIO_ENDPOINT: garage:3900
-      MINIO_ACCESS_KEY: clubpal
-      MINIO_SECRET_KEY: CHANGEME_GARAGE_SECRET
-      MINIO_PUBLIC_URL: http://your-server-ip:9000/storage  # ← public URL
+      STORAGE_ROOT: /data/storage
+      STORAGE_PUBLIC_URL: http://your-server-ip:9000/storage  # ← public URL
       GROUPS_SERVICE_URL: http://groups-service:8002
       ACTIVITIES_SERVICE_URL: http://activities-service:8005
       GATEWAY_URL: http://api-gateway:8001
       INTERNAL_API_SECRET: CHANGEME_INTERNAL_SECRET
+    volumes:
+      - storage_data:/data/storage
     networks:
       - clubpal-network
     depends_on:
@@ -310,8 +207,6 @@ services:
       groups-service:
         condition: service_healthy
       activities-service:
-        condition: service_healthy
-      garage:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
@@ -383,10 +278,8 @@ services:
       - "8006"
     environment:
       DATABASE_URL: postgresql://clubpal:CHANGEME_DB_PASSWORD@db:5432/clubpal_enrichment
-      MINIO_ENDPOINT: garage:3900
-      MINIO_ACCESS_KEY: clubpal
-      MINIO_SECRET_KEY: CHANGEME_GARAGE_SECRET
-      MINIO_PUBLIC_URL: http://your-server-ip:9000/storage  # ← public URL
+      STORAGE_ROOT: /data/storage
+      STORAGE_PUBLIC_URL: http://your-server-ip:9000/storage  # ← public URL
       INTERNAL_API_SECRET: CHANGEME_INTERNAL_SECRET
 
       # ── App URLs ──────────────────────────────────────────────────────────
@@ -413,12 +306,12 @@ services:
       CACHE_TTL_SEARCH: "86400"      # 24 h
       CACHE_TTL_DETAIL: "604800"     # 7 days
       CACHE_TTL_GEOCODE: "2592000"   # 30 days
+    volumes:
+      - storage_data:/data/storage
     networks:
       - clubpal-network
     depends_on:
       db:
-        condition: service_healthy
-      garage:
         condition: service_healthy
       api-gateway:
         condition: service_healthy
@@ -431,48 +324,7 @@ services:
       start_period: 15s
 
   # ===========================================================================
-  # Bill Split Service — receipt OCR, bill splitting, settlement emails
-  # ===========================================================================
-  bill-split-service:
-    image: ghcr.io/palstack-io/clubpal-bill-split-service:latest
-    container_name: clubpal-bill-split-service
-    expose:
-      - "8007"
-    environment:
-      DATABASE_URL: postgresql://clubpal:CHANGEME_DB_PASSWORD@db:5432/clubpal_billsplit
-      API_GATEWAY_URL: http://api-gateway:8001
-      EVENTS_SERVICE_URL: http://events-service:8003
-      INTERNAL_API_SECRET: CHANGEME_INTERNAL_SECRET
-
-      # ── App URL (used in payment confirmation email links) ─────────────────
-      FRONTEND_URL: http://your-server-ip:9000              # ← public URL
-
-      # ── Email / SMTP (leave blank to disable email features) ──────────────
-      SMTP_HOST: smtp.gmail.com
-      SMTP_PORT: "587"
-      SMTP_USER: ""
-      SMTP_PASSWORD: ""
-      FROM_EMAIL: noreply@yourapp.io
-      FROM_NAME: clubPal
-    networks:
-      - clubpal-network
-    depends_on:
-      db:
-        condition: service_healthy
-      api-gateway:
-        condition: service_healthy
-      events-service:
-        condition: service_healthy
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8007/health')"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-      start_period: 15s
-
-  # ===========================================================================
-  # Backup — Postgres + Garage snapshots → optional remote storage
+  # Backup — Postgres + storage snapshots → optional remote storage
   # Runs on cron inside the container (supercronic). No host cron needed.
   # ===========================================================================
   backup:
@@ -511,14 +363,12 @@ services:
       # ── Dead man's switch ping after each successful backup (optional) ───
       BACKUP_HEALTHCHECK_URL: ""                 # e.g. https://hc-ping.com/xxx
     volumes:
-      - garage_data:/garage-data:ro
+      - storage_data:/storage-data:ro
       - /media/harungunasekaran/raid1Copy/palStack/clubpal:/backups
     networks:
       - clubpal-network
     depends_on:
       db:
-        condition: service_healthy
-      garage:
         condition: service_healthy
     restart: unless-stopped
 
@@ -529,5 +379,4 @@ networks:
 
 volumes:
   pgdata:
-  garage_meta:
-  garage_data:
+  storage_data:

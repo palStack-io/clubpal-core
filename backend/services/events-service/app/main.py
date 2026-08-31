@@ -16,7 +16,7 @@ from app.models import (
     EventCreate, EventUpdate, EventResponse, EventDetailResponse,
     AttendeeAdd, AttendeeRSVP, AttendeeUpdateStatus, AttendeeResponse,
     CommentCreate, CommentResponse, EventHistoryResponse,
-    PhotoConfirmRequest, PhotoResponse,
+    PhotoResponse,
     RecurringScheduleCreate, RecurringScheduleResponse,
     EventBringItemCreate, EventBringItemResponse, EventBringItemUpdate, EventBringUpdate,
     EventItemClaim,
@@ -38,11 +38,11 @@ from app import storage
 
 logger = logging.getLogger(__name__)
 
-_STORAGE_PREFIX = f"{storage.MINIO_PUBLIC_URL}/{storage.BUCKET_EVENTS}/"
+_STORAGE_PREFIX = f"{storage.STORAGE_PUBLIC_URL}/{storage.BUCKET_EVENTS}/"
 
 
 def _cover_object_key(cover_url: str) -> Optional[str]:
-    """Extract the MinIO object key from a public cover URL, or None if external."""
+    """Extract the storage object key from a public cover URL, or None if external."""
     if cover_url and cover_url.startswith(_STORAGE_PREFIX):
         return cover_url[len(_STORAGE_PREFIX):]
     return None
@@ -111,7 +111,7 @@ def _validate_mirror_url(url: str) -> None:
 
 
 async def _mirror_external_cover(event_id: int, url: str) -> str:
-    """Fetch an external image URL and upload it to MinIO. Returns the MinIO public URL."""
+    """Fetch an external image URL and upload it to local storage. Returns the storage public URL."""
     try:
         _validate_mirror_url(url)
         async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
@@ -642,7 +642,7 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(
             # No group → host defaults to the creator
             host_user_id = creator_id
 
-    # Create the event first (no cover yet — we need event_id for proper MinIO path)
+    # Create the event first (no cover yet — we need event_id for proper storage path)
     event_id = create_event(
         group_id=event_data.group_id,
         activity_id=event_data.activity_id,
@@ -674,13 +674,13 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(
                     i,
                 )
 
-    # Mirror cover into MinIO under the real event path
+    # Mirror cover into storage under the real event path
     if event_data.banner_url:
         if event_data.banner_url.startswith(_STORAGE_PREFIX):
-            # Already in our MinIO — just store it
+            # Already in our storage — just store it
             update_event(event_id, cover_url=event_data.banner_url)
         else:
-            # External URL — fetch and upload to MinIO
+            # External URL — fetch and upload to storage
             cover_url = await _mirror_external_cover(event_id, event_data.banner_url)
             update_event(event_id, cover_url=cover_url)
 
@@ -1014,14 +1014,14 @@ async def delete_event_endpoint(event_id: int, user_id: int = Depends(get_curren
     except Exception as e:
         logger.warning(f"Failed to send cancellation notifications for event {event_id}: {e}")
 
-    # Clean up cover image from MinIO
+    # Clean up cover image from storage
     cover_url = event.get("cover_url")
     if cover_url:
         key = _cover_object_key(cover_url)
         if key:
             storage.delete_object(storage.BUCKET_EVENTS, key)
 
-    # Clean up all event photos from MinIO
+    # Clean up all event photos from storage
     for photo in get_photos(event_id):
         if photo.get("object_key"):
             storage.delete_object(storage.BUCKET_EVENTS, photo["object_key"])
@@ -1385,16 +1385,6 @@ async def delete_comment_endpoint(event_id: int, comment_id: int, user_id: int =
 
 # ===== Storage / Photo Endpoints =====
 
-class EventImageUploadRequest(BaseModel):
-    filename: str
-    content_type: str = "image/jpeg"
-
-class UploadUrlResponse(BaseModel):
-    upload_url: str
-    public_url: str
-    object_name: str
-
-
 @app.post("/events/{event_id}/cover/upload")
 async def upload_event_cover(
     event_id: int,
@@ -1418,48 +1408,6 @@ async def upload_event_cover(
         update_event(event_id, cover_url=public_url)
     return {"cover_url": public_url}
 
-
-@app.post("/events/{event_id}/cover/upload-url", response_model=UploadUrlResponse)
-async def get_event_cover_upload_url(event_id: int, request: EventImageUploadRequest,
-                                      user_id: int = Depends(get_current_user_id)):
-    """Get a pre-signed URL to upload an event cover image."""
-    event = get_event(event_id)
-    if not event:
-        raise HTTPException(status_code=404, detail="Event not found")
-
-    if event["host_user_id"] != user_id and event["created_by"] != user_id:
-        raise HTTPException(status_code=403, detail="Only the host can update the cover image")
-    if request.content_type not in _ALLOWED_IMAGE_CT:
-        raise HTTPException(status_code=415, detail="Unsupported content type — JPEG, PNG, GIF or WebP only")
-
-    ext = request.filename.rsplit(".", 1)[-1].lower() if "." in request.filename else "jpg"
-    object_name = f"events/{event_id}/cover-{uuid.uuid4().hex[:8]}.{ext}"
-
-    upload_url = storage.presigned_upload_url(
-        storage.BUCKET_EVENTS, object_name, content_type=request.content_type,
-    )
-    public_url = storage.public_object_url(storage.BUCKET_EVENTS, object_name)
-
-    return UploadUrlResponse(upload_url=upload_url, public_url=public_url, object_name=object_name)
-
-
-@app.post("/events/{event_id}/photos/upload-url", response_model=UploadUrlResponse)
-async def get_photo_upload_url(event_id: int, request: EventImageUploadRequest, user_id: int = Depends(get_current_user_id)):
-    """Get a pre-signed URL to upload a member photo for an event."""
-    if not get_event(event_id):
-        raise HTTPException(status_code=404, detail="Event not found")
-    if request.content_type not in _ALLOWED_IMAGE_CT:
-        raise HTTPException(status_code=415, detail="Unsupported content type — JPEG, PNG, GIF or WebP only")
-
-    ext = request.filename.rsplit(".", 1)[-1].lower() if "." in request.filename else "jpg"
-    object_name = f"events/{event_id}/photos/{user_id}/{uuid.uuid4().hex}.{ext}"
-
-    upload_url = storage.presigned_upload_url(
-        storage.BUCKET_EVENTS, object_name, content_type=request.content_type,
-    )
-    public_url = storage.public_object_url(storage.BUCKET_EVENTS, object_name)
-
-    return UploadUrlResponse(upload_url=upload_url, public_url=public_url, object_name=object_name)
 
 
 @app.post("/events/{event_id}/photos/upload", response_model=PhotoResponse, status_code=201)
@@ -1487,24 +1435,6 @@ async def upload_event_photo(
         public_url=public_url,
         caption=caption,
     )
-    photo = get_photo(photo_id)
-    return PhotoResponse(**photo)
-
-
-@app.post("/events/{event_id}/photos/confirm", response_model=PhotoResponse, status_code=201)
-async def confirm_photo_upload(event_id: int, body: PhotoConfirmRequest, user_id: int = Depends(get_current_user_id)):
-    """Save a photo to the DB after the client has PUT it to MinIO."""
-    if not get_event(event_id):
-        raise HTTPException(status_code=404, detail="Event not found")
-
-    photo_id = add_photo(
-        event_id=event_id,
-        user_id=user_id,
-        object_key=body.object_key,
-        public_url=body.public_url,
-        caption=body.caption,
-    )
-
     photo = get_photo(photo_id)
     return PhotoResponse(**photo)
 

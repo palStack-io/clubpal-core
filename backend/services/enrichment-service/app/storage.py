@@ -1,72 +1,49 @@
 import os
-import io
+import re
 import httpx
 from typing import Optional
-from minio import Minio
-from minio.error import S3Error
 
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "clubpal")
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "clubpalpassword")
-MINIO_PUBLIC_URL = os.getenv("MINIO_PUBLIC_URL", "/storage")
-MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
-MINIO_REGION = os.getenv("MINIO_REGION", "garage")
+STORAGE_ROOT = os.getenv("STORAGE_ROOT", "/data/storage")
+STORAGE_PUBLIC_URL = os.getenv("STORAGE_PUBLIC_URL", "/storage")
 
 BUCKET_CACHE = "clubpal-cache"
 
-client = Minio(
-    MINIO_ENDPOINT,
-    access_key=MINIO_ACCESS_KEY,
-    secret_key=MINIO_SECRET_KEY,
-    secure=MINIO_SECURE,
-    region=MINIO_REGION,
-)
+_SAFE_OBJECT_NAME = re.compile(r"^[A-Za-z0-9/_.-]+$")
+_ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
 
 
-import json as _json
-
-_PUBLIC_READ_POLICY = _json.dumps({
-    "Version": "2012-10-17",
-    "Statement": [{
-        "Effect": "Allow",
-        "Principal": {"AWS": ["*"]},
-        "Action": ["s3:GetObject"],
-        "Resource": [f"arn:aws:s3:::{BUCKET_CACHE}/*"],
-    }]
-})
+def _safe_path(object_name: str) -> str:
+    """Reject path traversal and non-image extensions before touching disk."""
+    if not _SAFE_OBJECT_NAME.match(object_name) or ".." in object_name.split("/"):
+        raise ValueError(f"Unsafe object name: {object_name!r}")
+    ext = object_name.rsplit(".", 1)[-1].lower() if "." in object_name else ""
+    if ext not in _ALLOWED_EXTENSIONS:
+        raise ValueError(f"Unsupported file extension: {ext!r}")
+    return os.path.join(STORAGE_ROOT, BUCKET_CACHE, object_name)
 
 
 def ensure_buckets():
-    try:
-        if not client.bucket_exists(BUCKET_CACHE):
-            client.make_bucket(BUCKET_CACHE)
-        client.set_bucket_policy(BUCKET_CACHE, _PUBLIC_READ_POLICY)
-    except S3Error as e:
-        print(f"Warning: Could not create bucket {BUCKET_CACHE}: {e}")
+    os.makedirs(os.path.join(STORAGE_ROOT, BUCKET_CACHE), exist_ok=True)
 
 
 def public_object_url(object_name: str) -> str:
-    return f"{MINIO_PUBLIC_URL}/{BUCKET_CACHE}/{object_name}"
+    return f"{STORAGE_PUBLIC_URL}/{BUCKET_CACHE}/{object_name}"
 
 
 async def fetch_and_cache_image(url: str, object_key: str,
                                  content_type: str = "image/jpeg") -> Optional[str]:
-    """Download image from external URL and store in MinIO. Returns public URL."""
+    """Download image from external URL and store it locally. Returns public URL."""
     try:
+        path = _safe_path(object_key)
         async with httpx.AsyncClient(follow_redirects=True, timeout=15.0) as http:
             resp = await http.get(url)
             if resp.status_code != 200:
                 return None
             data = resp.content
-            ct = resp.headers.get("content-type", content_type).split(";")[0]
 
-        client.put_object(
-            BUCKET_CACHE,
-            object_key,
-            io.BytesIO(data),
-            length=len(data),
-            content_type=ct,
-        )
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "wb") as f:
+            f.write(data)
         return public_object_url(object_key)
     except Exception as e:
         print(f"Warning: Failed to cache image {url} → {object_key}: {e}")
@@ -75,6 +52,6 @@ async def fetch_and_cache_image(url: str, object_key: str,
 
 def delete_object(object_key: str):
     try:
-        client.remove_object(BUCKET_CACHE, object_key)
-    except S3Error:
+        os.remove(_safe_path(object_key))
+    except (FileNotFoundError, ValueError):
         pass

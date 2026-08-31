@@ -53,8 +53,6 @@ export const groupsApi = {
   setRotation: (groupId, userId) =>
     groupsClient.post(`/groups/${groupId}/rotation/set`, { user_id: userId }).then(r => r.data),
 
-  getBannerUploadUrl: (groupId, filename, contentType) =>
-    groupsClient.post(`/groups/${groupId}/banner/upload-url`, { filename, content_type: contentType }).then(r => r.data),
 
   uploadBanner: (groupId, file, { applyBanner = true } = {}) => {
     const formData = new FormData()

@@ -381,7 +381,7 @@ async def get_book_detail(volume_id: str):
     if not data:
         raise HTTPException(status_code=404, detail="Book not found")
 
-    # Cache cover in MinIO
+    # Cache cover locally
     cover_url = data.get("cover_url")
     if cover_url:
         object_key = f"books/{volume_id}/cover.jpg"
@@ -463,7 +463,7 @@ async def get_movie_detail(tmdb_id: int):
     if not data:
         raise HTTPException(status_code=404, detail="Movie not found")
 
-    # Cache poster in MinIO
+    # Cache poster locally
     if data.get("poster_url"):
         ok = f"movies/{tmdb_id}/poster.jpg"
         url = await storage.fetch_and_cache_image(data["poster_url"], ok)
@@ -471,7 +471,7 @@ async def get_movie_detail(tmdb_id: int):
             data["poster_url"] = url
             data["poster_object_key"] = ok
 
-    # Cache backdrop in MinIO
+    # Cache backdrop locally
     if data.get("backdrop_url"):
         ok = f"movies/{tmdb_id}/backdrop.jpg"
         url = await storage.fetch_and_cache_image(data["backdrop_url"], ok)
@@ -554,7 +554,7 @@ async def get_show_detail(tmdb_id: int):
     if not data:
         raise HTTPException(status_code=404, detail="Show not found")
 
-    # Cache poster in MinIO
+    # Cache poster locally
     if data.get("poster_url"):
         ok = f"shows/{tmdb_id}/poster.jpg"
         url = await storage.fetch_and_cache_image(data["poster_url"], ok)
@@ -562,7 +562,7 @@ async def get_show_detail(tmdb_id: int):
             data["poster_url"] = url
             data["poster_object_key"] = ok
 
-    # Cache backdrop in MinIO
+    # Cache backdrop locally
     if data.get("backdrop_url"):
         ok = f"shows/{tmdb_id}/backdrop.jpg"
         url = await storage.fetch_and_cache_image(data["backdrop_url"], ok)
@@ -775,7 +775,7 @@ async def get_game_detail(igdb_id: int):
     if not data:
         raise HTTPException(status_code=404, detail="Game not found")
 
-    # Cache cover in MinIO
+    # Cache cover locally
     if data.get("cover_url"):
         ok = f"games/{igdb_id}/cover.jpg"
         url = await storage.fetch_and_cache_image(data["cover_url"], ok)

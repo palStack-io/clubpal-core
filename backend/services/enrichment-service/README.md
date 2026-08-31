@@ -70,7 +70,7 @@ TMDB-only endpoints (`/movies/popular`, `/movies/now-playing`, etc.) remain avai
 | `GET` | `/movies/popular` | TMDB popular |
 | `GET` | `/movies/now-playing` | TMDB now playing |
 | `GET` | `/movies/upcoming` | TMDB upcoming |
-| `GET` | `/movies/{tmdb_id}` | Full TMDB movie detail (poster/backdrop cached in MinIO) |
+| `GET` | `/movies/{tmdb_id}` | Full TMDB movie detail (poster/backdrop cached locally) |
 
 #### Movie item shape
 
@@ -136,7 +136,7 @@ These are used by the frontend to overlay "IN LIBRARY" badges on TMDB-sourced br
 |---|---|---|
 | `GET` | `/places/search` | Text search via Google Places |
 | `GET` | `/places/nearby` | Nearby search via Google Places |
-| `GET` | `/places/{place_id}` | Place detail + photos (cached in MinIO) |
+| `GET` | `/places/{place_id}` | Place detail + photos (cached locally) |
 | `GET` | `/hikes/search` | Park/trail search |
 | `GET` | `/hikes/nearby` | Nearby parks |
 | `GET` | `/hikes/{place_id}` | Hike detail |
@@ -150,7 +150,7 @@ These are used by the frontend to overlay "IN LIBRARY" badges on TMDB-sourced br
 |---|---|---|
 | `GET` | `/books/search?query=` | Search Google Books |
 | `GET` | `/books/isbn/{isbn}` | Lookup by ISBN |
-| `GET` | `/books/{volume_id}` | Book detail (cover cached in MinIO) |
+| `GET` | `/books/{volume_id}` | Book detail (cover cached locally) |
 
 ### Games
 
@@ -158,7 +158,7 @@ These are used by the frontend to overlay "IN LIBRARY" badges on TMDB-sourced br
 |---|---|---|
 | `GET` | `/games/search?query=` | Search IGDB |
 | `GET` | `/games/popular` | Popular games from IGDB |
-| `GET` | `/games/{igdb_id}` | Game detail (cover cached in MinIO) |
+| `GET` | `/games/{igdb_id}` | Game detail (cover cached locally) |
 
 ### Personalized Discover Feed
 
@@ -193,7 +193,7 @@ Valid cache types: `places`, `books`, `movies`, `shows`, `games`, `hikes`, `arts
 | `/movies/library` + `/shows/library` | 5 minutes |
 | Geocode results | 30 days |
 
-Images (posters, backdrops, covers, place photos) are fetched once and stored permanently in MinIO.
+Images (posters, backdrops, covers, place photos) are fetched once and stored permanently on local storage.
 
 ---
 

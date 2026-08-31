@@ -2,28 +2,28 @@
 set -euo pipefail
 
 DATE=$(date -u +%Y-%m-%d-%H%M)
-BACKUP_DIR=/backups/garage
+BACKUP_DIR=/backups/storage
 LOGFILE=/backups/backup.log
 RETENTION=${BACKUP_STORAGE_RETENTION_DAYS:-7}
-GARAGE_DATA=/garage-data
+STORAGE_DATA=/storage-data
 
-log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [garage] $*" | tee -a "$LOGFILE"; }
+log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [storage] $*" | tee -a "$LOGFILE"; }
 
 log "Starting backup..."
 
-tar czf "$BACKUP_DIR/garage-$DATE.tar.gz" -C "$GARAGE_DATA" .
+tar czf "$BACKUP_DIR/storage-$DATE.tar.gz" -C "$STORAGE_DATA" .
 
-SIZE=$(du -sh "$BACKUP_DIR/garage-$DATE.tar.gz" | cut -f1)
-log "Snapshot complete: garage-$DATE.tar.gz ($SIZE)"
+SIZE=$(du -sh "$BACKUP_DIR/storage-$DATE.tar.gz" | cut -f1)
+log "Snapshot complete: storage-$DATE.tar.gz ($SIZE)"
 
 # Remove local copies older than retention period
-find "$BACKUP_DIR" -name "garage-*.tar.gz" -mtime "+${RETENTION}" -delete
+find "$BACKUP_DIR" -name "storage-*.tar.gz" -mtime "+${RETENTION}" -delete
 log "Local cleanup done (keeping last ${RETENTION} days)"
 
 # Sync to remote if configured
 if [ -n "${BACKUP_REMOTE_BUCKET:-}" ]; then
-  log "Syncing to remote: ${BACKUP_REMOTE_BUCKET}/garage/"
-  rclone copy "$BACKUP_DIR" "remote:${BACKUP_REMOTE_BUCKET}/garage/" 2>&1 | tee -a "$LOGFILE"
+  log "Syncing to remote: ${BACKUP_REMOTE_BUCKET}/storage/"
+  rclone copy "$BACKUP_DIR" "remote:${BACKUP_REMOTE_BUCKET}/storage/" 2>&1 | tee -a "$LOGFILE"
   log "Remote sync complete"
 fi
 

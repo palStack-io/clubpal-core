@@ -1,93 +1,48 @@
 import os
-import io
-import json
-from datetime import timedelta
-from minio import Minio
-from minio.error import S3Error
+import re
 
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "clubpal")
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "clubpalpassword")
-MINIO_PUBLIC_URL = os.getenv("MINIO_PUBLIC_URL", "/storage")
-MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() == "true"
-MINIO_REGION = os.getenv("MINIO_REGION", "garage")
+STORAGE_ROOT = os.getenv("STORAGE_ROOT", "/data/storage")
+STORAGE_PUBLIC_URL = os.getenv("STORAGE_PUBLIC_URL", "/storage")
 
 BUCKET_EVENTS = "clubpal-events"
 
-client = Minio(
-    MINIO_ENDPOINT,
-    access_key=MINIO_ACCESS_KEY,
-    secret_key=MINIO_SECRET_KEY,
-    secure=MINIO_SECURE,
-    region=MINIO_REGION,
-)
-
-_PUBLIC_READ_POLICY = json.dumps({
-    "Version": "2012-10-17",
-    "Statement": [{
-        "Effect": "Allow",
-        "Principal": {"AWS": ["*"]},
-        "Action": ["s3:GetObject"],
-        "Resource": ["arn:aws:s3:::{bucket}/*"],
-    }]
-})
+_SAFE_OBJECT_NAME = re.compile(r"^[A-Za-z0-9/_.-]+$")
+_ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
 
 
-def _set_public_read(bucket: str):
-    try:
-        policy = _PUBLIC_READ_POLICY.replace("{bucket}", bucket)
-        client.set_bucket_policy(bucket, policy)
-    except S3Error as e:
-        print(f"Warning: Could not set public-read policy on {bucket}: {e}")
+def _safe_path(bucket: str, object_name: str) -> str:
+    """Reject path traversal and non-image extensions before touching disk."""
+    if not _SAFE_OBJECT_NAME.match(object_name) or ".." in object_name.split("/"):
+        raise ValueError(f"Unsafe object name: {object_name!r}")
+    ext = object_name.rsplit(".", 1)[-1].lower() if "." in object_name else ""
+    if ext not in _ALLOWED_EXTENSIONS:
+        raise ValueError(f"Unsupported file extension: {ext!r}")
+    return os.path.join(STORAGE_ROOT, bucket, object_name)
 
 
 def ensure_buckets():
-    """Ensure required storage buckets exist with public-read policy."""
-    try:
-        if not client.bucket_exists(BUCKET_EVENTS):
-            client.make_bucket(BUCKET_EVENTS)
-        _set_public_read(BUCKET_EVENTS)
-    except S3Error as e:
-        print(f"Warning: Could not create bucket {BUCKET_EVENTS}: {e}")
-
-
-def _public_url(internal_url: str) -> str:
-    """Replace internal MinIO host with the public nginx-proxied URL."""
-    return internal_url.replace(f"http://{MINIO_ENDPOINT}", MINIO_PUBLIC_URL)
-
-
-def presigned_upload_url(bucket: str, object_name: str, content_type: str,
-                         expires_minutes: int = 15) -> str:
-    """Generate a pre-signed PUT URL for direct client-side upload."""
-    url = client.presigned_put_object(
-        bucket,
-        object_name,
-        expires=timedelta(minutes=expires_minutes),
-    )
-    return _public_url(url)
+    """Ensure required storage directories exist."""
+    os.makedirs(os.path.join(STORAGE_ROOT, BUCKET_EVENTS), exist_ok=True)
 
 
 def public_object_url(bucket: str, object_name: str) -> str:
-    """Return the permanent public URL for a publicly readable object."""
-    return f"{MINIO_PUBLIC_URL}/{bucket}/{object_name}"
+    """Return the permanent public URL for a stored object."""
+    return f"{STORAGE_PUBLIC_URL}/{bucket}/{object_name}"
 
 
 def upload_bytes(bucket: str, object_name: str, data: bytes,
                  content_type: str = "application/octet-stream") -> str:
-    """Upload raw bytes and return the public URL."""
-    client.put_object(
-        bucket,
-        object_name,
-        io.BytesIO(data),
-        length=len(data),
-        content_type=content_type,
-    )
+    """Write raw bytes to local storage and return the public URL."""
+    path = _safe_path(bucket, object_name)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(data)
     return public_object_url(bucket, object_name)
 
 
 def delete_object(bucket: str, object_name: str):
-    """Delete an object from storage. Silently ignores missing objects."""
+    """Delete an object from storage. Silently ignores missing/unsafe objects."""
     try:
-        client.remove_object(bucket, object_name)
-    except S3Error:
+        os.remove(_safe_path(bucket, object_name))
+    except (FileNotFoundError, ValueError):
         pass

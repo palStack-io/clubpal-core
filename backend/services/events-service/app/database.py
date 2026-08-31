@@ -214,7 +214,7 @@ def init_db():
     except Exception:
         pass
 
-    # group_id is nullable for group-less events (e.g. public party invites / link-only)
+    # group_id is nullable for group-less (link-only) events
     try:
         cursor.execute("ALTER TABLE events ALTER COLUMN group_id DROP NOT NULL")
     except Exception:
@@ -230,6 +230,35 @@ def init_db():
             sort_order INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS event_bring_item_claims (
+            id              SERIAL PRIMARY KEY,
+            event_item_id   INTEGER NOT NULL REFERENCES event_bring_items(id) ON DELETE CASCADE,
+            user_id         INTEGER,
+            quantity        INTEGER NOT NULL DEFAULT 1,
+            note            VARCHAR(500),
+            created_at      TIMESTAMPTZ DEFAULT NOW()
+        )
+    """)
+    cursor.execute(
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_ebic_item_user "
+        "ON event_bring_item_claims(event_item_id, user_id) WHERE user_id IS NOT NULL"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_ebic_item ON event_bring_item_claims(event_item_id)"
+    )
+
+    # Backfill: migrate legacy single-claims (event_attendees.claim_item_id) into
+    # the unified claims table. Idempotent via ON CONFLICT against idx_ebic_item_user.
+    cursor.execute("""
+        INSERT INTO event_bring_item_claims (event_item_id, user_id, quantity)
+        SELECT ea.claim_item_id, ea.user_id, 1
+        FROM event_attendees ea
+        JOIN event_bring_items ebi ON ebi.id = ea.claim_item_id
+        WHERE ea.claim_item_id IS NOT NULL
+        ON CONFLICT DO NOTHING
     """)
 
     # Background personalization migrations
@@ -796,8 +825,8 @@ def update_event_bring_item(event_id: int, item_id: int, label: str = None, emoj
 
 def get_event_bring_items(event_id: int) -> List[dict]:
     """Bring-list items with unified claim info. claimed_count is the sum of
-    per-person quantities across BOTH clubPal members and external party guests
-    (event_bring_item_claims), counted against the single shared max_claims."""
+    per-user quantities (event_bring_item_claims), counted against the
+    single shared max_claims."""
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute(
@@ -814,9 +843,8 @@ def get_event_bring_items(event_id: int) -> List[dict]:
         for item in items:
             item["claimed_count"] = int(item.get("claimed_count") or 0)
             cursor.execute(
-                """SELECT c.user_id, c.guest_id, c.quantity, c.note, g.name AS guest_name
+                """SELECT c.user_id, c.quantity, c.note
                    FROM event_bring_item_claims c
-                   LEFT JOIN party_invite_guests g ON g.id = c.guest_id
                    WHERE c.event_item_id = %s
                    ORDER BY c.created_at ASC""",
                 (item["id"],)
@@ -824,12 +852,8 @@ def get_event_bring_items(event_id: int) -> List[dict]:
             claimers = []
             for row in cursor.fetchall():
                 row = dict(row)
-                is_guest = row["guest_id"] is not None
                 claimers.append({
                     "user_id": row["user_id"],
-                    "guest_id": row["guest_id"],
-                    "is_guest": is_guest,
-                    "name": (row["guest_name"].split()[0] if is_guest and row.get("guest_name") else None),
                     "quantity": int(row["quantity"] or 1),
                     "note": row["note"],
                 })

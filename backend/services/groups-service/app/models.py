@@ -124,17 +124,6 @@ class GroupCommentResponse(BaseModel):
     created_at: datetime
 
 
-class BannerUploadRequest(BaseModel):
-    filename: str
-    content_type: str = "image/jpeg"
-
-
-class UploadUrlResponse(BaseModel):
-    upload_url: str
-    public_url: str
-    object_name: str
-
-
 # Poll models
 class PollCreate(BaseModel):
     activity_name: str = Field(..., min_length=1, max_length=200)

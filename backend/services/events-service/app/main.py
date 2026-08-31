@@ -22,8 +22,6 @@ from app.models import (
     EventItemClaim,
 )
 from app import bring_sync
-from app.party_invites_db import init_party_invite_tables
-from app.party_invites import host_router as _party_host_router, public_router as _party_public_router
 from app.database import (
     init_db, get_db, create_event, get_event, get_events_by_group, get_events_by_user,
     get_events_by_host, update_event, delete_event,
@@ -143,9 +141,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-app.include_router(_party_host_router)
-app.include_router(_party_public_router)
 
 # Service URLs
 GROUPS_SERVICE_URL     = "http://groups-service:8002"
@@ -567,21 +562,6 @@ async def spawn_recurring_instances():
 async def startup():
     """Initialize database on startup."""
     init_db()
-    init_party_invite_tables()
-    # Party invite columns on existing tables
-    _conn = get_db()
-    _cur = _conn.cursor()
-    for stmt in [
-        "ALTER TABLE events ADD COLUMN IF NOT EXISTS party_invite_id INTEGER",
-        "ALTER TABLE event_attendees ADD COLUMN IF NOT EXISTS bring_note TEXT",
-        "ALTER TABLE event_attendees ADD COLUMN IF NOT EXISTS claim_item_id INTEGER",
-    ]:
-        try:
-            _cur.execute(stmt)
-        except Exception:
-            pass
-    _conn.commit()
-    _conn.close()
     storage.ensure_buckets()
     # Schedule daily recurring event generation at 07:00
     scheduler.add_job(spawn_recurring_instances, 'cron', hour=7, minute=0,
@@ -643,7 +623,7 @@ async def get_activity_name(activity_id: int) -> Optional[str]:
 @app.post("/events", response_model=EventResponse, status_code=201)
 async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(get_current_user_id)):
     """Create a new event. If is_recurring=True, also registers a recurring schedule."""
-    # Group-less events (e.g. public party invites / link-only) skip the membership check
+    # Group-less (link-only) events skip the membership check
     if event_data.group_id is not None and not await _is_group_member(event_data.group_id, user_id):
         raise HTTPException(status_code=403, detail="Not a member of this group")
 
@@ -1316,7 +1296,7 @@ async def update_my_event_bring(event_id: int, body: EventBringUpdate, user_id: 
 @app.put("/events/{event_id}/bring/items/{item_id}/claim", response_model=EventBringItemResponse)
 async def claim_event_bring_item(event_id: int, item_id: int, body: EventItemClaim, user_id: int = Depends(get_current_user_id)):
     """Tap-to-claim for members: set (or release, with quantity 0) my quantity on a
-    bring item, against the shared capacity (members + party guests)."""
+    bring item, against the item's shared capacity."""
     event = get_event(event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")

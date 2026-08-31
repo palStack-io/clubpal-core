@@ -1652,34 +1652,6 @@ async def notify_push(req: PushNotifyRequest, x_internal_secret: Optional[str] =
     return {"sent": True}
 
 
-class PartyInviteEmailPayload(BaseModel):
-    to_email: str
-    event_title: str
-    host_name: str = ""
-    scheduled_date: str = ""
-    location: str = ""
-    accent_color: str = "#f43f5e"
-    rsvp_url: str
-
-@app.post("/internal/notify/party-invite-email", status_code=202)
-async def internal_party_invite_email(
-    payload: PartyInviteEmailPayload,
-    x_internal_secret: Optional[str] = Header(None),
-):
-    if not INTERNAL_API_SECRET or x_internal_secret != INTERNAL_API_SECRET:
-        raise HTTPException(status_code=403, detail="Forbidden")
-    email_service.send_party_invite_ticket(
-        to_email=payload.to_email,
-        event_title=payload.event_title,
-        host_name=payload.host_name,
-        scheduled_date=payload.scheduled_date,
-        location=payload.location,
-        accent_color=payload.accent_color,
-        rsvp_url=payload.rsvp_url,
-    )
-    return {"ok": True}
-
-
 @app.post("/internal/notify/event", status_code=202)
 async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str] = Header(None)):
     """Internal: send event/poll notifications (email + push + in-app).

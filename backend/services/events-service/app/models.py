@@ -13,7 +13,7 @@ class EventStatus(str, Enum):
 
 # Event models
 class EventCreate(BaseModel):
-    group_id: Optional[int] = None  # None = group-less event (e.g. public party invite, link-only)
+    group_id: Optional[int] = None  # None = group-less (link-only) event
     activity_id: Optional[int] = None
     activity_type: Optional[str] = None
     title: str = Field(..., min_length=1, max_length=200)
@@ -205,12 +205,6 @@ class EventHistoryResponse(BaseModel):
 
 
 # Event photo models
-class PhotoConfirmRequest(BaseModel):
-    object_key: str
-    public_url: str
-    caption: Optional[str] = Field(None, max_length=200)
-
-
 class PhotoResponse(BaseModel):
     id: int
     event_id: int
@@ -220,8 +214,6 @@ class PhotoResponse(BaseModel):
     caption: Optional[str]
     uploaded_at: datetime
 
-
-# Cover upload models (reuse UploadUrlResponse from main.py)
 
 # Update forward references
 EventDetailResponse.model_rebuild()

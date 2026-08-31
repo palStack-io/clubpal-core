@@ -13,7 +13,6 @@ from app.models import (
     MemberAdd, MemberUpdateRole, MemberResponse,
     RotationTurnResponse, RotationAdvanceRequest, RotationResetRequest,
     RotationSetTurnRequest, RotationSkipRequest, RotationReorderRequest, CompleteTurnRequest,
-    BannerUploadRequest, UploadUrlResponse,
     GroupCommentCreate, GroupCommentResponse,
     PollCreate, PollUpdate, PollAddOption, PollRespond, PollConvert, PollResponseModel,
     InviteCodeCreate, InviteCodeResponse, InviteCodePreview,
@@ -40,6 +39,23 @@ from app import storage
 
 GATEWAY_SERVICE_URL = os.getenv("GATEWAY_SERVICE_URL", "http://api-gateway:8001")
 EVENTS_SERVICE_URL = os.getenv("EVENTS_SERVICE_URL", "http://events-service:8003")
+
+_BANNER_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+_ALLOWED_IMAGE_MAGIC = {
+    b"\xff\xd8\xff": "jpg",
+    b"\x89PNG\r\n": "png",
+    b"GIF87a": "gif",
+    b"GIF89a": "gif",
+    b"RIFF": "webp",
+}
+
+
+def _detect_image_type(data: bytes) -> str:
+    """Return detected image extension or raise HTTPException if not a safe image type."""
+    for magic, ext in _ALLOWED_IMAGE_MAGIC.items():
+        if data[:len(magic)] == magic:
+            return ext
+    raise HTTPException(status_code=415, detail="Unsupported image type — JPEG, PNG, GIF or WebP only")
 
 
 def get_current_user(authorization: Optional[str] = Header(None)) -> dict:
@@ -658,34 +674,6 @@ async def send_group_invite(group_id: int, email: str, group_name: str, user_id:
             raise HTTPException(status_code=503, detail="Gateway service unavailable")
 
 
-@app.post("/groups/{group_id}/banner/upload-url", response_model=UploadUrlResponse)
-async def get_banner_upload_url(group_id: int, request: BannerUploadRequest, user_id: int = Depends(get_current_user_id)):
-    """Get a pre-signed URL to upload a group banner image."""
-    group = get_group(group_id)
-
-    if not group:
-        raise HTTPException(status_code=404, detail="Group not found")
-
-    if not is_admin_or_owner(group_id, user_id):
-        raise HTTPException(status_code=403, detail="Only admins and owners can update the banner")
-
-    ext = request.filename.rsplit(".", 1)[-1].lower() if "." in request.filename else "jpg"
-    object_name = f"groups/{group_id}/banner-{uuid.uuid4().hex[:8]}.{ext}"
-
-    upload_url = storage.presigned_upload_url(
-        storage.BUCKET_EVENTS,
-        object_name,
-        content_type=request.content_type,
-    )
-    public_url = storage.public_object_url(storage.BUCKET_EVENTS, object_name)
-
-    return UploadUrlResponse(
-        upload_url=upload_url,
-        public_url=public_url,
-        object_name=object_name,
-    )
-
-
 @app.post("/groups/{group_id}/banner/upload")
 async def upload_group_banner(
     group_id: int,
@@ -698,10 +686,13 @@ async def upload_group_banner(
         raise HTTPException(status_code=404, detail="Group not found")
     if not is_admin_or_owner(group_id, user_id):
         raise HTTPException(status_code=403, detail="Only admins and owners can update the banner")
-    ext = (file.filename or "banner.jpg").rsplit(".", 1)[-1].lower()
+    content = await file.read(_BANNER_MAX_BYTES + 1)
+    if len(content) > _BANNER_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="File too large (max 10 MB)")
+    ext = _detect_image_type(content)
     object_name = f"groups/{group_id}/banner-{uuid.uuid4().hex[:8]}.{ext}"
-    content = await file.read()
-    public_url = storage.upload_bytes(storage.BUCKET_EVENTS, object_name, content, file.content_type or "image/jpeg")
+    ct_map = {"jpg": "image/jpeg", "png": "image/png", "gif": "image/gif", "webp": "image/webp"}
+    public_url = storage.upload_bytes(storage.BUCKET_EVENTS, object_name, content, ct_map[ext])
     if apply_banner:
         update_group(group_id, banner_url=public_url)
     return {"banner_url": public_url}

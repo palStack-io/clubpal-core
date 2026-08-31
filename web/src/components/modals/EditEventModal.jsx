@@ -78,7 +78,6 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
   const [bgValue, setBgValue] = useState('')
   const [bgScope, setBgScope] = useState('hero')
   const [ratingsEnabled, setRatingsEnabled] = useState(true)
-  const [billSplitEnabled, setBillSplitEnabled] = useState(false)
   const [bringListEnabled, setBringListEnabled] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -104,7 +103,6 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
       }
       setMaxAttendees(event.max_attendees ? String(event.max_attendees) : '')
       setRatingsEnabled(event.ratings_enabled !== false)
-      setBillSplitEnabled(event.bill_split_enabled === true)
       setBringListEnabled(event.bring_list_enabled === true)
     }
   }, [event])
@@ -139,7 +137,6 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
         // Sync cover_url so mobile (which only reads cover_url) always sees the image
         cover_url: bgType === 'image' && bgValue ? bgValue : (coverPreview || null),
         ratings_enabled: ratingsEnabled,
-        bill_split_enabled: billSplitEnabled,
         bring_list_enabled: bringListEnabled,
       })
       onSaved && onSaved({
@@ -152,7 +149,6 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
         bg_scope: bgScope,
         cover_url: bgType === 'image' && bgValue ? bgValue : (coverPreview || null),
         ratings_enabled: ratingsEnabled,
-        bill_split_enabled: billSplitEnabled,
         bring_list_enabled: bringListEnabled,
       })
     } catch (err) {
@@ -359,12 +355,6 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
         />
       </div>
 
-      <ToggleRow
-        value={billSplitEnabled}
-        onChange={() => setBillSplitEnabled(v => !v)}
-        label="💳 Enable Bill Split"
-        description="Allow members to split and track expenses for this event"
-      />
       <ToggleRow
         value={ratingsEnabled}
         onChange={() => setRatingsEnabled(v => !v)}

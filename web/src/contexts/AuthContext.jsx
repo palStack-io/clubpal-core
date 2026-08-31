@@ -8,7 +8,7 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const publicPaths = ['/login', '/register', '/forgot-password', '/reset-password', '/invite', '/pay/', '/claim/']
+    const publicPaths = ['/login', '/register', '/forgot-password', '/reset-password', '/invite']
     const onPublic = publicPaths.some(p => window.location.pathname.startsWith(p))
     if (onPublic) { setLoading(false); return }
 

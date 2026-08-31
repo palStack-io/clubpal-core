@@ -61,9 +61,9 @@ const GROUP_ONBOARD_STEPS = [
     body: "Members take turns choosing the activity. The current picker shows up on everyone's dashboard.",
   },
   {
-    icon: '💸',
-    title: 'Split costs effortlessly',
-    body: 'When creating an event, enable Bill Split to track expenses and divide them fairly between attendees.',
+    icon: '🧺',
+    title: 'Coordinate what everyone brings',
+    body: 'When creating an event, enable a Bring List so members can claim what they\'re bringing.',
   },
 ]
 

@@ -34,8 +34,6 @@ const ActivityPicker = lazy(() => import('./pages/activities/ActivityPicker'))
 const Profile = lazy(() => import('./pages/profile/Profile'))
 const Settings = lazy(() => import('./pages/profile/Settings'))
 const NotFound = lazy(() => import('./pages/NotFound'))
-const PayConfirm = lazy(() => import('./pages/PayConfirm'))
-const ClaimItems = lazy(() => import('./pages/ClaimItems'))
 
 // Unified discover page
 const DiscoverExplore = lazy(() => import('./pages/discover/DiscoverExplore'))
@@ -110,8 +108,6 @@ function AppRoutes() {
       <Route path="/invite/:token" element={<AcceptInvite />} />
       <Route path="/join/:code" element={<JoinGroup />} />
       <Route path="/verify-email/:token" element={<VerifyEmail />} />
-      <Route path="/pay/:token" element={<PayConfirm />} />
-      <Route path="/claim/:token" element={<ClaimItems />} />
 
       {/* Protected */}
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />

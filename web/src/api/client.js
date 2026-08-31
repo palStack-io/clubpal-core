@@ -32,7 +32,7 @@ function createClient(baseURL, { injectUserId = false } = {}) {
     (error) => {
       if (error.response?.status === 401) {
         localStorage.removeItem('user')
-        const pub = ['/login', '/register', '/forgot-password', '/reset-password', '/invite', '/pay/', '/claim/']
+        const pub = ['/login', '/register', '/forgot-password', '/reset-password', '/invite']
         const onPublic = pub.some(p => window.location.pathname.startsWith(p))
         if (!onPublic) {
           const next = window.location.pathname + window.location.search
@@ -52,4 +52,3 @@ export const eventsClient  = createClient(EVENTS_URL,  { injectUserId: true })
 export const ratingsClient = createClient(RATINGS_URL)
 export const activitiesClient = createClient(ACTIVITIES_URL)
 export const enrichClient     = createClient(ENRICH_URL)
-export const billSplitClient  = createClient(import.meta.env.VITE_BILL_SPLIT_URL || '/api/bill-splits')

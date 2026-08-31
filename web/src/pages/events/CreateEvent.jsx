@@ -74,8 +74,6 @@ export default function CreateEvent() {
     end_date: '',
   })
 
-  // Bill split opt-in
-  const [billSplitEnabled, setBillSplitEnabled] = useState(false)
   const [eventBringEnabled, setEventBringEnabled] = useState(false)
   const [eventBringItems, setEventBringItems] = useState([])
 
@@ -135,7 +133,6 @@ export default function CreateEvent() {
         location: form.location.trim() || null,
         description: form.description.trim() || null,
         created_by: user.id,
-        bill_split_enabled: billSplitEnabled,
         bring_list_enabled: eventBringEnabled,
         bring_list_type: 'freeform',
         bring_items: eventBringItems,
@@ -248,36 +245,6 @@ export default function CreateEvent() {
             items={eventBringItems}
             onItemsChange={setEventBringItems}
           />
-        </FormSection>
-
-        {/* Bill Split */}
-        <FormSection title="Bill Splitting">
-          <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
-            <div
-              onClick={() => setBillSplitEnabled(v => !v)}
-              style={{
-                width: '44px', height: '24px', borderRadius: '12px',
-                background: billSplitEnabled ? 'var(--rose)' : 'var(--glass)',
-                position: 'relative', transition: 'background 0.2s', cursor: 'pointer', flexShrink: 0,
-              }}
-            >
-              <div style={{
-                position: 'absolute', top: '2px',
-                left: billSplitEnabled ? '22px' : '2px',
-                width: '20px', height: '20px', borderRadius: '10px',
-                background: '#fff', transition: 'left 0.2s',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-              }} />
-            </div>
-            <div>
-              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t1)' }}>
-                Enable bill splitting
-              </div>
-              <div style={{ fontSize: '12px', color: 'var(--t3)' }}>
-                Lets the host split and track costs with attendees after the event
-              </div>
-            </div>
-          </label>
         </FormSection>
 
         {/* Recurring */}

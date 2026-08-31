@@ -11,8 +11,6 @@ import EditEventModal from '../../components/modals/EditEventModal'
 import AddEventAttendeesModal from '../../components/modals/AddEventAttendeesModal'
 import RateEventModal from '../../components/events/RateEventModal'
 import AnimatedBackground from '../../components/ui/AnimatedBackground'
-import BillSplitModal from '../../components/modals/BillSplitModal'
-import BillSplitStatusCard from '../../components/events/BillSplitStatusCard'
 import EventBringListCard from '../../components/events/EventBringListCard'
 import { eventsApi } from '../../api/events'
 import { ratingsClient, gatewayClient } from '../../api/client'
@@ -47,7 +45,6 @@ export default function EventDetail() {
   const [rsvpLoading, setRsvpLoading] = useState(false)
   const [showEditEvent, setShowEditEvent] = useState(false)
   const [showRateModal, setShowRateModal] = useState(false)
-  const [showBillSplit, setShowBillSplit] = useState(false)
   const [showAddAttendees, setShowAddAttendees] = useState(false)
   const [isBookmarked, setIsBookmarked] = useState(false)
   const [showEndConfirm, setShowEndConfirm] = useState(false)
@@ -245,7 +242,6 @@ export default function EventDetail() {
     ...(isScheduled && (isHost || isCreator) ? [{ label: '🏁 End Event', onClick: () => setShowEndConfirm(true) }] : []),
     ...(isScheduled && isCreator && !!event.rsvp_deadline ? [{ label: '📣 Send Reminder', onClick: handleRsvpReminder }] : []),
     ...(event.ratings_enabled !== false && (event.status === 'completed' || event.status === 'in_progress' || (event.scheduled_date && new Date(event.scheduled_date) < new Date())) ? [{ label: '⭐ Rate', onClick: () => setShowRateModal(true) }] : []),
-    ...(event.bill_split_enabled ? [{ label: '💳 Split Bill', onClick: () => setShowBillSplit(true) }] : []),
     ...(isScheduled && myAttendee?.status !== 'going' ? [{ label: '✓ RSVP Going', onClick: () => handleRsvp('going'), loading: rsvpLoading }] : []),
     { label: isBookmarked ? '🔖 Bookmarked' : '🔖 Bookmark', onClick: toggleBookmark },
   ]
@@ -316,13 +312,6 @@ export default function EventDetail() {
 
           {/* Right column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {event.bill_split_enabled && (
-              <BillSplitStatusCard
-                event={event}
-                currentUser={user}
-                onOpenModal={() => setShowBillSplit(true)}
-              />
-            )}
             <EventBringListCard
               event={event}
               attendees={attendees}
@@ -348,13 +337,6 @@ export default function EventDetail() {
 
       </div>
 
-      <BillSplitModal
-        isOpen={showBillSplit}
-        onClose={() => setShowBillSplit(false)}
-        event={event}
-        attendees={attendees}
-        currentUser={user}
-      />
       <EditEventModal
         isOpen={showEditEvent}
         onClose={() => setShowEditEvent(false)}

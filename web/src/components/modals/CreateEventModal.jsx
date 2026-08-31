@@ -84,19 +84,12 @@ export default function CreateEventModal({
   const [coverUrlOverride, setCoverUrlOverride] = useState(initialImageUrl || null)
   const [maxAttendees, setMaxAttendees] = useState('')
   const [pulseCheck, setPulseCheck] = useState(false)
-  const [billSplitEnabled, setBillSplitEnabled] = useState(false)
   const [eventBringEnabled, setEventBringEnabled] = useState(false)
   const [eventBringItems, setEventBringItems] = useState([])
   const [ratingsEnabled, setRatingsEnabled] = useState(true)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [showBillHint, setShowBillHint] = useState(() => !localStorage.getItem('clubpal_billsplit_hint_seen'))
   const coverRef = useRef()
-
-  const dismissBillHint = () => {
-    localStorage.setItem('clubpal_billsplit_hint_seen', 'true')
-    setShowBillHint(false)
-  }
   // RSVP deadline
   const [rsvpDeadlineDate, setRsvpDeadlineDate] = useState('')
   const [rsvpDeadlineTime, setRsvpDeadlineTime] = useState('')
@@ -171,7 +164,6 @@ export default function CreateEventModal({
         activity_type: resolvedActivity || null,
         rsvp_deadline: rsvpDeadlineISO,
         max_attendees: maxAttendees ? parseInt(maxAttendees, 10) : null,
-        bill_split_enabled: billSplitEnabled,
         ratings_enabled: ratingsEnabled,
         bring_list_enabled: eventBringEnabled,
         bring_list_type: 'freeform',
@@ -550,39 +542,6 @@ export default function CreateEventModal({
         description="Ask the group how they feel about this pick after creating the event"
       />
 
-      {/* Bill Split hint — shown first time only */}
-      {showBillHint && (
-        <div style={{
-          background: 'rgba(34,211,160,0.07)',
-          border: '1px solid rgba(34,211,160,0.22)',
-          borderRadius: '14px',
-          padding: '14px 16px',
-          marginBottom: '12px',
-          display: 'flex', alignItems: 'flex-start', gap: '12px',
-        }}>
-          <span style={{ fontSize: '22px', flexShrink: 0 }}>💸</span>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--green)', marginBottom: '3px' }}>
-              Bill Split — track &amp; divide costs
-            </div>
-            <div style={{ fontSize: '12px', color: 'var(--t3)', lineHeight: 1.5 }}>
-              Enable it below to let the host log and split expenses with attendees after the event ends.
-            </div>
-          </div>
-          <button onClick={dismissBillHint} style={{
-            background: 'none', border: 'none', color: 'var(--t4)',
-            fontSize: '18px', lineHeight: 1, cursor: 'pointer', flexShrink: 0, padding: '0 2px',
-          }}>×</button>
-        </div>
-      )}
-
-      <ToggleRow
-        value={billSplitEnabled}
-        onChange={() => setBillSplitEnabled(v => !v)}
-        label="💸 Enable Bill Splitting"
-        description="Let the host split and track costs with attendees after the event"
-        activeColor="var(--green)"
-      />
       <ToggleRow
         value={ratingsEnabled}
         onChange={() => setRatingsEnabled(v => !v)}

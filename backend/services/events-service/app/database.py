@@ -177,11 +177,6 @@ def init_db():
         pass
 
     try:
-        cursor.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS bill_split_enabled BOOLEAN DEFAULT FALSE")
-    except Exception:
-        pass
-
-    try:
         cursor.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS ratings_enabled BOOLEAN DEFAULT TRUE")
     except Exception:
         pass
@@ -373,7 +368,7 @@ def create_event(group_id: int, activity_id: Optional[int], title: str, schedule
                 created_by: int, host_user_id: int, description: str = None,
                 location: str = None, rsvp_deadline=None, parent_recurring_id: int = None,
                 activity_type: str = None, max_attendees: int = None,
-                cover_url: str = None, bill_split_enabled: bool = False,
+                cover_url: str = None,
                 ratings_enabled: bool = True, bring_list_enabled: bool = False,
                 bring_list_type: str = "freeform") -> int:
     """Create a new event."""
@@ -383,12 +378,12 @@ def create_event(group_id: int, activity_id: Optional[int], title: str, schedule
         cursor.execute(
             """INSERT INTO events (group_id, activity_id, activity_type, title, description, scheduled_date,
                                   location, host_user_id, created_by, rsvp_deadline, parent_recurring_id,
-                                  max_attendees, cover_url, bill_split_enabled, ratings_enabled,
+                                  max_attendees, cover_url, ratings_enabled,
                                   bring_list_enabled, bring_list_type)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
             (group_id, activity_id, activity_type, title, description, scheduled_date, location,
              host_user_id, created_by, rsvp_deadline, parent_recurring_id, max_attendees, cover_url,
-             bill_split_enabled, ratings_enabled, bring_list_enabled, bring_list_type)
+             ratings_enabled, bring_list_enabled, bring_list_type)
         )
 
         event_id = cursor.fetchone()['id']
@@ -499,7 +494,7 @@ def update_event(event_id: int, title: str = None, description: str = None,
                 cover_url: str = None, updated_by: int = None,
                 rsvp_deadline=None, max_attendees: int = None,
                 bg_type: str = None, bg_value: str = None, bg_scope: str = None,
-                ratings_enabled: bool = None, bill_split_enabled: bool = None,
+                ratings_enabled: bool = None,
                 bring_list_enabled: bool = None, bring_list_type: str = None) -> bool:
     """Update event details."""
     with get_db() as conn:
@@ -573,11 +568,6 @@ def update_event(event_id: int, title: str = None, description: str = None,
             updates.append("ratings_enabled = %s")
             params.append(ratings_enabled)
             changes.append(f"ratings_enabled set to {ratings_enabled}")
-
-        if bill_split_enabled is not None:
-            updates.append("bill_split_enabled = %s")
-            params.append(bill_split_enabled)
-            changes.append(f"bill_split_enabled set to {bill_split_enabled}")
 
         if bring_list_enabled is not None:
             updates.append("bring_list_enabled = %s")

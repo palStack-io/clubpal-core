@@ -107,7 +107,6 @@ app.add_middleware(
 GROUPS_SERVICE_URL = "http://groups-service:8002"
 EVENTS_SERVICE_URL = "http://events-service:8003"
 ENRICHMENT_SERVICE_URL = "http://enrichment-service:8006"
-BILL_SPLIT_SERVICE_URL = "http://bill-split-service:8007"
 
 # Internal service secret — shared with enrichment-service to protect /internal/* endpoints
 INTERNAL_API_SECRET = os.environ.get("INTERNAL_API_SECRET", "")
@@ -207,7 +206,7 @@ async def _fetch_userinfo(access_token: str, discovery_url: str) -> dict:
 INTEGRATION_KEYS = [
     "google_api_key", "tmdb_api_key", "igdb_client_id", "igdb_client_secret",
     "radarr_url", "radarr_api_key", "sonarr_url", "sonarr_api_key",
-    "google_cloud_vision_api_key", "giphy_api_key",
+    "giphy_api_key",
 ]
 
 
@@ -1195,7 +1194,6 @@ class IntegrationsUpdate(BaseModel):
     radarr_api_key: Optional[str] = None
     sonarr_url: Optional[str] = None
     sonarr_api_key: Optional[str] = None
-    google_cloud_vision_api_key: Optional[str] = None
     giphy_api_key: Optional[str] = None
 
 
@@ -1227,15 +1225,6 @@ async def update_integrations(data: IntegrationsUpdate, admin: dict = Depends(ge
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             await client.post(f"{ENRICHMENT_SERVICE_URL}/admin/reload-config")
-    except Exception:
-        pass
-    # Notify bill-split service to reload keys (picks up google_cloud_vision_api_key)
-    try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            await client.post(
-                f"{BILL_SPLIT_SERVICE_URL}/admin/reload-config",
-                headers={"x-internal-secret": INTERNAL_API_SECRET},
-            )
     except Exception:
         pass
     stored = get_all_integrations()
@@ -1507,16 +1496,13 @@ class EventNotifyRequest(BaseModel):
     creator_name: Optional[str] = None
     creator_id: Optional[int] = None   # used to look up name + exclude from poll notifs
     event_id: int = 0
-    type: str = "created"      # "created" | "recurring" | "reminder" | "rsvp_reminder" | "rsvp_deadline_final" | "poll" | "poll_result" | "invite" | "event_cancelled" | "event_edit" | "social_rsvp" | "rating_prompt" | "bill_split_assigned" | "bill_split_claiming"
+    type: str = "created"      # "created" | "recurring" | "reminder" | "rsvp_reminder" | "rsvp_deadline_final" | "poll" | "poll_result" | "invite" | "event_cancelled" | "event_edit" | "social_rsvp" | "rating_prompt"
     hours_until: Optional[int] = None
     deadline: Optional[str] = None
     going_count: Optional[int] = None
     has_rsvp: bool = True   # False when event has no RSVP deadline — changes email framing
     maybe_count: Optional[int] = None
     not_going_count: Optional[int] = None
-    amount: Optional[float] = None      # for bill_split_assigned
-    payer_name: Optional[str] = None    # for bill_split_assigned
-    claim_token: Optional[str] = None   # for bill_split_claiming
     winner_text: Optional[str] = None   # for poll_result
     result_summary: Optional[str] = None
     responded_count: Optional[int] = None
@@ -1819,33 +1805,6 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                     link_type="event", link_id=req.event_id,
                 )
 
-            elif req.type == "bill_split_assigned":
-                # Bill split share assigned — in-app + email (if notify_events on) + push
-                payer = req.payer_name or "Someone"
-                body = (f"You owe ${req.amount:.2f} for {req.event_title}"
-                        if req.amount else f"You have a share in {req.event_title}")
-                create_notification(
-                    uid, "event",
-                    f"💸 {payer} split the bill",
-                    body,
-                    link_type="event", link_id=req.event_id,
-                )
-                if prefs["notify_events"] and user.get("email"):
-                    email_service.send_bill_split_assigned(
-                        user["email"], name, req.event_title,
-                        req.event_id, payer, req.amount,
-                    )
-
-            elif req.type == "bill_split_claiming":
-                # Collaborative claiming — notify members to pick their items
-                payer = req.payer_name or "Someone"
-                create_notification(
-                    uid, "event",
-                    f"💸 Pick your items for {req.event_title}",
-                    f"{payer} is splitting the bill — tap to claim your items",
-                    link_type="bill_split_claim", link_id=req.claim_token or "",
-                )
-
             else:  # "created"
                 # Skip the creator — they made the event, no need to notify themselves
                 if req.creator_id and uid == req.creator_id:
@@ -1917,17 +1876,6 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
             await _send_push(push_tokens, f"⭐ How was {req.event_title}?",
                              "Leave a rating for this event",
                              {"link_type": "event", "link_id": req.event_id})
-        elif req.type == "bill_split_assigned":
-            payer = req.payer_name or "Someone"
-            body = (f"You owe ${req.amount:.2f}" if req.amount else "Check your share")
-            await _send_push(push_tokens, f"💸 {payer} split the bill",
-                             body,
-                             {"link_type": "event", "link_id": req.event_id})
-        elif req.type == "bill_split_claiming":
-            payer = req.payer_name or "Someone"
-            await _send_push(push_tokens, f"💸 Pick your items for {req.event_title}",
-                             f"{payer} is splitting the bill — tap to claim",
-                             {"link_type": "bill_split_claim", "link_id": req.claim_token or ""})
 
     return {"notified": results}
 

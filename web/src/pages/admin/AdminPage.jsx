@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import AppShell from '../../components/shell/AppShell'
 import AdminIntegrationsCard from '../../components/admin/AdminIntegrationsCard'
-import AdminOCRStatsCard from '../../components/admin/AdminOCRStatsCard'
 import AdminUsersCard from '../../components/admin/AdminUsersCard'
 
 const TABS = [
@@ -43,12 +42,7 @@ export default function AdminPage() {
           ))}
         </div>
 
-        {tab === 'integrations' && (
-          <>
-            <AdminIntegrationsCard />
-            <AdminOCRStatsCard />
-          </>
-        )}
+        {tab === 'integrations' && <AdminIntegrationsCard />}
         {tab === 'users' && <AdminUsersCard />}
       </div>
     </AppShell>

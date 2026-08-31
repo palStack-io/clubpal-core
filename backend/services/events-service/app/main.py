@@ -657,7 +657,6 @@ async def create_event_endpoint(event_data: EventCreate, user_id: int = Depends(
         parent_recurring_id=event_data.parent_recurring_id,
         max_attendees=event_data.max_attendees,
         cover_url=None,
-        bill_split_enabled=event_data.bill_split_enabled,
         ratings_enabled=event_data.ratings_enabled,
         bring_list_enabled=event_data.bring_list_enabled,
         bring_list_type=event_data.bring_list_type,
@@ -887,7 +886,6 @@ async def update_event_endpoint(event_id: int, event_data: EventUpdate, user_id:
         bg_value=event_data.bg_value,
         bg_scope=event_data.bg_scope,
         ratings_enabled=event_data.ratings_enabled,
-        bill_split_enabled=event_data.bill_split_enabled,
         bring_list_enabled=event_data.bring_list_enabled,
         bring_list_type=event_data.bring_list_type,
     )

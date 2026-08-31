@@ -28,7 +28,6 @@ class EventCreate(BaseModel):
     banner_url: Optional[str] = None
     # Link to an existing recurring schedule (poll → recurring event conversion)
     parent_recurring_id: Optional[int] = None
-    bill_split_enabled: bool = False
     ratings_enabled: bool = True
     bring_list_enabled: bool = False
     bring_list_type: str = "freeform"
@@ -86,7 +85,6 @@ class EventUpdate(BaseModel):
     bg_value: Optional[str] = None
     bg_scope: Optional[str] = None
     ratings_enabled: Optional[bool] = None
-    bill_split_enabled: Optional[bool] = None
     bring_list_enabled: Optional[bool] = None
     bring_list_type: Optional[str] = None
 
@@ -111,7 +109,6 @@ class EventResponse(BaseModel):
     updated_at: datetime
     rsvp_deadline: Optional[datetime] = None
     max_attendees: Optional[int] = None
-    bill_split_enabled: bool = False
     ratings_enabled: bool = True
     bring_list_enabled: bool = False
     bring_list_type: str = "freeform"

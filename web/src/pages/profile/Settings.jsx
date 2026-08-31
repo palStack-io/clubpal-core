@@ -8,7 +8,6 @@ import { useAuth } from '../../contexts/AuthContext'
 import { useTheme } from '../../contexts/ThemeContext'
 import { gatewayClient, enrichClient } from '../../api/client'
 import AdminUsersCard from '../../components/admin/AdminUsersCard'
-import AdminOCRStatsCard from '../../components/admin/AdminOCRStatsCard'
 import { SunIcon, MoonIcon } from '@heroicons/react/24/outline'
 import { authApi } from '../../api/auth'
 import { enrichApi } from '../../api/enrich'
@@ -554,10 +553,9 @@ function AppearanceSection() {
 const INTEGRATION_FIELDS = [
   {
     group: '🔵 Google',
-    description: 'Maps/Places powers discovery features (restaurants, hikes, arts, geocoding, books). Cloud Vision powers receipt OCR for bill splits.',
+    description: 'Maps/Places powers discovery features (restaurants, hikes, arts, geocoding, books).',
     fields: [
       { key: 'google_api_key', label: 'Google Maps / Places API Key', placeholder: 'AIza…' },
-      { key: 'google_cloud_vision_api_key', label: 'Google Cloud Vision API Key', placeholder: 'AIza…' },
     ],
   },
   {
@@ -974,9 +972,6 @@ function IntegrationsSection({ user }) {
       )}
         </>
       )}
-      <div style={{ marginTop: '28px' }}>
-        <AdminOCRStatsCard />
-      </div>
       <div style={{ marginTop: '16px' }}>
         <AdminUsersCard />
       </div>
@@ -1772,8 +1767,8 @@ function AboutSection() {
         </p>
         <p style={{ fontSize: '13px', color: 'var(--t3)', lineHeight: 1.7, marginBottom: '0' }}>
           Keeping a friend group coordinated is harder than it looks — who's picking the spot this week, did everyone RSVP,
-          who still owes who money? clubPal handles all of it. Create groups, schedule outings, rotate who picks the activity,
-          split bills, track attendance, and discover new places to go together. It's built for real friend groups who want
+          whose turn is it to plan? clubPal handles all of it. Create groups, schedule outings, rotate who picks the activity,
+          track attendance, and discover new places to go together. It's built for real friend groups who want
           to spend less time planning and more time actually hanging out.
         </p>
       </div>

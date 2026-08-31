@@ -26,7 +26,7 @@ function getStatusChipVariant(status) {
   return 'pending'
 }
 
-function EventRow({ event, onClick, onSplitBill, avgRating = null }) {
+function EventRow({ event, onClick, avgRating = null }) {
   const [hovered, setHovered] = useState(false)
   const act = getActivityMeta(event.activity_type)
   const dateStr = event.scheduled_date || event.event_date
@@ -109,27 +109,6 @@ function EventRow({ event, onClick, onSplitBill, avgRating = null }) {
           status={getStatusChipVariant(event.status)}
           label={event.status || 'pending'}
         />
-      )}
-
-      {/* Split Bill button */}
-      {event.status !== 'cancelled' && (
-        <button
-          onClick={e => { e.stopPropagation(); onSplitBill(event.id) }}
-          title="Split Bill"
-          style={{
-            flexShrink: 0,
-            background: hovered ? 'rgba(244,63,94,0.12)' : 'var(--s3)',
-            border: '1px solid ' + (hovered ? 'var(--rose-border)' : 'transparent'),
-            borderRadius: '8px',
-            padding: '4px 8px',
-            fontSize: '13px',
-            cursor: 'pointer',
-            color: 'var(--t2)',
-            transition: 'all 0.15s',
-          }}
-        >
-          💸
-        </button>
       )}
 
       {/* Chevron */}
@@ -259,7 +238,6 @@ export default function GroupEventsCard({ upcoming = [], past = [], groupId, isM
                 <EventRow
                   event={event}
                   onClick={() => window.location.href = `/events/${event.id}`}
-                  onSplitBill={id => window.location.href = `/events/${id}#bill-split`}
                   avgRating={ratingsMap[event.id] ?? null}
                 />
               </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { billSplitApi } from '../../api/billSplit'
+import { adminApi } from '../../api/admin'
 import Card from '../ui/Card'
 import Button from '../ui/Button'
 
@@ -12,7 +12,6 @@ const INTEGRATION_LABELS = {
   radarr_api_key: 'Radarr API Key',
   sonarr_url: 'Sonarr URL',
   sonarr_api_key: 'Sonarr API Key',
-  google_cloud_vision_api_key: 'Google Cloud Vision API Key (Receipt OCR)',
   giphy_api_key: 'GIPHY API Key (GIF Search)',
 }
 
@@ -69,7 +68,7 @@ export default function AdminIntegrationsCard() {
   const [saveResults, setSaveResults] = useState({})
 
   useEffect(() => {
-    billSplitApi.getIntegrations()
+    adminApi.getIntegrations()
       .then(data => {
         setIntegrations(data)
         setLoading(false)
@@ -86,10 +85,10 @@ export default function AdminIntegrationsCard() {
     setSavingKey(key)
     setSaveResults(prev => ({ ...prev, [key]: null }))
     try {
-      await billSplitApi.updateIntegrations({ [key]: value.trim() })
+      await adminApi.updateIntegrations({ [key]: value.trim() })
       setSaveResults(prev => ({ ...prev, [key]: 'success' }))
       setEditValues(prev => ({ ...prev, [key]: '' }))
-      const data = await billSplitApi.getIntegrations()
+      const data = await adminApi.getIntegrations()
       setIntegrations(data)
     } catch {
       setSaveResults(prev => ({ ...prev, [key]: 'error' }))

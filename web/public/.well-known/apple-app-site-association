@@ -6,8 +6,6 @@
         "components": [
           { "/": "/invite/*", "comment": "Group invite deep link" },
           { "/": "/join/*",    "comment": "Group join alias" },
-          { "/": "/claim/*",   "comment": "Bill split claim" },
-          { "/": "/pay/*",     "comment": "Bill payment confirmation" },
           { "/": "/events/*",  "comment": "Event detail" },
           { "/": "/groups/*",  "comment": "Group detail" },
           { "/": "/reset-password/*", "comment": "Password reset" },

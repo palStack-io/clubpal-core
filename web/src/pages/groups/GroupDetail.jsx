@@ -19,15 +19,6 @@ import { groupsApi } from '../../api/groups'
 import { eventsApi } from '../../api/events'
 import { ratingsApi } from '../../api/ratings'
 import { gatewayClient } from '../../api/client'
-import PartyInviteCarousel from '../../components/party/PartyInviteCarousel'
-import {
-  getDevPartyInvitePreview,
-  getDevPartyInvitePreviewEvents,
-  getDevPartyInvitePreviewGroup,
-  getDevPartyInvitePreviewMembers,
-  getDevPartyInvitePreviewRotation,
-  isDevPartyInvitePreviewEnabled,
-} from '../../utils/devPartyInvitePreview'
 
 async function enrichWithProfiles(items, uidField) {
   if (!items?.length) return items || []
@@ -80,7 +71,6 @@ export default function GroupDetail() {
   const [pendingRequests, setPendingRequests] = useState([])
   const [inviteSuccess, setInviteSuccess] = useState(null)
   const [inviteCode, setInviteCode] = useState(null)
-  const [pendingPartyInvites, setPendingPartyInvites] = useState([])
 
   const fetchAll = async () => {
     try {
@@ -105,20 +95,11 @@ export default function GroupDetail() {
         setRotation(null)
       }
     } catch {
-      if (isDevPartyInvitePreviewEnabled()) {
-        const previewGroup = getDevPartyInvitePreviewGroup(user, id)
-        setGroup(previewGroup)
-        setUpcoming(getDevPartyInvitePreviewEvents())
-        setMembers(getDevPartyInvitePreviewMembers(user))
-        setRotation(getDevPartyInvitePreviewRotation(user))
-        setPendingPartyInvites([getDevPartyInvitePreview(user, previewGroup)])
-      }
+      /* leave group/members/upcoming/rotation at their prior state on failure */
     }
     finally { setLoading(false) }
 
     groupsApi.getActiveInviteCode(id).then(ic => setInviteCode(ic?.code || null)).catch(() => {})
-
-    eventsApi.getPendingPartyInvites(id).then(setPendingPartyInvites).catch(() => {})
 
     groupsApi.getComments(id).then(async c => {
       const arr = Array.isArray(c) ? c : []
@@ -155,12 +136,6 @@ export default function GroupDetail() {
   const myRole = members.find(m => m.user_id === user?.id)?.role
   const isAdmin = myRole === 'owner' || myRole === 'admin'
   const isMyTurn = rotation?.current_user_id === user?.id
-  const previewPartyInvite = isDevPartyInvitePreviewEnabled() && group
-    ? getDevPartyInvitePreview(user, group)
-    : null
-  const visiblePartyInvites = previewPartyInvite
-    ? [previewPartyInvite, ...pendingPartyInvites.filter(i => i.token !== previewPartyInvite.token)]
-    : pendingPartyInvites
 
   const handleInvite = async (email) => {
     setInviteLoading(true)
@@ -293,19 +268,6 @@ export default function GroupDetail() {
           <AnimatedBackground bgType={group.bg_type} bgValue={group.bg_value} style={{ borderRadius: 0 }} />
         )}
 
-        {/* Pending party invites carousel */}
-        {visiblePartyInvites.length > 0 && (
-          <div style={{ position: 'relative', zIndex: 1, marginBottom: 14 }}>
-            <PartyInviteCarousel
-              invites={visiblePartyInvites}
-              userId={user?.id}
-              onRsvp={(eventId) => {
-                setPendingPartyInvites(prev => prev.filter(i => i.event_id !== eventId))
-                eventsApi.getGroupEvents(id, 'scheduled').then(setUpcoming).catch(() => {})
-              }}
-            />
-          </div>
-        )}
 
         <div style={{ display: 'grid', gridTemplateColumns: '1.7fr 1fr', gap: '14px', position: 'relative', zIndex: 1 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>

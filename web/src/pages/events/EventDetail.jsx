@@ -13,11 +13,9 @@ import RateEventModal from '../../components/events/RateEventModal'
 import AnimatedBackground from '../../components/ui/AnimatedBackground'
 import BillSplitModal from '../../components/modals/BillSplitModal'
 import BillSplitStatusCard from '../../components/events/BillSplitStatusCard'
-import PartyInviteAdminCard from '../../components/events/PartyInviteAdminCard'
 import EventBringListCard from '../../components/events/EventBringListCard'
-import EditPublicInviteModal from '../../components/party/EditPublicInviteModal'
 import { eventsApi } from '../../api/events'
-import { ratingsClient, gatewayClient, eventsClient } from '../../api/client'
+import { ratingsClient, gatewayClient } from '../../api/client'
 import { useAuth } from '../../contexts/AuthContext'
 
 async function enrichWithProfiles(items, uidField) {
@@ -46,10 +44,8 @@ export default function EventDetail() {
   const [photos, setPhotos] = useState([])
   const [comments, setComments] = useState([])
   const [loading, setLoading] = useState(true)
-  const [partyInvite, setPartyInvite] = useState(null)
   const [rsvpLoading, setRsvpLoading] = useState(false)
   const [showEditEvent, setShowEditEvent] = useState(false)
-  const [showEditInvite, setShowEditInvite] = useState(false)
   const [showRateModal, setShowRateModal] = useState(false)
   const [showBillSplit, setShowBillSplit] = useState(false)
   const [showAddAttendees, setShowAddAttendees] = useState(false)
@@ -95,9 +91,6 @@ export default function EventDetail() {
     gatewayClient.get('/users/me/saved', { params: { item_type: 'event' } })
       .then(r => setIsBookmarked((r.data || []).some(s => String(s.item_id) === String(id))))
       .catch(() => setIsBookmarked(false))
-    eventsClient.get(`/party-invites/by-event/${id}`)
-      .then(r => setPartyInvite({ token: r.data.token, bg_animation: r.data.bg_animation, accent_color: r.data.accent_color, style: r.data.style }))
-      .catch(() => {})
   }, [id])
 
   const toggleBookmark = async () => {
@@ -248,8 +241,6 @@ export default function EventDetail() {
 
   const heroActions = [
     ...(event.status === 'scheduled' && isHost ? [{ label: '✏️ Edit', onClick: () => setShowEditEvent(true) }] : []),
-    ...(partyInvite?.token && (isHost || isCreator) ? [{ label: '✨ Edit Public Invite', onClick: () => setShowEditInvite(true) }] : []),
-    ...((isHost || isCreator) && !partyInvite ? [{ label: '✨ Create Invite', onClick: () => navigate('/events/new/invite') }] : []),
     ...(isScheduled && (isHost || isCreator) ? [{ label: '➕ Add Attendees', onClick: () => setShowAddAttendees(true) }] : []),
     ...(isScheduled && (isHost || isCreator) ? [{ label: '🏁 End Event', onClick: () => setShowEndConfirm(true) }] : []),
     ...(isScheduled && isCreator && !!event.rsvp_deadline ? [{ label: '📣 Send Reminder', onClick: handleRsvpReminder }] : []),
@@ -267,7 +258,6 @@ export default function EventDetail() {
         attendees={attendees}
         onBack={() => navigate(-1)}
         actions={heroActions}
-        partyInvite={partyInvite}
       />
 
       {/* Floating stats */}
@@ -326,9 +316,6 @@ export default function EventDetail() {
 
           {/* Right column */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {(isHost || isCreator) && partyInvite?.token && (
-              <PartyInviteAdminCard token={partyInvite.token} eventId={id} />
-            )}
             {event.bill_split_enabled && (
               <BillSplitStatusCard
                 event={event}
@@ -374,13 +361,6 @@ export default function EventDetail() {
         event={event}
         onSaved={(updatedFields) => { setShowEditEvent(false); if (updatedFields) setEvent(prev => ({ ...prev, ...updatedFields })); fetchAll() }}
         onCancel={handleCancelEvent}
-      />
-      <EditPublicInviteModal
-        isOpen={showEditInvite}
-        onClose={() => setShowEditInvite(false)}
-        token={partyInvite?.token}
-        event={event}
-        onSaved={(updatedInvite) => { if (updatedInvite) setPartyInvite(prev => ({ ...prev, ...updatedInvite })); fetchAll() }}
       />
       <AddEventAttendeesModal
         isOpen={showAddAttendees}

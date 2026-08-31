@@ -299,13 +299,6 @@ export default function EventsList() {
         subtitle="Your upcoming and past outings"
         hasStats
       >
-        <Button
-          variant="ghost" size="sm"
-          onClick={() => navigate('/events/new/invite')}
-          style={{ color: 'var(--rose-soft)', border: '1px solid var(--rose-border)', background: 'var(--rose-glow)' }}
-        >
-          ✨ Party Invite
-        </Button>
         <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>+ Event</Button>
       </PageHero>
 

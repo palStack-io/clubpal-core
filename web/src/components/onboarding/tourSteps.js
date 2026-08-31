@@ -47,7 +47,7 @@ export const tourSteps = [
     arrow: 'top',
     label: 'Your plans',
     title: 'Everything coming up',
-    body: 'Swipe through your upcoming events and party invites right here. See an invite? Accept or decline it without leaving the dashboard.',
+    body: 'Swipe through your upcoming events right here.',
   },
   {
     zoneId: 'tour-turn',

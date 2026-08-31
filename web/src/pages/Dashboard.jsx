@@ -20,7 +20,6 @@ import { useTour } from '../components/onboarding/useTour'
 import TourOverlay from '../components/onboarding/TourOverlay'
 import { tourSteps } from '../components/onboarding/tourSteps'
 import { useToast } from '../components/ui/Toast'
-import { getDevPartyInvitePreview, isDevPartyInvitePreviewEnabled } from '../utils/devPartyInvitePreview'
 
 function getGreeting() {
   const h = new Date().getHours()
@@ -61,7 +60,6 @@ export default function Dashboard() {
   const [pendingPolls, setPendingPolls] = useState([])
   const [myPolls, setMyPolls] = useState([])
   const [rsvpNeeded, setRsvpNeeded] = useState([])
-  const [pendingPartyInvites, setPendingPartyInvites] = useState([])
   const [activityItems, setActivityItems] = useState([])
   const [activityLoading, setActivityLoading] = useState(true)
   const [showCreateGroup, setShowCreateGroup] = useState(false)
@@ -93,15 +91,6 @@ export default function Dashboard() {
       setRsvpNeeded(upcoming.filter(ev =>
         !ev.my_rsvp_status || ev.my_rsvp_status === 'pending' || ev.my_rsvp_status === 'maybe'
       ))
-
-      eventsApi.getMyPendingPartyInvites()
-        .then(data => {
-          const invites = Array.isArray(data) ? data : []
-          setPendingPartyInvites(invites)
-          const inviteEventIds = new Set(invites.map(i => i.event_id))
-          setRsvpNeeded(prev => prev.filter(ev => !inviteEventIds.has(ev.id)))
-        })
-        .catch(() => setPendingPartyInvites([]))
 
       // Check ALL groups for whose turn it is — skip manual-rotation groups
       if (g.length > 0) {
@@ -185,7 +174,6 @@ export default function Dashboard() {
 
   function handleRsvpResponded(eventId) {
     setRsvpNeeded(prev => prev.filter(e => e.id !== eventId))
-    setPendingPartyInvites(prev => prev.filter(i => i.event_id !== eventId))
   }
 
   const primaryGroupObj = groups.find(g => g.id === primaryGroupId)
@@ -210,12 +198,6 @@ export default function Dashboard() {
   const turnPosition = activeTurn ? '1st 🔄' : (rotation?.turn_index != null ? ordinal(rotation.turn_index + 1) : '—')
 
   const greeting = `${getGreeting()}, ${user?.full_name?.split(' ')[0] || user?.username} 👋`
-  const previewPartyInvite = isDevPartyInvitePreviewEnabled()
-    ? getDevPartyInvitePreview(user, primaryGroupObj)
-    : null
-  const visiblePartyInvites = previewPartyInvite
-    ? [previewPartyInvite, ...pendingPartyInvites]
-    : pendingPartyInvites
 
   const subtitle = `${activeGroups} club${activeGroups !== 1 ? 's' : ''} · ${events.length} upcoming`
 
@@ -226,16 +208,13 @@ export default function Dashboard() {
     { label: activeTurn ? 'Your Turn' : 'Turn', value: loading ? '—' : turnPosition, highlight: !!activeTurn },
   ]
 
-  // Hero carousel — invites first, then confirmed upcoming events, greeting fallback.
-  // Exclude events that already surface elsewhere: pending invites (their own slides)
-  // and un-RSVP'd events (they live in the attention band, per design) — no duplicates.
-  const inviteEventIds = new Set(visiblePartyInvites.map(i => i.event_id))
+  // Hero carousel — confirmed upcoming events, greeting fallback.
+  // Exclude un-RSVP'd events (they live in the attention band, per design) — no duplicates.
   const rsvpNeededIds = new Set(rsvpNeeded.map(e => e.id))
   const heroEvents = [...events]
-    .filter(ev => !inviteEventIds.has(ev.id) && !rsvpNeededIds.has(ev.id))
+    .filter(ev => !rsvpNeededIds.has(ev.id))
     .sort((a, b) => new Date(a.scheduled_date || 0) - new Date(b.scheduled_date || 0))
   const heroSlides = [
-    ...visiblePartyInvites.map(inv => ({ kind: 'invite', invite: inv, key: `inv-${inv.token || inv.event_id}` })),
     ...heroEvents.map(ev => ({ kind: 'event', event: ev, key: `ev-${ev.id}` })),
   ]
   if (heroSlides.length === 0) {
@@ -250,13 +229,6 @@ export default function Dashboard() {
   return (
     <AppShell activeRoute="/dashboard" user={user} groupCount={groups.length}>
       <Topbar title={greeting}>
-        <Button
-          variant="ghost" size="sm"
-          onClick={() => navigate('/events/new/invite')}
-          style={{ color: 'var(--rose-soft)', border: '1px solid var(--rose-border)', background: 'var(--rose-glow)' }}
-        >
-          ✨ Party Invite
-        </Button>
         <Button variant="ghost" size="sm" onClick={() => setShowCreateEvent(true)}>+ Event</Button>
         <Button variant="primary" size="sm" onClick={() => setShowCreateGroup(true)}>+ Club</Button>
       </Topbar>

@@ -11,7 +11,7 @@ import BannerUpload from '../../components/ui/BannerUpload'
 import { FormSection, FormRow, FormGroup, FormInput, FormSelect } from '../../components/ui/Form'
 import { PageLoader } from '../../components/ui/LoadingSpinner'
 import { useToast } from '../../components/ui/Toast'
-import BringListBuilder from '../../components/party/BringListBuilder'
+import BringListBuilder from '../../components/events/BringListBuilder'
 
 // Maps group activity_type → activity category for filtering
 const ACTIVITY_TYPE_TO_CATEGORY = {

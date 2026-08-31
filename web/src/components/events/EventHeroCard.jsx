@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import AvatarStack from '../ui/AvatarStack'
 import AnimatedBackground from '../ui/AnimatedBackground'
-import InviteMotion from '../party/InviteMotion'
 import StatusChip from '../ui/StatusChip'
 import { resolveMediaUrl } from '../../utils/resolveMediaUrl'
 
@@ -29,7 +28,7 @@ function formatDate(dateStr) {
   )
 }
 
-export default function EventHeroCard({ event, attendees = [], onBack, actions = [], partyInvite = null }) {
+export default function EventHeroCard({ event, attendees = [], onBack, actions = [] }) {
   const [menuOpen, setMenuOpen] = useState(false)
   const menuRef = useRef(null)
 
@@ -44,12 +43,11 @@ export default function EventHeroCard({ event, attendees = [], onBack, actions =
 
   const type = (event.activity_type || 'dining').toLowerCase()
   const act = ACTIVITY[type] || ACTIVITY.dining
-  const accentColor = partyInvite?.accent_color || act.color
-  const accentRgb = accentColor === act.color ? act.rgb : accentColor.replace('#', '').match(/.{2}/g).map(h => parseInt(h, 16)).join(',')
+  const accentColor = act.color
+  const accentRgb = act.rgb
   const hasCustomBg = event.bg_type && event.bg_type !== 'default'
   const hasCover = Boolean(event.cover_url) && !hasCustomBg
   const textOnDark = hasCustomBg || hasCover
-  const hasInviteMotion = partyInvite?.bg_animation && partyInvite.bg_animation !== 'none'
 
   let statusVariant = 'pending'
   let statusLabel = 'Scheduled'
@@ -124,10 +122,6 @@ export default function EventHeroCard({ event, attendees = [], onBack, actions =
             pointerEvents: 'none',
           }}
         />
-      )}
-
-      {hasInviteMotion && (
-        <InviteMotion type={partyInvite.bg_animation} accent={partyInvite.accent_color} />
       )}
 
       {/* Top controls row */}

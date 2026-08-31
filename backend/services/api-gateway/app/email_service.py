@@ -1,6 +1,7 @@
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import html as _html
 import os
 from typing import Optional
 
@@ -99,6 +100,20 @@ def _note(text: str) -> str:
     return f'<p style="margin:18px 0 0;font-size:12px;color:#aaa;line-height:1.6;">{text}</p>'
 
 
+def _esc(value) -> str:
+    """HTML-escape free text before it's interpolated into an email template.
+    Group names, event titles, usernames etc. are set by users — without this,
+    one user could inject markup/scripts into an email delivered to another
+    user's inbox."""
+    return _html.escape(str(value)) if value is not None else ""
+
+
+def _clean(value) -> str:
+    """Strip CR/LF from free text before it's interpolated into a Subject
+    line, so a user-controlled field can't inject extra mail headers."""
+    return str(value).replace("\r", "").replace("\n", "") if value is not None else ""
+
+
 class EmailService:
     """Transactional email service for clubPal — a palStack.io product."""
 
@@ -146,18 +161,33 @@ class EmailService:
         url = f"{self.app_url}/verify-email/{token}"
         content = (
             _h1("Confirm your email address")
-            + _p(f"Hey <strong>{username}</strong>, welcome to clubPal!")
+            + _p(f"Hey <strong>{_esc(username)}</strong>, welcome to clubPal!")
             + _p("Just one quick step — click below to verify your email and activate your account.")
             + _btn("Verify Email Address", url, "#f43f5e")
             + _note("Link expires in <strong>24 hours</strong>. If you didn't sign up, you can safely ignore this email.")
         )
         return self._send(to_email, "Confirm your clubPal email", _base("Confirm your email", content, self.app_url))
 
+    def send_verification_reminder(self, to_email: str, username: str, token: str) -> bool:
+        """Periodic nudge for accounts that still haven't verified — token is
+        freshly minted by the caller since the original link expires in 24h."""
+        url = f"{self.app_url}/verify-email/{token}"
+        subject = "Don't forget to confirm your clubPal email"
+        content = (
+            _h1("Still need to confirm your email")
+            + _p(f"Hey <strong>{_esc(username)}</strong>,")
+            + _p("We noticed your clubPal account hasn't been verified yet. "
+                 "Confirming your email unlocks the full experience — invites, notifications, and more.")
+            + _btn("Verify Email Address", url, "#f43f5e")
+            + _note("Link expires in <strong>24 hours</strong>. If you didn't sign up, you can safely ignore this email.")
+        )
+        return self._send(to_email, subject, _base(subject, content, self.app_url))
+
     def send_password_reset(self, to_email: str, username: str, token: str) -> bool:
         url = f"{self.app_url}/reset-password/{token}"
         content = (
             _h1("Reset your password")
-            + _p(f"Hi <strong>{username}</strong>,")
+            + _p(f"Hi <strong>{_esc(username)}</strong>,")
             + _p("We received a request to reset your clubPal password. Click the button below to choose a new one.")
             + _btn("Reset Password", url, "#f43f5e")
             + _note("This link expires in <strong>1 hour</strong>. If you didn't request a reset, no action is needed — your password is unchanged.")
@@ -169,21 +199,23 @@ class EmailService:
     def send_invite(self, to_email: str, group_name: str, invited_by_name: str,
                     invite_token: str, user_exists: bool) -> bool:
         url = f"{self.app_url}/invite/{invite_token}"
+        safe_group_name = _esc(group_name)
+        safe_invited_by_name = _esc(invited_by_name)
 
         if user_exists:
-            subject = f"{invited_by_name} invited you to {group_name}"
+            subject = f"{_clean(invited_by_name)} invited you to {_clean(group_name)}"
             content = (
-                _h1(f"You're invited to join <em style='color:#f43f5e;'>{group_name}</em>")
-                + _p(f"<strong>{invited_by_name}</strong> has invited you to join their group on clubPal.")
+                _h1(f"You're invited to join <em style='color:#f43f5e;'>{safe_group_name}</em>")
+                + _p(f"<strong>{safe_invited_by_name}</strong> has invited you to join their group on clubPal.")
                 + _btn("Accept Invitation", url, "#f43f5e")
                 + _note("Invitation expires in <strong>7 days</strong>.")
             )
         else:
-            subject = f"Join {group_name} on clubPal"
+            subject = f"Join {_clean(group_name)} on clubPal"
             content = (
                 _h1(f"You've been invited to clubPal!")
-                + _p(f"<strong>{invited_by_name}</strong> has invited you to join "
-                     f"<strong>{group_name}</strong> on clubPal.")
+                + _p(f"<strong>{safe_invited_by_name}</strong> has invited you to join "
+                     f"<strong>{safe_group_name}</strong> on clubPal.")
                 + _p("clubPal helps groups coordinate activities, manage turn rotations, "
                      "and keep everyone on the same page.")
                 + _btn("Create Account &amp; Join", url, "#f43f5e")
@@ -198,11 +230,11 @@ class EmailService:
                             group_name: str, group_id: int) -> bool:
         """Send 'it's your turn to pick an activity' alert."""
         url = f"{self.app_url}/groups/{group_id}"
-        subject = f"It's your turn in {group_name}!"
+        subject = f"It's your turn in {_clean(group_name)}!"
         content = (
             _h1("Your turn to pick! 🎯")
-            + _p(f"Hey <strong>{username}</strong>,")
-            + _p(f"The rotation in <strong>{group_name}</strong> has moved to you. "
+            + _p(f"Hey <strong>{_esc(username)}</strong>,")
+            + _p(f"The rotation in <strong>{_esc(group_name)}</strong> has moved to you. "
                  "It's your turn to pick the next activity.")
             + _btn("Pick an Activity", url, "#f43f5e")
             + _note("You can change your notification preferences in your "
@@ -215,32 +247,35 @@ class EmailService:
                            creator_name: str, event_id: int, has_rsvp: bool = True) -> bool:
         """Notify group member that a new event has been scheduled."""
         url = f"{self.app_url}/events/{event_id}"
+        safe_event_title = _esc(event_title)
+        safe_group_name = _esc(group_name)
+        safe_creator_name = _esc(creator_name)
         if has_rsvp:
-            subject = f"RSVP: {event_title} in {group_name}"
+            subject = f"RSVP: {_clean(event_title)} in {_clean(group_name)}"
             heading = "Are you in? 📅"
-            body_line = (f"<strong>{creator_name}</strong> just scheduled a new event in "
-                         f"<strong>{group_name}</strong>. Let everyone know if you're coming!")
+            body_line = (f"<strong>{safe_creator_name}</strong> just scheduled a new event in "
+                         f"<strong>{safe_group_name}</strong>. Let everyone know if you're coming!")
             btn_label = "RSVP Now"
         else:
-            subject = f"New event: {event_title} in {group_name}"
+            subject = f"New event: {_clean(event_title)} in {_clean(group_name)}"
             heading = "New event planned 📅"
-            body_line = (f"<strong>{creator_name}</strong> just scheduled a new event in "
-                         f"<strong>{group_name}</strong>.")
+            body_line = (f"<strong>{safe_creator_name}</strong> just scheduled a new event in "
+                         f"<strong>{safe_group_name}</strong>.")
             btn_label = "View Event"
         content = (
             _h1(heading)
-            + _p(f"Hey <strong>{username}</strong>,")
+            + _p(f"Hey <strong>{_esc(username)}</strong>,")
             + _p(body_line)
             + f"""
 <div style="background:#f9f9fb;border-left:3px solid #f43f5e;border-radius:0 8px 8px 0;
             padding:14px 18px;margin:20px 0;">
-  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{event_title}</p>
-  <p style="margin:4px 0 0;font-size:13px;color:#666;">{event_date}</p>
-  <p style="margin:4px 0 0;font-size:12px;color:#aaa;">{group_name}</p>
+  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{safe_event_title}</p>
+  <p style="margin:4px 0 0;font-size:13px;color:#666;">{_esc(event_date)}</p>
+  <p style="margin:4px 0 0;font-size:12px;color:#aaa;">{safe_group_name}</p>
 </div>"""
             + _btn(btn_label, url, "#f43f5e")
             + _note("You're receiving this because you're a member of "
-                    f"<strong>{group_name}</strong>. Update preferences in "
+                    f"<strong>{safe_group_name}</strong>. Update preferences in "
                     f'<a href="{self.app_url}/settings" style="color:#f43f5e;">settings</a>.')
         )
         return self._send(to_email, subject, _base(subject, content, self.app_url))
@@ -249,22 +284,24 @@ class EmailService:
                                      event_date: str, group_name: str, event_id: int) -> bool:
         """Notify group member that a recurring event instance has been auto-scheduled."""
         url = f"{self.app_url}/events/{event_id}"
-        subject = f"Recurring event scheduled: {event_title}"
+        safe_event_title = _esc(event_title)
+        safe_group_name = _esc(group_name)
+        subject = f"Recurring event scheduled: {_clean(event_title)}"
         content = (
-            _h1(f"🔁 Recurring event: {event_title}")
-            + _p(f"Hey <strong>{username}</strong>,")
-            + _p(f"A new occurrence of <strong>{event_title}</strong> has been automatically "
-                 f"scheduled for <strong>{group_name}</strong>.")
+            _h1(f"🔁 Recurring event: {safe_event_title}")
+            + _p(f"Hey <strong>{_esc(username)}</strong>,")
+            + _p(f"A new occurrence of <strong>{safe_event_title}</strong> has been automatically "
+                 f"scheduled for <strong>{safe_group_name}</strong>.")
             + f"""
 <div style="background:#f9f9fb;border-left:3px solid #f43f5e;border-radius:0 8px 8px 0;
             padding:14px 18px;margin:20px 0;">
-  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{event_title}</p>
-  <p style="margin:4px 0 0;font-size:13px;color:#666;">{event_date}</p>
-  <p style="margin:4px 0 0;font-size:12px;color:#aaa;">Recurring event &nbsp;·&nbsp; {group_name}</p>
+  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{safe_event_title}</p>
+  <p style="margin:4px 0 0;font-size:13px;color:#666;">{_esc(event_date)}</p>
+  <p style="margin:4px 0 0;font-size:12px;color:#aaa;">Recurring event &nbsp;·&nbsp; {safe_group_name}</p>
 </div>"""
             + _btn("View Event", url, "#f43f5e")
             + _note("You're receiving this because you're a member of "
-                    f"<strong>{group_name}</strong>. You can update your notification preferences "
+                    f"<strong>{safe_group_name}</strong>. You can update your notification preferences "
                     f'in <a href="{self.app_url}/settings" style="color:#f43f5e;">account settings</a>.')
         )
         return self._send(to_email, subject, _base(subject, content, self.app_url))
@@ -274,22 +311,24 @@ class EmailService:
                                     deadline_str: str, event_id: int) -> bool:
         """Notify group member that the RSVP deadline is approaching."""
         url = f"{self.app_url}/events/{event_id}"
-        subject = f"RSVP closes soon for {event_title}"
+        safe_event_title = _esc(event_title)
+        safe_group_name = _esc(group_name)
+        subject = f"RSVP closes soon for {_clean(event_title)}"
         content = (
             _h1("RSVP deadline approaching ⏰")
-            + _p(f"Hey <strong>{username}</strong>,")
-            + _p(f"The RSVP deadline for <strong>{event_title}</strong> in "
-                 f"<strong>{group_name}</strong> is coming up.")
+            + _p(f"Hey <strong>{_esc(username)}</strong>,")
+            + _p(f"The RSVP deadline for <strong>{safe_event_title}</strong> in "
+                 f"<strong>{safe_group_name}</strong> is coming up.")
             + f"""
 <div style="background:#f9f9fb;border-left:3px solid #f43f5e;border-radius:0 8px 8px 0;
             padding:14px 18px;margin:20px 0;">
-  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{event_title}</p>
-  <p style="margin:4px 0 0;font-size:13px;color:#666;">📅 {event_date}</p>
-  <p style="margin:4px 0 0;font-size:12px;color:#f43f5e;font-weight:600;">⏰ RSVP by: {deadline_str}</p>
+  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{safe_event_title}</p>
+  <p style="margin:4px 0 0;font-size:13px;color:#666;">📅 {_esc(event_date)}</p>
+  <p style="margin:4px 0 0;font-size:12px;color:#f43f5e;font-weight:600;">⏰ RSVP by: {_esc(deadline_str)}</p>
 </div>"""
             + _btn("RSVP Now", url, "#f43f5e")
             + _note("You're receiving this because you're a member of "
-                    f"<strong>{group_name}</strong>. Update preferences in "
+                    f"<strong>{safe_group_name}</strong>. Update preferences in "
                     f'<a href="{self.app_url}/settings" style="color:#f43f5e;">settings</a>.')
         )
         return self._send(to_email, subject, _base(subject, content, self.app_url))
@@ -300,17 +339,19 @@ class EmailService:
                                        event_id: int) -> bool:
         """Notify event creator of final RSVP counts after the deadline has passed."""
         url = f"{self.app_url}/events/{event_id}"
-        subject = f"Final RSVP count for {event_title}"
+        safe_event_title = _esc(event_title)
+        safe_group_name = _esc(group_name)
+        subject = f"Final RSVP count for {_clean(event_title)}"
         content = (
             _h1("RSVP deadline passed — final counts 📊")
-            + _p(f"Hey <strong>{username}</strong>,")
-            + _p(f"The RSVP deadline for <strong>{event_title}</strong> in "
-                 f"<strong>{group_name}</strong> has passed. Here's the final headcount:")
+            + _p(f"Hey <strong>{_esc(username)}</strong>,")
+            + _p(f"The RSVP deadline for <strong>{safe_event_title}</strong> in "
+                 f"<strong>{safe_group_name}</strong> has passed. Here's the final headcount:")
             + f"""
 <div style="background:#f9f9fb;border-left:3px solid #f43f5e;border-radius:0 8px 8px 0;
             padding:14px 18px;margin:20px 0;">
-  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{event_title}</p>
-  <p style="margin:4px 0 0;font-size:13px;color:#666;">📅 {event_date}</p>
+  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{safe_event_title}</p>
+  <p style="margin:4px 0 0;font-size:13px;color:#666;">📅 {_esc(event_date)}</p>
   <p style="margin:12px 0 0;font-size:13px;color:#111;">
     <span style="color:#22d3a0;font-weight:700;">✓ Going: {going}</span> &nbsp;·&nbsp;
     <span style="color:#f59e0b;font-weight:700;">? Maybe: {maybe}</span> &nbsp;·&nbsp;
@@ -319,7 +360,7 @@ class EmailService:
 </div>"""
             + _btn("View Event", url, "#f43f5e")
             + _note("You're receiving this as the organiser of "
-                    f"<strong>{event_title}</strong> in <strong>{group_name}</strong>.")
+                    f"<strong>{safe_event_title}</strong> in <strong>{safe_group_name}</strong>.")
         )
         return self._send(to_email, subject, _base(subject, content, self.app_url))
 
@@ -327,23 +368,26 @@ class EmailService:
                          group_name: str, creator_name: str, group_id: int) -> bool:
         """Notify group member that a new poll is open for their vote."""
         url = f"{self.app_url}/groups/{group_id}"
-        subject = f"🗳️ {creator_name} wants your vote in {group_name}"
+        safe_activity_name = _esc(activity_name)
+        safe_group_name = _esc(group_name)
+        safe_creator_name = _esc(creator_name)
+        subject = f"🗳️ {_clean(creator_name)} wants your vote in {_clean(group_name)}"
         content = (
-            _h1(f"New vote: {activity_name}")
-            + _p(f"Hey <strong>{username}</strong>,")
-            + _p(f"<strong>{creator_name}</strong> is thinking about <strong>{activity_name}</strong> "
-                 f"for <strong>{group_name}</strong> and wants to know what you think.")
+            _h1(f"New vote: {safe_activity_name}")
+            + _p(f"Hey <strong>{_esc(username)}</strong>,")
+            + _p(f"<strong>{safe_creator_name}</strong> is thinking about <strong>{safe_activity_name}</strong> "
+                 f"for <strong>{safe_group_name}</strong> and wants to know what you think.")
             + f"""
 <div style="background:#f9f9fb;border-left:3px solid #f43f5e;border-radius:0 8px 8px 0;
             padding:14px 18px;margin:20px 0;">
-  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{activity_name}</p>
+  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{safe_activity_name}</p>
   <p style="margin:8px 0 0;font-size:13px;color:#444;">Tap your reaction:</p>
   <p style="margin:8px 0 0;font-size:13px;color:#444;">
     🙌 I'm in! &nbsp;·&nbsp; ❤️ Done it, loved it &nbsp;·&nbsp; 👎 Done it, pass &nbsp;·&nbsp; 🚫 Can't make it
   </p>
 </div>"""
             + _btn("Vote Now →", url, "#f43f5e")
-            + _note(f"You're receiving this because you're a member of <strong>{group_name}</strong>. "
+            + _note(f"You're receiving this because you're a member of <strong>{safe_group_name}</strong>. "
                     f'Update preferences in <a href="{self.app_url}/settings" style="color:#f43f5e;">settings</a>.')
         )
         return self._send(to_email, subject, _base(subject, content, self.app_url))
@@ -353,44 +397,22 @@ class EmailService:
                          responded_count: int, total_count: int, group_id: int) -> bool:
         """Notify group member that a poll has closed with final results."""
         url = f"{self.app_url}/groups/{group_id}"
-        subject = f"📊 Poll result: {activity_name}"
+        safe_activity_name = _esc(activity_name)
+        safe_group_name = _esc(group_name)
+        subject = f"📊 Poll result: {_clean(activity_name)}"
         content = (
-            _h1(f"Poll closed: {activity_name}")
-            + _p(f"Hey <strong>{username}</strong>,")
-            + _p(f"The poll in <strong>{group_name}</strong> has closed. Here are the final results:")
+            _h1(f"Poll closed: {safe_activity_name}")
+            + _p(f"Hey <strong>{_esc(username)}</strong>,")
+            + _p(f"The poll in <strong>{safe_group_name}</strong> has closed. Here are the final results:")
             + f"""
 <div style="background:#f9f9fb;border-left:3px solid #f43f5e;border-radius:0 8px 8px 0;
             padding:14px 18px;margin:20px 0;">
-  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">Winner: {winner_text}</p>
-  <p style="margin:8px 0 0;font-size:13px;color:#444;">{result_summary}</p>
+  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">Winner: {_esc(winner_text)}</p>
+  <p style="margin:8px 0 0;font-size:13px;color:#444;">{_esc(result_summary)}</p>
   <p style="margin:10px 0 0;font-size:12px;color:#777;">{responded_count} of {total_count} responded</p>
 </div>"""
             + _btn("View Poll →", url, "#f43f5e")
-            + _note(f"You're receiving this because you're a member of <strong>{group_name}</strong>.")
-        )
-        return self._send(to_email, subject, _base(subject, content, self.app_url))
-
-    def send_quota_alert(self, to_email: str, api_name: str,
-                         today_calls: int, daily_limit: int,
-                         approve_url: str) -> bool:
-        """Notify admin that an API quota has been exhausted and the API is now blocked."""
-        subject = f"[clubPal] API quota reached — {api_name} is now blocked"
-        content = (
-            _h1("API quota reached ⚠️")
-            + _p(f"The <strong>{api_name}</strong> API has hit its daily call limit and has been "
-                 f"<strong style='color:#f43f5e;'>automatically blocked</strong> to prevent unexpected charges.")
-            + f"""
-<div style="background:#f9f9fb;border-left:3px solid #f43f5e;border-radius:0 8px 8px 0;
-            padding:14px 18px;margin:20px 0;">
-  <p style="margin:0;font-size:14px;color:#111;"><strong>API:</strong> {api_name}</p>
-  <p style="margin:6px 0 0;font-size:14px;color:#111;"><strong>Calls today:</strong> {today_calls}</p>
-  <p style="margin:6px 0 0;font-size:14px;color:#111;"><strong>Daily limit:</strong> {daily_limit}</p>
-  <p style="margin:6px 0 0;font-size:13px;color:#f43f5e;font-weight:600;">
-    Status: BLOCKED — new API calls will be skipped until you approve
-  </p>
-</div>"""
-            + _p("To resume API calls, visit the admin panel to approve the block or increase the daily limit.")
-            + _btn("Review &amp; Approve in Admin Panel", approve_url, "#f43f5e")
+            + _note(f"You're receiving this because you're a member of <strong>{safe_group_name}</strong>.")
         )
         return self._send(to_email, subject, _base(subject, content, self.app_url))
 
@@ -398,19 +420,21 @@ class EmailService:
                              event_date: str, group_name: str, group_id: int) -> bool:
         """Notify an attendee that an event they RSVPed to has been cancelled."""
         url = f"{self.app_url}/groups/{group_id}"
-        subject = f"Cancelled: {event_title}"
+        safe_event_title = _esc(event_title)
+        safe_group_name = _esc(group_name)
+        subject = f"Cancelled: {_clean(event_title)}"
         content = (
-            _h1(f"❌ {event_title} has been cancelled")
-            + _p(f"Hi <strong>{username}</strong>,")
-            + _p(f"Unfortunately, <strong>{event_title}</strong> in "
-                 f"<strong>{group_name}</strong> has been cancelled.")
+            _h1(f"❌ {safe_event_title} has been cancelled")
+            + _p(f"Hi <strong>{_esc(username)}</strong>,")
+            + _p(f"Unfortunately, <strong>{safe_event_title}</strong> in "
+                 f"<strong>{safe_group_name}</strong> has been cancelled.")
             + (f"""
 <div style="background:#fff5f7;border-left:3px solid #f43f5e;border-radius:0 8px 8px 0;
             padding:14px 18px;margin:20px 0;">
-  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{event_title}</p>
-  <p style="margin:4px 0 0;font-size:13px;color:#666;">{event_date}</p>
+  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{safe_event_title}</p>
+  <p style="margin:4px 0 0;font-size:13px;color:#666;">{_esc(event_date)}</p>
 </div>""" if event_date else "")
-            + _p(f"Stay tuned for future events in <strong>{group_name}</strong>.")
+            + _p(f"Stay tuned for future events in <strong>{safe_group_name}</strong>.")
             + _btn("View Group", url, "#f43f5e")
         )
         return self._send(to_email, subject, _base(subject, content, self.app_url))
@@ -419,11 +443,12 @@ class EmailService:
                                group_id: int, message: str) -> bool:
         """Generic membership email — added to group, approved, declined."""
         url = f"{self.app_url}/groups/{group_id}"
-        subject = f"clubPal: {group_name}"
+        safe_group_name = _esc(group_name)
+        subject = f"clubPal: {_clean(group_name)}"
         content = (
-            _h1(message)
-            + _p(f"Hi <strong>{username}</strong>,")
-            + _p(f"This update is about your membership in <strong>{group_name}</strong>.")
+            _h1(_esc(message))
+            + _p(f"Hi <strong>{_esc(username)}</strong>,")
+            + _p(f"This update is about your membership in <strong>{safe_group_name}</strong>.")
             + _btn("Open Group", url, "#f43f5e")
         )
         return self._send(to_email, subject, _base(subject, content, self.app_url))
@@ -433,18 +458,19 @@ class EmailService:
                             hours_until: int, event_id: int) -> bool:
         """Send a reminder before an event."""
         url = f"{self.app_url}/events/{event_id}"
+        safe_event_title = _esc(event_title)
         when = f"{hours_until} hour{'s' if hours_until != 1 else ''}"
-        subject = f"Reminder: {event_title} starts in {when}"
+        subject = f"Reminder: {_clean(event_title)} starts in {when}"
         content = (
             _h1(f"Coming up in {when} ⏰")
-            + _p(f"Hey <strong>{username}</strong>,")
-            + _p(f"Don't forget — <strong>{event_title}</strong> in "
-                 f"<strong>{group_name}</strong> is coming up soon.")
+            + _p(f"Hey <strong>{_esc(username)}</strong>,")
+            + _p(f"Don't forget — <strong>{safe_event_title}</strong> in "
+                 f"<strong>{_esc(group_name)}</strong> is coming up soon.")
             + f"""
 <div style="background:#f9f9fb;border-left:3px solid #f43f5e;border-radius:0 8px 8px 0;
             padding:14px 18px;margin:20px 0;">
-  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{event_title}</p>
-  <p style="margin:4px 0 0;font-size:13px;color:#666;">{event_date}</p>
+  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{safe_event_title}</p>
+  <p style="margin:4px 0 0;font-size:13px;color:#666;">{_esc(event_date)}</p>
 </div>"""
             + _btn("View Event", url, "#f43f5e")
         )
@@ -455,22 +481,25 @@ class EmailService:
                         creator_name: str, event_id: int) -> bool:
         """Notify a group member that the event creator is asking them to RSVP."""
         url = f"{self.app_url}/events/{event_id}"
-        subject = f"{creator_name} wants to know — are you in for {event_title}?"
+        safe_event_title = _esc(event_title)
+        safe_group_name = _esc(group_name)
+        safe_creator_name = _esc(creator_name)
+        subject = f"{_clean(creator_name)} wants to know — are you in for {_clean(event_title)}?"
         content = (
             _h1("RSVP requested 📅")
-            + _p(f"Hey <strong>{username}</strong>,")
-            + _p(f"<strong>{creator_name}</strong> is asking if you're in for "
-                 f"<strong>{event_title}</strong> in <strong>{group_name}</strong>.")
+            + _p(f"Hey <strong>{_esc(username)}</strong>,")
+            + _p(f"<strong>{safe_creator_name}</strong> is asking if you're in for "
+                 f"<strong>{safe_event_title}</strong> in <strong>{safe_group_name}</strong>.")
             + f"""
 <div style="background:#f9f9fb;border-left:3px solid #f43f5e;border-radius:0 8px 8px 0;
             padding:14px 18px;margin:20px 0;">
-  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{event_title}</p>
-  <p style="margin:4px 0 0;font-size:13px;color:#666;">{event_date}</p>
-  <p style="margin:4px 0 0;font-size:12px;color:#aaa;">{group_name}</p>
+  <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{safe_event_title}</p>
+  <p style="margin:4px 0 0;font-size:13px;color:#666;">{_esc(event_date)}</p>
+  <p style="margin:4px 0 0;font-size:12px;color:#aaa;">{safe_group_name}</p>
 </div>"""
             + _btn("RSVP Now", url, "#f43f5e")
             + _note("You're receiving this because you're a member of "
-                    f"<strong>{group_name}</strong>. Update preferences in "
+                    f"<strong>{safe_group_name}</strong>. Update preferences in "
                     f'<a href="{self.app_url}/settings" style="color:#f43f5e;">settings</a>.')
         )
         return self._send(to_email, subject, _base(subject, content, self.app_url))
@@ -481,7 +510,7 @@ class EmailService:
         subject = "We miss you — what's happening in your clubs?"
         content = (
             _h1("It's been a while! 👋")
-            + _p(f"Hey <strong>{username}</strong>,")
+            + _p(f"Hey <strong>{_esc(username)}</strong>,")
             + _p("Your clubs might have new events, polls, or activity waiting for you. "
                  "Come check in and see what you've missed.")
             + _btn("Open clubPal", url, "#f43f5e")

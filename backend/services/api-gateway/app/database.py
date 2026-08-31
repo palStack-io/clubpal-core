@@ -477,16 +477,6 @@ def update_last_login(user_id: int):
         conn.commit()
 
 
-def update_user_email_verified(user_id: int):
-    """Mark user's email as verified."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-
-        cursor.execute("UPDATE users SET email_verified = 1 WHERE id = %s", (user_id,))
-
-        conn.commit()
-
-
 def update_user_password(user_id: int, new_password: str):
     """Update user's password, invalidate all reset tokens, and mark it as changed."""
     with get_db() as conn:
@@ -679,24 +669,32 @@ def create_verification_token(user_id: int) -> tuple[str, datetime]:
 
 
 def verify_email_token(token: str) -> int:
-    """Verify email token and return user_id."""
+    """Atomically consume a verification token and mark the user's email verified.
+
+    The token consumption and the users.email_verified update happen in one
+    transaction, and the token consumption itself is a single UPDATE...RETURNING
+    (not a SELECT followed by an UPDATE), so two concurrent requests for the
+    same token can't both succeed and a crash between steps can't leave the
+    token burned with the user still unverified.
+    """
     with get_db() as conn:
         cursor = conn.cursor()
 
         cursor.execute("""
-            SELECT user_id FROM verification_tokens
+            UPDATE verification_tokens SET used = 1
             WHERE token = %s AND expires_at > CURRENT_TIMESTAMP AND used = 0
+            RETURNING user_id
         """, (token,))
 
         row = cursor.fetchone()
 
-        if row:
-            user_id = row['user_id']
-            cursor.execute("UPDATE verification_tokens SET used = 1 WHERE token = %s", (token,))
-            conn.commit()
-            return user_id
+        if not row:
+            return None
 
-        return None
+        user_id = row['user_id']
+        cursor.execute("UPDATE users SET email_verified = 1 WHERE id = %s", (user_id,))
+        conn.commit()
+        return user_id
 
 
 # Password reset functions
@@ -808,6 +806,17 @@ def delete_sessions_except(user_id: int, keep_token: str) -> int:
             "DELETE FROM sessions WHERE user_id = %s AND session_token != %s",
             (user_id, keep_hash)
         )
+        deleted = cursor.rowcount
+        conn.commit()
+        return deleted
+
+
+def delete_all_sessions(user_id: int) -> int:
+    """Delete every session for a user — used after a password reset via email,
+    where there's no 'current' session to preserve (unlike an in-app password change)."""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM sessions WHERE user_id = %s", (user_id,))
         deleted = cursor.rowcount
         conn.commit()
         return deleted
@@ -1078,6 +1087,9 @@ def upsert_user_preferences(user_id: int, **fields) -> dict:
 
 # ── Push tokens ───────────────────────────────────────────────────────────────
 
+PUSH_TOKENS_PER_USER_CAP = 10
+
+
 def upsert_push_token(user_id: int, token: str, platform: str = "unknown") -> None:
     with get_db() as conn:
         cursor = conn.cursor()
@@ -1086,6 +1098,19 @@ def upsert_push_token(user_id: int, token: str, platform: str = "unknown") -> No
             VALUES (%s, %s, %s, NOW())
             ON CONFLICT (user_id, token) DO UPDATE SET platform = EXCLUDED.platform, updated_at = NOW()
         """, (user_id, token, platform))
+        # Every reinstall/new-device login registers a distinct Expo token, and stale
+        # ones are otherwise only pruned reactively (when Expo reports DeviceNotRegistered
+        # during an actual send) — without a cap, rows accumulate unbounded over an
+        # account's life. Keep only the most-recently-used tokens per user.
+        cursor.execute("""
+            DELETE FROM user_push_tokens
+            WHERE user_id = %s AND id NOT IN (
+                SELECT id FROM user_push_tokens
+                WHERE user_id = %s
+                ORDER BY updated_at DESC
+                LIMIT %s
+            )
+        """, (user_id, user_id, PUSH_TOKENS_PER_USER_CAP))
         conn.commit()
 
 
@@ -1123,6 +1148,26 @@ def get_inactive_users(days_min: int, days_max: int) -> list:
               AND last_login_at IS NOT NULL
               AND last_login_at < NOW() - INTERVAL '%s days'
               AND last_login_at >= NOW() - INTERVAL '%s days'
+        """, (days_min, days_max))
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_unverified_users(days_min: int, days_max: int) -> list:
+    """Return active users who registered between days_min and days_max days ago
+    and still haven't verified their email.
+
+    Used by the verification-reminder scheduler.
+    """
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, username, email, full_name, created_at
+            FROM users
+            WHERE is_active = 1
+              AND email_verified = 0
+              AND created_at < NOW() - INTERVAL '%s days'
+              AND created_at >= NOW() - INTERVAL '%s days'
         """, (days_min, days_max))
         rows = cursor.fetchall()
         return [dict(r) for r in rows]

@@ -56,6 +56,7 @@ class _PooledConn:
 def init_db():
     """Initialize database with schema."""
     conn = psycopg2.connect(DATABASE_URL)
+    conn.autocommit = True
     cursor = conn.cursor()
 
     # Groups table

@@ -32,10 +32,10 @@ from app.database import (
     get_user_by_id, verify_password, update_last_login, create_session,
     get_user_by_session, delete_session, cleanup_expired_sessions, refresh_session,
     create_invite_token, get_invite_by_token, mark_invite_accepted, get_pending_invites_for_group,
-    create_verification_token, verify_email_token, update_user_email_verified,
+    create_verification_token, verify_email_token,
     create_reset_token, verify_reset_token, update_user_password,
     update_user_profile, get_sessions_for_user, delete_session_by_token_for_user,
-    delete_sessions_except,
+    delete_sessions_except, delete_all_sessions,
     get_all_users, admin_update_user, deactivate_user, get_admin_emails,
     get_all_integrations, set_integration, delete_integration, log_admin_action,
     get_notification_prefs, set_notification_prefs,
@@ -48,7 +48,7 @@ from app.database import (
     get_saved_items, get_saved_item, save_item, delete_saved_item,
     search_users_by_username,
     log_invite_send, count_recent_domain_invites,
-    get_inactive_users,
+    get_inactive_users, get_unverified_users,
 )
 from app.email_service import email_service
 from app import storage
@@ -234,7 +234,6 @@ async def _send_reengagement_notifications():
         username = user.get("full_name") or user["username"]
         try:
             prefs = get_notification_prefs(user_id)
-            # Respect push_enabled preference; always attempt email
             tokens = get_push_tokens_for_users([user_id])
             if tokens and prefs.get("push_enabled", True):
                 await _send_push(
@@ -243,11 +242,35 @@ async def _send_reengagement_notifications():
                     body="Your clubs have new activity — come check what you've missed.",
                     data={"link_type": "home"},
                 )
-            email_service.send_reengagement(user["email"], username)
+            if prefs.get("notify_reminders", True):
+                email_service.send_reengagement(user["email"], username)
         except Exception as e:
             print(f"[REENGAGEMENT] Error notifying user {user_id}: {e}")
 
     print(f"[REENGAGEMENT] Job complete — notified {len(inactive)} user(s)")
+
+
+async def _send_verification_reminders():
+    """Weekly job: remind accounts 1-30 days old that still haven't verified
+    their email. A fresh token is minted per send since the link expires in 24h."""
+    print("[VERIFY-REMINDER] Starting verification reminder job")
+    try:
+        unverified = get_unverified_users(days_min=1, days_max=30)
+    except Exception as e:
+        print(f"[VERIFY-REMINDER] Failed to fetch unverified users: {e}")
+        return
+
+    print(f"[VERIFY-REMINDER] Found {len(unverified)} unverified user(s)")
+    for user in unverified:
+        user_id = user["id"]
+        username = user.get("full_name") or user["username"]
+        try:
+            token, _ = create_verification_token(user_id)
+            email_service.send_verification_reminder(user["email"], username, token)
+        except Exception as e:
+            print(f"[VERIFY-REMINDER] Error notifying user {user_id}: {e}")
+
+    print(f"[VERIFY-REMINDER] Job complete — notified {len(unverified)} user(s)")
 
 
 @app.on_event("startup")
@@ -262,6 +285,8 @@ async def startup():
     asyncio.create_task(_session_cleanup_loop())
     scheduler.add_job(_send_reengagement_notifications, 'cron', day_of_week='mon', hour=10, minute=0,
                       id='reengagement', replace_existing=True)
+    scheduler.add_job(_send_verification_reminders, 'cron', day_of_week='thu', hour=10, minute=0,
+                      id='verification-reminder', replace_existing=True)
     scheduler.start()
     print("API Gateway started")
 
@@ -885,8 +910,6 @@ async def verify_email(request: EmailVerifyRequest):
     if not user_id:
         raise HTTPException(status_code=400, detail="Invalid or expired verification token")
 
-    update_user_email_verified(user_id)
-
     return {"message": "Email verified successfully"}
 
 
@@ -933,6 +956,10 @@ async def reset_password(request: ResetPasswordRequest):
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
     update_user_password(user_id, request.new_password)
+
+    # A password reset implies the account may have been compromised — unlike an
+    # in-app password change, there's no "current" session to preserve here.
+    delete_all_sessions(user_id)
 
     return {"message": "Password reset successfully"}
 
@@ -1037,6 +1064,7 @@ async def upload_avatar(file: UploadFile = File(...), current_user: dict = Depen
     public_url = storage.upload_bytes(storage.BUCKET_AVATARS, object_name, content, mime)
     update_user_profile(current_user["id"], avatar_url=public_url)
     return {"avatar_url": public_url}
+
 
 
 # ===== Admin Endpoints =====

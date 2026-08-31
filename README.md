@@ -2,7 +2,9 @@
 
 **ClubPal** is a social events app for recurring friend groups — track whose turn it is to host, schedule outings, rate experiences, and keep everyone in the loop.
 
-This repository contains the full self-hosted stack: seven FastAPI microservices, a React web UI, PostgreSQL, local filesystem object storage, and Nginx — all orchestrated with Docker Compose.
+This repository contains the full self-hosted stack: six FastAPI microservices, a React web UI, PostgreSQL, local filesystem object storage, and Nginx — all orchestrated with Docker Compose.
+
+clubPal is also available as native iOS and Android apps.
 
 ---
 

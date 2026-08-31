@@ -3,7 +3,7 @@
 ## Stack
 - **Web:** Vite + React 18 + React Router v6 + axios + Tailwind 3 (class-based dark mode)
 - **Backend:** FastAPI microservices (Python), SQLite, Docker
-- **Services:** gateway :8001 · groups :8002 · events :8003 · enrichment :8006 · bill-split :8007
+- **Services:** gateway :8001 · groups :8002 · events :8003 · enrichment :8006
 
 ---
 
@@ -18,14 +18,14 @@ web/src/components/events/      — EventHeroCard, RatingCard, AttendanceCard, P
                                    CommentsCard, EventMetaCard, RateEventModal
 web/src/components/groups/      — GroupEventsCard, MembersCard, etc.
 web/src/components/dashboard/   — StatCard, EventItem, UpcomingEventsCard, TurnQueueCard, HeroBanner
-web/src/components/modals/      — EditEventModal, BillSplitModal
+web/src/components/modals/      — EditEventModal
 web/src/pages/                  — one file per route
 ```
 
 ## Web — API Clients
 ```js
 import { gatewayClient, groupsClient, eventsClient,
-         ratingsClient, activitiesClient, enrichClient, billSplitClient } from '../../api/client'
+         ratingsClient, activitiesClient, enrichClient } from '../../api/client'
 ```
 - `gatewayClient` → `/api/gateway` — auth, users, notifications, invites, saved items
 - `groupsClient` → `/api/groups` — groups, members, rotation, polls (injects `user_id` param)
@@ -33,7 +33,6 @@ import { gatewayClient, groupsClient, eventsClient,
 - `ratingsClient` → `/api/ratings`
 - `activitiesClient` → `/api/activities` — discover
 - `enrichClient` → `/api/enrich`
-- `billSplitClient` → `/api/bill-splits`
 - Auth header auto-injected from `localStorage.session_token`; 401 → redirect to /login
 
 ## Web — Auth & Theme
@@ -71,7 +70,6 @@ backend/services/groups-service/                — groups, members, rotation, p
 backend/services/events-service/                — events, attendees, rsvp, photos, comments
 backend/services/ratings-service/               — event ratings
 backend/services/enrichment-service/            — discover / activity enrichment
-backend/services/bill-split-service/            — bill splitting
 ```
 
 ## Backend — Auth Pattern
@@ -172,8 +170,7 @@ POST /internal/notify/rotation   body: {user_id, group_name, group_id}
 POST /internal/notify/event      body: {user_ids|group_id, event_title, type, event_id, ...}
                                   types: created|recurring|reminder|rsvp_reminder|rsvp_nudge|
                                          rsvp_deadline_final|poll|invite|event_cancelled|
-                                         event_edit|social_rsvp|rating_prompt|
-                                         bill_split_assigned|bill_split_claiming
+                                         event_edit|social_rsvp|rating_prompt
 POST /internal/notify/push       body: {user_id, title, body, link_type?, link_id?}
 GET  /internal/integrations
 GET  /internal/admin-email
@@ -216,7 +213,14 @@ backend/services/events-service/                   → premium: same path (entir
 backend/services/ratings-service/                  → premium: same path (entire directory)
 backend/services/activities-service/               → premium: same path (entire directory)
 backend/services/enrichment-service/               → premium: same path (entire directory)
-backend/services/bill-split-service/               → premium: same path (entire directory)
+```
+
+### Intentional core/premium divergence — do not "fix" these
+```
+backend/services/bill-split-service/  → premium only. Removed from core deliberately
+                                         (2026-08) to keep self-hosting bare-bones with
+                                         minimal setup. Do not re-add, and do not treat
+                                         its absence here as a sync gap to close.
 ```
 
 ### Premium-only files — never create or modify these in core

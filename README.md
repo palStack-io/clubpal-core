@@ -2,7 +2,7 @@
 
 **ClubPal** is a social events app for recurring friend groups — track whose turn it is to host, schedule outings, rate experiences, and keep everyone in the loop.
 
-This repository contains the full self-hosted stack: seven FastAPI microservices, a React web UI, PostgreSQL, MinIO object storage, and Nginx — all orchestrated with Docker Compose.
+This repository contains the full self-hosted stack: seven FastAPI microservices, a React web UI, PostgreSQL, local filesystem object storage, and Nginx — all orchestrated with Docker Compose.
 
 ---
 
@@ -13,7 +13,7 @@ This repository contains the full self-hosted stack: seven FastAPI microservices
 | Web UI | React 18 · Vite 5 · Tailwind CSS |
 | API services | Python 3.11 · FastAPI · uvicorn |
 | Database | PostgreSQL 15 (one database per service) |
-| Object storage | MinIO (S3-compatible) |
+| Object storage | Local filesystem (shared Docker volume) |
 | Reverse proxy | Nginx 1.25 |
 | Containerisation | Docker Compose |
 | CI | GitHub Actions → ghcr.io |
@@ -44,21 +44,19 @@ cp .env.example .env
 docker compose up --build -d
 ```
 
-First boot initialises all seven databases and creates the MinIO buckets automatically. Give it ~30 seconds.
+First boot initialises all six databases and creates the local storage directories automatically. Give it ~30 seconds.
 
 ### 3. Open the app
 
 | URL | What you get |
 |---|---|
 | `http://localhost:9000` | ClubPal web UI |
-| `http://localhost:9001` | MinIO admin console |
 | `http://localhost:9000/docs/auth` | API Gateway Swagger |
 | `http://localhost:9000/docs/groups` | Groups Service Swagger |
 | `http://localhost:9000/docs/events` | Events Service Swagger |
 | `http://localhost:9000/docs/ratings` | Ratings Service Swagger |
 | `http://localhost:9000/docs/activities` | Activities Service Swagger |
 | `http://localhost:9000/docs/enrich` | Enrichment Service Swagger |
-| `http://localhost:9000/docs/bill-splits` | Bill Split Service Swagger |
 
 ---
 
@@ -85,15 +83,14 @@ clubpal_core/
 │
 ├── backend/
 │   ├── pg-init/
-│   │   └── init-databases.sh   # Creates all 7 PostgreSQL databases at first boot
+│   │   └── init-databases.sh   # Creates all 6 PostgreSQL databases at first boot
 │   └── services/
 │       ├── api-gateway/        # :8001 — auth, users, invites, file uploads
 │       ├── groups-service/     # :8002 — groups, members, rotation, comments
 │       ├── events-service/     # :8003 — events, attendees, comments, images
 │       ├── ratings-service/    # :8004 — ratings, stats, leaderboard
 │       ├── activities-service/ # :8005 — activity types and categories
-│       ├── enrichment-service/ # :8006 — external API cache (Places, TMDB, IGDB)
-│       └── bill-split-service/ # :8007 — receipt OCR, bill splitting, settlement
+│       └── enrichment-service/ # :8006 — external API cache (Places, TMDB, IGDB)
 │
 ├── docs/
 │   └── ARCHITECTURE.md         # Deep-dive: services, schemas, auth, env vars
@@ -113,7 +110,7 @@ Each service folder follows the same structure:
     ├── main.py       # FastAPI app + routes
     ├── models.py     # Pydantic request/response models
     ├── database.py   # psycopg2 data access layer
-    └── storage.py    # MinIO helpers (where applicable)
+    └── storage.py    # local filesystem storage helpers (where applicable)
 ```
 
 ---
@@ -218,26 +215,6 @@ Owns all user identity concerns.
 | GET | `/api-usage` | Call counts and cache-hit rate per API |
 | GET/PUT/DELETE | `/admin/integrations` | Manage API keys (admin only) |
 
-### Bill Split Service — `/api/bill-splits/` → `:8007`
-
-Handles receipt scanning, bill creation, collaborative item claiming, and payment tracking for dining events.
-
-| Method | Path | Auth | Description |
-|---|---|---|---|
-| POST | `/ocr` | Bearer | Scan receipt image → extract items, tax, tip |
-| POST | `/` | Bearer | Create bill split for an event |
-| GET | `/event/{event_id}` | Bearer | Get split + shares for an event |
-| POST | `/pay/{token}` | — | One-tap mark-as-paid (public, email link) |
-| PATCH | `/{id}/shares/{uid}/paid` | Bearer (payer) | Manually mark a share as paid |
-| POST | `/{id}/reminders` | Bearer (payer) | Resend payment reminder emails |
-| POST | `/{id}/start-claiming` | Bearer (payer) | Generate collaborative claim link |
-| GET | `/claim/{token}` | Bearer | Member view: see items to claim |
-| POST | `/claim/{token}/submit` | Bearer | Member submits their item selections |
-| GET | `/{id}/claiming-status` | Bearer (payer) | Live claiming progress per member |
-| POST | `/{id}/finalize` | Bearer (payer) | Lock claims, recompute shares, send emails |
-| GET | `/admin/ocr-stats` | Bearer (admin) | OCR usage stats and cost estimate |
-| POST | `/admin/reload-config` | Internal secret | Reload Vision API key from gateway |
-
 ---
 
 ## Environment variables
@@ -249,9 +226,7 @@ Copy `.env.example` to `.env` before running. Defaults work for local dev.
 | Variable | Default | Used by |
 |---|---|---|
 | `POSTGRES_PASSWORD` | `clubpal` | db |
-| `MINIO_ROOT_USER` | `clubpal` | minio + all services |
-| `MINIO_ROOT_PASSWORD` | `clubpalpassword` | minio + all services |
-| `MINIO_PUBLIC_URL` | `http://localhost:9000/storage` | api-gateway, groups, events, enrichment |
+| `STORAGE_PUBLIC_URL` | `http://localhost:9000/storage` | api-gateway, groups, events, enrichment |
 | `FRONTEND_URL` | `http://localhost:9000` | api-gateway (email links) |
 
 ### Email (optional — leave blank to disable)
@@ -276,14 +251,6 @@ Copy `.env.example` to `.env` before running. Defaults work for local dev.
 | `RADARR_API_KEY` | Radarr authentication |
 | `SONARR_URL` | "In Library" badge on TV show cards (e.g. `http://192.168.1.10:8989`) |
 | `SONARR_API_KEY` | Sonarr authentication |
-
-### Bill split (optional)
-
-| Variable | Enables |
-|---|---|
-| `GOOGLE_CLOUD_VISION_API_KEY` | Receipt OCR — scan photos to auto-extract items, tax, tip |
-
-> Without the Vision key the bill-split service starts fine. Users can still create splits by entering items manually.
 
 > All external keys can also be set at runtime by an admin user via **Admin Panel → Integrations** in the web UI — no restart required.
 
@@ -365,9 +332,8 @@ On every push to `main`, GitHub Actions builds and pushes all Docker images to t
 | `ghcr.io/<owner>/clubpal-ratings-service` | `latest`, `<git-sha>` |
 | `ghcr.io/<owner>/clubpal-activities-service` | `latest`, `<git-sha>` |
 | `ghcr.io/<owner>/clubpal-enrichment-service` | `latest`, `<git-sha>` |
-| `ghcr.io/<owner>/clubpal-bill-split-service` | `latest`, `<git-sha>` |
 
-The workflow uses `GITHUB_TOKEN` — no extra secrets required. All seven service builds run in parallel via a matrix job.
+The workflow uses `GITHUB_TOKEN` — no extra secrets required. All six service builds run in parallel via a matrix job.
 
 ---
 

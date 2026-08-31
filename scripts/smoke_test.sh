@@ -98,7 +98,6 @@ expect_status "events-service /health"     200 "$BASE/api/events/health"
 expect_status "ratings-service /health"    200 "$BASE/api/ratings/health"
 expect_status "activities-service /health" 200 "$BASE/api/activities/health"
 expect_status "enrichment-service /health" 200 "$BASE/api/enrich/health"
-expect_status "bill-split /health"         200 "$BASE/api/bill-splits/health"
 
 # ── 2. Security headers ───────────────────────────────────────────────────────
 echo ""

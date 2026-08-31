@@ -119,7 +119,6 @@ jobs:
           - ratings-service
           - activities-service
           - enrichment-service
-          - bill-split-service
 
     steps:
       - name: Checkout

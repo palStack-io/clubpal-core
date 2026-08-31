@@ -2,7 +2,7 @@
 # Run pip-audit on all backend services and npm audit on the web UI
 set -e
 
-SERVICES=(api-gateway groups-service events-service ratings-service activities-service enrichment-service bill-split-service)
+SERVICES=(api-gateway groups-service events-service ratings-service activities-service enrichment-service)
 
 echo "=== Python dependency audit ==="
 for svc in "${SERVICES[@]}"; do

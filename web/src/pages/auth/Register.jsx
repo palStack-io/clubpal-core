@@ -29,12 +29,26 @@ const LockIcon = () => (
 )
 
 export default function Register() {
-  const { register, loginWithGoogle } = useAuth()
+  const { register, loginWithGoogle, confirmLink } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState({ fullName: '', email: '', username: '', password: '', confirmPassword: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [fieldErrors, setFieldErrors] = useState({})
+  const [linkPending, setLinkPending] = useState(null)
+  const [linking, setLinking] = useState(false)
+
+  const handleConfirmLink = async () => {
+    setLinking(true)
+    const result = await confirmLink(linkPending.linkToken)
+    setLinking(false)
+    if (result.success) {
+      navigate('/dashboard')
+    } else {
+      setLinkPending(null)
+      setError(result.error)
+    }
+  }
 
   const set = key => e => {
     setForm(f => ({ ...f, [key]: e.target.value }))
@@ -80,7 +94,24 @@ export default function Register() {
           <p className="cp-auth-subtitle">Join clubPal today</p>
         </div>
 
-        {error && (
+        {linkPending && (
+          <div className="cp-auth-error" style={{ borderColor: 'var(--rose-border, #f43f5e55)', background: 'var(--rose-glow, rgba(244,63,94,0.08))' }}>
+            <span style={{ fontSize: '15px', lineHeight: 1 }}>🔗</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--t1)' }}>{linkPending.message}</div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <Button size="sm" loading={linking} onClick={handleConfirmLink}>
+                  Confirm & Link Account
+                </Button>
+                <Button size="sm" variant="ghost" disabled={linking} onClick={() => setLinkPending(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {error && !linkPending && (
           <div className="cp-auth-error">
             <span style={{ fontSize: '15px', lineHeight: 1 }}>⚠️</span>
             <span style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--error)' }}>{error}</span>
@@ -182,9 +213,15 @@ export default function Register() {
                 text="signup_with"
                 onSuccess={async ({ credential }) => {
                   setError('')
+                  setLinkPending(null)
                   const result = await loginWithGoogle(credential)
-                  if (result.success) navigate('/dashboard')
-                  else setError(result.error)
+                  if (result.success) {
+                    navigate('/dashboard')
+                  } else if (result.linkRequired) {
+                    setLinkPending(result)
+                  } else {
+                    setError(result.error)
+                  }
                 }}
                 onError={() => setError('Google sign-up failed. Please try again.')}
               />

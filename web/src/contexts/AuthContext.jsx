@@ -3,6 +3,21 @@ import { authApi } from '../api/auth'
 
 const AuthContext = createContext(null)
 
+// FastAPI's `detail` field isn't always a string — it can be an object (e.g. our
+// LINK_REQUIRED payload) or a list (422 validation errors). Calling .toLowerCase()
+// or rendering a non-string detail directly crashes the page, so every catch block
+// funnels through here instead of reading err.response?.data?.detail raw.
+function extractErrorMessage(err, fallback) {
+  const detail = err?.response?.data?.detail
+  if (!detail) return fallback
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) {
+    return detail.map(d => d?.msg || (typeof d === 'string' ? d : null)).filter(Boolean).join('; ') || fallback
+  }
+  if (typeof detail === 'object') return detail.message || fallback
+  return fallback
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -27,7 +42,7 @@ export function AuthProvider({ children }) {
       setUser(data.user)
       return { success: true }
     } catch (err) {
-      return { success: false, error: err.response?.data?.detail || 'Login failed' }
+      return { success: false, error: extractErrorMessage(err, 'Login failed') }
     }
   }
 
@@ -38,7 +53,7 @@ export function AuthProvider({ children }) {
       setUser(data.user)
       return { success: true }
     } catch (err) {
-      return { success: false, error: err.response?.data?.detail || 'Registration failed' }
+      return { success: false, error: extractErrorMessage(err, 'Registration failed') }
     }
   }
 
@@ -63,14 +78,36 @@ export function AuthProvider({ children }) {
       setUser(data.user)
       return { success: true }
     } catch (err) {
-      return { success: false, error: err.response?.data?.detail || 'Google sign-in failed' }
+      const detail = err?.response?.data?.detail
+      if (detail && typeof detail === 'object' && detail.code === 'LINK_REQUIRED') {
+        return {
+          success: false,
+          linkRequired: true,
+          linkToken: detail.link_token,
+          email: detail.email,
+          provider: detail.provider,
+          message: detail.message,
+        }
+      }
+      return { success: false, error: extractErrorMessage(err, 'Google sign-in failed') }
+    }
+  }
+
+  const confirmLink = async (linkToken) => {
+    try {
+      const data = await authApi.confirmOidcLink(linkToken)
+      localStorage.setItem('user', JSON.stringify(data.user))
+      setUser(data.user)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: extractErrorMessage(err, 'Failed to link account') }
     }
   }
 
   const isAuthenticated = !!user
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAuthenticated, login, register, logout, updateUser, loginWithGoogle }}>
+    <AuthContext.Provider value={{ user, loading, isAuthenticated, login, register, logout, updateUser, loginWithGoogle, confirmLink }}>
       {children}
     </AuthContext.Provider>
   )

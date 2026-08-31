@@ -21,13 +21,20 @@ const LockIcon = () => (
 )
 
 export default function Login() {
-  const { login, loginWithGoogle } = useAuth()
+  const { login, loginWithGoogle, confirmLink } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [form, setForm] = useState({ username: '', password: '' })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [showPwd, setShowPwd] = useState(false)
+  const [linkPending, setLinkPending] = useState(null)
+  const [linking, setLinking] = useState(false)
+
+  const goToNext = () => {
+    const next = searchParams.get('next')
+    navigate(next?.startsWith('/') ? next : '/dashboard')
+  }
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -36,8 +43,20 @@ export default function Login() {
     const result = await login(form.username, form.password)
     setLoading(false)
     if (result.success) {
-      navigate(searchParams.get('next') || '/dashboard')
+      goToNext()
     } else {
+      setError(result.error)
+    }
+  }
+
+  const handleConfirmLink = async () => {
+    setLinking(true)
+    const result = await confirmLink(linkPending.linkToken)
+    setLinking(false)
+    if (result.success) {
+      goToNext()
+    } else {
+      setLinkPending(null)
       setError(result.error)
     }
   }
@@ -54,7 +73,24 @@ export default function Login() {
           <p className="cp-auth-subtitle">Sign in to your account</p>
         </div>
 
-        {error && (
+        {linkPending && (
+          <div className="cp-auth-error" style={{ borderColor: 'var(--rose-border, #f43f5e55)', background: 'var(--rose-glow, rgba(244,63,94,0.08))' }}>
+            <span style={{ fontSize: '15px', lineHeight: 1 }}>🔗</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--t1)' }}>{linkPending.message}</div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+                <Button size="sm" loading={linking} onClick={handleConfirmLink}>
+                  Confirm & Link Account
+                </Button>
+                <Button size="sm" variant="ghost" disabled={linking} onClick={() => setLinkPending(null)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {error && !linkPending && (
           <div className="cp-auth-error">
             <span style={{ fontSize: '15px', lineHeight: 1 }}>⚠️</span>
             <div>
@@ -133,9 +169,15 @@ export default function Login() {
                 text="signin_with"
                 onSuccess={async ({ credential }) => {
                   setError('')
+                  setLinkPending(null)
                   const result = await loginWithGoogle(credential)
-                  if (result.success) navigate('/dashboard')
-                  else setError(result.error)
+                  if (result.success) {
+                    goToNext()
+                  } else if (result.linkRequired) {
+                    setLinkPending(result)
+                  } else {
+                    setError(result.error)
+                  }
                 }}
                 onError={() => setError('Google sign-in failed. Please try again.')}
               />

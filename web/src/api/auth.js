@@ -16,6 +16,7 @@ export const authApi = {
   updateProfile: (data) =>
     gatewayClient.patch('/users/me', data).then(r => r.data),
 
+
   uploadAvatar: (file) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -65,6 +66,9 @@ export const authApi = {
 
   oidcLogin: (idToken, provider = 'google') =>
     gatewayClient.post('/auth/oidc', { provider, id_token: idToken }).then(r => r.data),
+
+  confirmOidcLink: (linkToken) =>
+    gatewayClient.post('/auth/oidc/confirm-link', { link_token: linkToken }).then(r => r.data),
 
   linkOidc: (idToken, provider = 'google') =>
     gatewayClient.post('/auth/link', { provider, id_token: idToken }).then(r => r.data),

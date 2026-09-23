@@ -180,7 +180,7 @@ clubpal-core/
 ├── nginx/                         # multi-stage build: web UI + reverse proxy
 ├── backup/                        # scheduled pg_dump + storage backups
 ├── scripts/                       # smoke_test.sh, e2e_test.sh, security_audit.sh
-└── docs/                          # ARCHITECTURE.md, CODE_AUDIT.md, UI checklists
+└── docs/ARCHITECTURE.md           # services, schemas, auth flow, nginx routing
 ```
 
 ## CI / CD

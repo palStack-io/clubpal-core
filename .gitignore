@@ -65,4 +65,7 @@ CLAUDE.md
 receipt.jpg
 
 # ── Internal docs / audit files ──────────────────────────────────────────────
-docs/
+# Everything in docs/ stays local (audits, checklists, bug trackers, plans).
+# ARCHITECTURE.md is the one public doc: the README links to it.
+docs/*
+!docs/ARCHITECTURE.md

@@ -13,6 +13,8 @@ import RateEventModal from '../../components/events/RateEventModal'
 import AnimatedBackground from '../../components/ui/AnimatedBackground'
 import EventBringListCard from '../../components/events/EventBringListCard'
 import { eventsApi } from '../../api/events'
+import { groupsApi } from '../../api/groups'
+import { useToast } from '../../components/ui/Toast'
 import { ratingsClient, gatewayClient } from '../../api/client'
 import { useAuth } from '../../contexts/AuthContext'
 
@@ -35,6 +37,7 @@ export default function EventDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const toast = useToast()
 
   const [event, setEvent] = useState(null)
   const [attendees, setAttendees] = useState([])
@@ -49,6 +52,7 @@ export default function EventDetail() {
   const [isBookmarked, setIsBookmarked] = useState(false)
   const [showEndConfirm, setShowEndConfirm] = useState(false)
   const [remindToast, setRemindToast] = useState(null)
+  const [myGroupRole, setMyGroupRole] = useState(null)
 
   const fetchAll = async () => {
     try {
@@ -82,6 +86,16 @@ export default function EventDetail() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (!event?.group_id || !user?.id) return
+    groupsApi.getMembers(event.group_id)
+      .then(members => {
+        const me = (members || []).find(m => String(m.user_id) === String(user.id))
+        setMyGroupRole(me?.role || null)
+      })
+      .catch(() => setMyGroupRole(null))
+  }, [event?.group_id, user?.id])
 
   useEffect(() => {
     fetchAll()
@@ -122,6 +136,20 @@ export default function EventDetail() {
       // ignore
     } finally {
       setRsvpLoading(false)
+    }
+  }
+
+  // Owner / event creator setting RSVP on someone's behalf
+  const handleSetMemberRsvp = async (member, status) => {
+    const name = (member.full_name || member.username || 'them').split(' ')[0]
+    try {
+      await eventsApi.updateRsvp(id, member.user_id, status)
+      toast.success(`Updated ${name}'s RSVP. We'll give them a heads-up.`)
+      fetchAll()
+      return true
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || `Couldn't update ${name}'s RSVP. Please try again.`)
+      return false
     }
   }
 
@@ -194,6 +222,7 @@ export default function EventDetail() {
 
   const isHost = user?.id != null && event.host_user_id != null && String(user.id) === String(event.host_user_id)
   const isCreator = user?.id != null && String(user.id) === String(event.created_by ?? event.host_user_id)
+  const canManageRsvps = isHost || isCreator || myGroupRole === 'owner'
 
   const handleRsvpReminder = async () => {
     try {
@@ -324,6 +353,8 @@ export default function EventDetail() {
               eventId={id}
               eventStatus={event.status}
               onRsvpChange={handleRsvp}
+              canManageRsvps={canManageRsvps}
+              onSetMemberRsvp={handleSetMemberRsvp}
               rsvpDeadline={event.rsvp_deadline}
               maxAttendees={event.max_attendees}
             />

@@ -10,7 +10,55 @@ function vibeLabel(avg) {
   return { label: '😌 Easy going', color: 'var(--amber)' }
 }
 
-export default function UserStatsModal({ member, canManage, onRoleChange, onRemove, onClose, isAdmin, isCurrent, rotationEnabled, onSkipTurn, onSetTurn, rotationActionLoading }) {
+const RSVP_OPTIONS = [
+  { label: '✓ Going', value: 'going' },
+  { label: '? Maybe', value: 'maybe' },
+  { label: "✕ Can't Make It", value: 'not_going' },
+]
+
+function RsvpForMember({ member, control }) {
+  const [saving, setSaving] = useState(null)
+  const firstName = (member.full_name || member.username || 'them').split(' ')[0]
+
+  const pick = async (value) => {
+    if (saving || value === control.status) return
+    setSaving(value)
+    try { await control.onChange(value) } finally { setSaving(null) }
+  }
+
+  return (
+    <div style={{ marginTop: '16px', marginBottom: '16px', padding: '14px', background: 'var(--s3)', borderRadius: '14px', border: '1px solid var(--glass)' }}>
+      <div style={{ fontSize: '12px', fontWeight: 800, color: 'var(--t1)' }}>RSVP for {firstName}</div>
+      <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '3px', marginBottom: '10px', lineHeight: 1.4 }}>
+        Helping a friend out? We'll let {firstName} know you updated it, and they can change it anytime.
+      </div>
+      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+        {RSVP_OPTIONS.map(({ label, value }) => {
+          const active = control.status === value
+          return (
+            <button
+              key={value}
+              onClick={() => pick(value)}
+              disabled={!!saving}
+              style={{
+                padding: '6px 12px', fontSize: '11px', fontWeight: 700, borderRadius: '100px',
+                cursor: saving ? 'not-allowed' : 'pointer', transition: 'all 0.15s',
+                opacity: saving && saving !== value ? 0.6 : 1,
+                ...(active
+                  ? { background: 'rgba(244,63,94,0.15)', color: 'var(--rose-soft)', border: '1px solid var(--rose-border)' }
+                  : { background: 'var(--s4)', color: 'var(--t3)', border: '1px solid var(--glass)' }),
+              }}
+            >
+              {saving === value ? '…' : label}
+            </button>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+export default function UserStatsModal({ member, canManage, onRoleChange, onRemove, onClose, isAdmin, isCurrent, rotationEnabled, onSkipTurn, onSetTurn, rotationActionLoading, rsvpControl }) {
   const [stats, setStats] = useState(null)
   const ref = useRef(null)
 
@@ -113,6 +161,9 @@ export default function UserStatsModal({ member, canManage, onRoleChange, onRemo
             </div>
           </div>
         )}
+
+        {/* RSVP on their behalf — club owner / event creator only */}
+        {rsvpControl && <RsvpForMember member={member} control={rsvpControl} />}
 
         {/* Admin actions */}
         {(canManage || (isAdmin && rotationEnabled)) && (

@@ -41,6 +41,8 @@ export default function AttendanceCard({
   eventId,
   eventStatus,
   onRsvpChange,
+  canManageRsvps = false,
+  onSetMemberRsvp,
   rsvpDeadline,
   maxAttendees,
 }) {
@@ -184,6 +186,15 @@ export default function AttendanceCard({
       <UserStatsModal
         member={selectedAttendee}
         onClose={() => setSelectedAttendee(null)}
+        rsvpControl={
+          canManageRsvps && onSetMemberRsvp && eventStatus === 'scheduled'
+            && String(selectedAttendee.user_id) !== String(currentUser?.id)
+            ? {
+                status: attendees.find(a => a.user_id === selectedAttendee.user_id)?.status || selectedAttendee.status,
+                onChange: (status) => onSetMemberRsvp(selectedAttendee, status),
+              }
+            : null
+        }
       />
     )}
   </>

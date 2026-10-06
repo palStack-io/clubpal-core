@@ -1309,27 +1309,121 @@ async def claim_event_bring_item(event_id: int, item_id: int, body: EventItemCla
     return EventBringItemResponse(**item)
 
 
+async def _get_group_role(group_id: int, user_id: int) -> Optional[str]:
+    """Return user_id's role in group_id ('owner' / 'admin' / 'member'), or None if not a member."""
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            r = await client.get(
+                f"{GROUPS_SERVICE_URL}/internal/groups/{group_id}/members",
+                headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
+            )
+            if r.status_code == 200:
+                for m in r.json():
+                    if m["user_id"] == user_id:
+                        return m.get("role") or "member"
+    except Exception:
+        pass
+    return None
+
+
+async def _can_manage_rsvps(event: dict, requester_id: int) -> bool:
+    """The event's creator/host and the group owner can set RSVPs on behalf of other members."""
+    if requester_id in (event.get("created_by"), event.get("host_user_id")):
+        return True
+    return await _get_group_role(event["group_id"], requester_id) == "owner"
+
+
+async def _assert_can_manage_attendance(event_id: int, target_user_id: int, requester_id: int) -> dict:
+    """Anyone can change their own attendance; changing someone else's needs _can_manage_rsvps."""
+    event = get_event(event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    if requester_id != target_user_id and not await _can_manage_rsvps(event, requester_id):
+        raise HTTPException(status_code=403, detail="Only the club owner or the event's creator can update someone else's RSVP")
+    return event
+
+
+async def _get_first_name(user_id: int) -> str:
+    try:
+        async with httpx.AsyncClient(timeout=3.0) as client:
+            r = await client.get(
+                f"{GATEWAY_URL}/internal/users/{user_id}/profile",
+                headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
+            )
+            if r.status_code == 200:
+                p = r.json()
+                if p.get("full_name"):
+                    return p["full_name"].split()[0]
+                if p.get("username"):
+                    return p["username"]
+    except Exception:
+        pass
+    return "Someone"
+
+
+def _rsvp_set_for_you_copy(setter: str, event_title: str, status: str) -> tuple:
+    """Push/in-app copy for a member whose RSVP someone else updated."""
+    if status == "going":
+        return (f"You're in for {event_title} 🎉",
+                f"{setter} saved you a spot. If your plans change, you can update your RSVP anytime.")
+    if status == "maybe":
+        return (f"{setter} penciled you in for {event_title}",
+                "You're down as a maybe for now. Update your RSVP whenever you know more.")
+    return (f"We'll miss you at {event_title}",
+            f"{setter} let everyone know you can't make it. If plans change, you're always welcome back.")
+
+
 @app.patch("/events/{event_id}/attendees/{user_id}", response_model=AttendeeResponse)
 async def update_attendee_status_endpoint(event_id: int, user_id: int,
                                          status_data: AttendeeUpdateStatus, requester_id: int = Depends(get_current_user_id)):
-    """Update an attendee's status."""
-    # Check if attendee exists
-    if not get_attendee(event_id, user_id):
-        raise HTTPException(status_code=404, detail="Attendee not found")
+    """Set an attendee's RSVP. The attendee themselves, the event's creator/host, or the group owner."""
+    event = await _assert_can_manage_attendance(event_id, user_id, requester_id)
 
-    # Update status
-    success = update_attendee_status(event_id, user_id, status_data.status)
+    existing = get_attendee(event_id, user_id)
+    if not existing:
+        # Members who never responded may not have a row yet; only create one for group members.
+        if not await _is_group_member(event["group_id"], user_id):
+            raise HTTPException(status_code=404, detail="Attendee not found")
 
-    if not success:
-        raise HTTPException(status_code=500, detail="Failed to update attendee status")
+    previous_status = existing["status"] if existing else None
+    if status_data.status == previous_status:
+        return AttendeeResponse(**existing)
 
-    attendee = get_attendee(event_id, user_id)
+    if status_data.status == "going" and event.get("max_attendees"):
+        going_count = sum(1 for a in get_attendees(event_id)
+                          if a["status"] == "going" and a["user_id"] != user_id)
+        if going_count >= event["max_attendees"]:
+            raise HTTPException(status_code=409, detail="This event is full")
+
+    attendee = upsert_attendee(event_id, user_id, status_data.status)
+
+    # Let the member know someone else updated their RSVP (fire-and-forget)
+    if requester_id != user_id:
+        try:
+            setter = await _get_first_name(requester_id)
+            title, body = _rsvp_set_for_you_copy(setter, event["title"], status_data.status)
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                await client.post(
+                    f"{GATEWAY_URL}/internal/notify/push",
+                    json={
+                        "user_id": user_id,
+                        "title": title[:200],
+                        "body": body[:500],
+                        "link_type": "event",
+                        "link_id": event_id,
+                    },
+                    headers={"x-internal-secret": os.getenv("INTERNAL_API_SECRET", "")},
+                )
+        except Exception as e:
+            logger.warning(f"Failed to notify user {user_id} of RSVP update on event {event_id}: {e}")
+
     return AttendeeResponse(**attendee)
 
 
 @app.delete("/events/{event_id}/attendees/{user_id}", status_code=204)
 async def remove_attendee_endpoint(event_id: int, user_id: int, requester_id: int = Depends(get_current_user_id)):
-    """Remove an attendee from an event."""
+    """Remove an attendee from an event. The attendee themselves, the event's creator/host, or the group owner."""
+    await _assert_can_manage_attendance(event_id, user_id, requester_id)
     success = remove_attendee(event_id, user_id)
 
     if not success:

@@ -256,6 +256,11 @@ async def _notify_group_members(group_id: int, event_id: int, event_title: str,
         logger.warning(f"Failed to notify members for event {event_id}: {e}")
 
 
+# An event with no RSVP deadline still gets the three touches: its answers are treated as due
+# 24 hours before it starts (COALESCE(rsvp_deadline, scheduled_date - 24h) in the two queries
+# below). The reminders just don't quote a deadline that was never set.
+
+
 def _unanswered_member_ids(event_id: int, exclude: tuple = ()) -> List[int]:
     """Members who haven't answered: their attendee row is still 'pending'. Anyone who
     said going, maybe or not_going — and anyone the host removed — is left alone."""
@@ -272,8 +277,7 @@ async def send_rsvp_deadline_reminders():
     cursor = conn.cursor()
     cursor.execute("""
         SELECT * FROM events
-        WHERE rsvp_deadline BETWEEN NOW() AND NOW() + INTERVAL '25 hours'
-          AND rsvp_deadline > NOW()
+        WHERE COALESCE(rsvp_deadline, scheduled_date - INTERVAL '24 hours') BETWEEN NOW() AND NOW() + INTERVAL '25 hours'
           AND status = 'scheduled'
           AND (rsvp_reminder_sent IS NULL OR rsvp_reminder_sent = FALSE)
     """)
@@ -308,7 +312,8 @@ async def send_rsvp_deadline_reminders():
 
 async def send_rsvp_asks():
     """Hourly job: the one honest reminder. Sent once per event, halfway between the
-    invite (event creation) and the RSVP deadline, only to people who haven't answered.
+    invite (event creation) and the RSVP deadline (24 hours before the start when no deadline was set),
+    only to people who haven't answered.
 
     Skipped when the halfway point falls inside the last-call window (deadline within
     25 hours): the last call covers those events, so nobody is asked twice in a row.
@@ -318,10 +323,10 @@ async def send_rsvp_asks():
     cursor = conn.cursor()
     cursor.execute("""
         SELECT * FROM events
-        WHERE rsvp_deadline > NOW() + INTERVAL '25 hours'
+        WHERE COALESCE(rsvp_deadline, scheduled_date - INTERVAL '24 hours') > NOW() + INTERVAL '25 hours'
           AND status = 'scheduled'
           AND (rsvp_ask_sent IS NULL OR rsvp_ask_sent = FALSE)
-          AND created_at + (rsvp_deadline - created_at) / 2 <= NOW()
+          AND created_at + (COALESCE(rsvp_deadline, scheduled_date - INTERVAL '24 hours') - created_at) / 2 <= NOW()
     """)
     events = [dict(r) for r in cursor.fetchall()]
     conn.close()

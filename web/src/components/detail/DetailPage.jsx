@@ -60,7 +60,7 @@ const TYPE_CONFIG = {
         { label: 'Cuisine', value: d.cuisine },
         { label: 'Price', value: d.price_level ? '$'.repeat(d.price_level) : null },
         { label: 'Phone', value: d.phone, href: d.phone ? `tel:${d.phone}` : null },
-        { label: 'Website', value: d.website ? 'Visit website ↗' : null, href: d.website },
+        { label: 'Website', value: d.website ? 'Visit website' : null, href: d.website },
       ].filter(f => f.value),
       descriptionLabel: 'About',
       description: d.description,
@@ -314,7 +314,7 @@ const TYPE_CONFIG = {
       infoFields: [
         { label: 'Type', value: d.type },
         { label: 'Phone', value: d.phone, href: d.phone ? `tel:${d.phone}` : null },
-        { label: 'Website', value: d.website ? 'Visit website ↗' : null, href: d.website },
+        { label: 'Website', value: d.website ? 'Visit website' : null, href: d.website },
         { label: 'Admission', value: d.admission },
       ].filter(f => f.value),
       descriptionLabel: 'About',
@@ -661,7 +661,7 @@ export default function DetailPage({ type, itemId, data: rawData, extra = {}, lo
           fontFamily: `'DM Sans', sans-serif`,
         }}
       >
-        {isWide ? '💬 Poll Club' : '💬'}
+        {isWide ? 'Poll Group' : '💬'}
       </button>
     </div>
   )

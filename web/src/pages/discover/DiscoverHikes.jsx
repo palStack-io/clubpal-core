@@ -20,7 +20,7 @@ function SetupBanner({ onNavigate }) {
     }}>
       <div>
         <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--t1)', marginBottom: '2px' }}>
-          No personalized feed yet
+          Your personal feed will fill in as you pick things you like.
         </div>
         <div style={{ fontSize: '12px', color: 'var(--t3)' }}>
           Complete your discover setup to see nearby trails and parks.
@@ -117,7 +117,7 @@ export default function DiscoverHikes() {
 
       <SearchHero
         eyebrow="Find a trail"
-        headline="Where's your club heading?"
+        headline="Where's your group heading?"
         onSearch={doSearch}
         suggestions={['🌿 Easy', '🏔️ Challenging', '🌊 Waterfall', '🌅 Views']}
       />
@@ -140,7 +140,7 @@ export default function DiscoverHikes() {
         ) : results.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '64px 32px', color: 'var(--t3)' }}>
             <div style={{ fontSize: '48px', marginBottom: '12px' }}>🥾</div>
-            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t2)' }}>No trails found</div>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t2)' }}>Nothing matched. Try a different search.</div>
             <div style={{ fontSize: '13px', marginTop: '4px' }}>Try a different search or location</div>
           </div>
         ) : (
@@ -162,7 +162,7 @@ export default function DiscoverHikes() {
                     onClick={e => { e.stopPropagation(); setPollItem({ title: item.name, location: item.address || '' }) }}
                     style={{ background: 'var(--s2)', border: '1px solid var(--glass)', borderRadius: '8px', padding: '5px 8px', fontSize: '11px', fontWeight: 700, color: 'var(--t2)', cursor: 'pointer' }}
                   >
-                    💬 Poll
+                    Poll
                   </button>
                   <button
                     onClick={e => { e.stopPropagation(); setPickItem({ title: item.name, location: item.address || '' }) }}

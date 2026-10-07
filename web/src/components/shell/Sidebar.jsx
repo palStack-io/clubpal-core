@@ -12,7 +12,7 @@ const SIGNOUT_ICON = (
 
 const MAIN_NAV = [
   { to: '/dashboard',   label: 'Dashboard',   icon: '🏠' },
-  { to: '/groups',      label: 'My Clubs',    icon: '👥', id: 'tour-nav-groups' },
+  { to: '/groups',      label: 'My Groups',    icon: '👥', id: 'tour-nav-groups' },
   { to: '/events',      label: 'Events',      icon: '📅', id: 'tour-nav-events' },
   { to: '/stats',       label: 'Stats',       icon: '📊', id: 'tour-nav-stats' },
   { to: '/leaderboard', label: 'Leaderboard', icon: '🏆', id: 'tour-nav-leaderboard' },

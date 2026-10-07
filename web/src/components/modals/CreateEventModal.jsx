@@ -136,7 +136,7 @@ export default function CreateEventModal({
 
   const handleSubmit = async () => {
     setError('')
-    if (!title.trim()) { setError('Event name is required.'); return }
+    if (!title.trim()) { setError('What should we call this event?'); return }
     if (!resolvedGroupId) { setError('Please select a group.'); return }
 
     let scheduledDateTime = null
@@ -198,7 +198,7 @@ export default function CreateEventModal({
       onCreated && onCreated(event.id)
     } catch (err) {
       const detail = err?.response?.data?.detail
-      setError(typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map(d => d.msg || String(d)).join('; ') : 'Failed to create event. Please try again.')
+      setError(typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map(d => d.msg || String(d)).join('; ') : 'Hmm, your event didn\'t save. Mind trying again?')
     } finally {
       setLoading(false)
     }
@@ -414,7 +414,7 @@ export default function CreateEventModal({
           </div>
           {rsvpDeadlineDate && (
             <div style={{ fontSize: '11px', color: 'var(--amber)', marginTop: '6px' }}>
-              ⏰ Members will be reminded when the RSVP deadline approaches.
+              People who haven't answered get one gentle reminder, then a last call the day before the RSVP deadline.
             </div>
           )}
         </div>
@@ -436,7 +436,7 @@ export default function CreateEventModal({
               transition: 'all 0.15s',
             }}
           >
-            🔁 Repeat this event
+            Repeat this event
           </button>
 
           {isRecurring && (
@@ -538,14 +538,14 @@ export default function CreateEventModal({
       <ToggleRow
         value={pulseCheck}
         onChange={() => setPulseCheck(v => !v)}
-        label="💬 Send Pulse Check"
+        label="Send Pulse Check"
         description="Ask the group how they feel about this pick after creating the event"
       />
 
       <ToggleRow
         value={ratingsEnabled}
         onChange={() => setRatingsEnabled(v => !v)}
-        label="⭐ Enable Ratings"
+        label="Enable Ratings"
         description="Allow members to rate and review this event after it ends"
       />
 
@@ -613,7 +613,7 @@ export default function CreateEventModal({
               onPollGroup({ title: title || initialTitle, activityType: resolvedActivity })
             }}
           >
-            💬 Poll Group First
+            Poll Group First
           </Button>
         )}
         <Button variant="primary" loading={loading} onClick={handleSubmit}>

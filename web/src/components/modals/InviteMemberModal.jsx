@@ -90,16 +90,16 @@ export default function InviteMemberModal({
       onAdded?.()
     } catch (e) {
       const detail = e?.response?.data?.detail
-      setError(typeof detail === 'string' ? detail : 'Could not add member.')
+      setError(typeof detail === 'string' ? detail : 'We couldn\'t add that member. Give it another go.')
     } finally { setLoading(false) }
   }
 
   const extractErrorMsg = (e) => {
     const detail = e?.response?.data?.detail
-    if (!detail) return 'Some invites could not be sent.'
+    if (!detail) return "We couldn't send some of those invites. Give it another go."
     if (typeof detail === 'string') return detail
     if (Array.isArray(detail)) return detail.map(d => d.msg || String(d)).join('; ')
-    return 'Some invites could not be sent.'
+    return "We couldn't send some of those invites. Give it another go."
   }
 
   // Send all email invites
@@ -113,7 +113,7 @@ export default function InviteMemberModal({
             email,
             group_id: groupId,
             invited_by: user?.id,
-            group_name: groupName || 'the club',
+            group_name: groupName || 'the group',
           })
         )
       )
@@ -180,7 +180,7 @@ export default function InviteMemberModal({
                 background: 'rgba(34,211,160,0.12)', border: '1px solid rgba(34,211,160,0.25)',
                 fontSize: '12px', fontWeight: 600, color: 'var(--green, #22d3a0)',
               }}>
-                ✓ Added to club
+                ✓ Added to group
               </div>
             </>
           ) : (
@@ -381,7 +381,7 @@ export default function InviteMemberModal({
             ))}
           </div>
           <div style={{ marginTop: '6px', fontSize: '11px', color: 'var(--t4)' }}>
-            They'll receive an email with a link to join the club.
+            They'll receive an email with a link to join the group.
           </div>
         </div>
       )}

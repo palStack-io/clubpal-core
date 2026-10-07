@@ -183,7 +183,7 @@ export default function RatingCard({
   }))
   const maxDist = Math.max(...dist.map((d) => d.count), 1)
 
-  const rateLabel = myRating ? '✏️ Edit Rating' : '⭐ Rate Event'
+  const rateLabel = myRating ? 'Edit Rating' : 'Rate Event'
 
   return (
     <Card>
@@ -208,20 +208,20 @@ export default function RatingCard({
             }}
           >
             <span style={{ fontSize: '13px', color: 'var(--t3)' }}>
-              ⏳ Ratings will appear after the event
+              Ratings will appear after the event
             </span>
           </div>
         ) : ratings.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '28px 20px' }}>
             <div style={{ fontSize: '40px', marginBottom: '8px' }}>⭐</div>
             <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t2)', marginBottom: '4px' }}>
-              No ratings yet
+              The first rating will show up here.
             </div>
             <div style={{ fontSize: '13px', color: 'var(--t3)', marginBottom: '16px' }}>
               Be the first to share how it went
             </div>
             <Button variant="primary" size="sm" onClick={onAddRating}>
-              ⭐ Rate this Event
+              Rate this Event
             </Button>
           </div>
         ) : (

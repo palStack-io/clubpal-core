@@ -75,7 +75,7 @@ export default function ActivityDonutCard({ breakdown = [] }) {
               )
             })}
             {breakdown.length === 0 && (
-              <span style={{ fontSize: '12px', color: 'var(--t3)' }}>No activity data yet</span>
+              <span style={{ fontSize: '12px', color: 'var(--t3)' }}>Your story starts here.</span>
             )}
           </div>
         </div>

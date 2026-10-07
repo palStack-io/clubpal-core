@@ -95,7 +95,7 @@ function MemberStatsPopup({ member, canManage, onRoleChange, onRemove, onClose }
               {vibe ? (
                 <span style={{ fontSize: '12px', fontWeight: 800, color: vibe.color, textAlign: 'center', lineHeight: 1.3 }}>{vibe.label}</span>
               ) : (
-                <span style={{ fontSize: '11px', color: 'var(--t4)', textAlign: 'center' }}>No ratings yet</span>
+                <span style={{ fontSize: '11px', color: 'var(--t4)', textAlign: 'center' }}>The first rating will show up here.</span>
               )}
             </div>
           </div>
@@ -114,7 +114,7 @@ function MemberStatsPopup({ member, canManage, onRoleChange, onRemove, onClose }
               onClick={() => { onRemove(member.user_id); onClose() }}
               style={{ width: '100%', padding: '11px', borderRadius: '12px', background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
             >
-              Remove from Club
+              Remove from Group
             </button>
           </div>
         )}
@@ -387,14 +387,14 @@ export default function MembersCard({ members = [], pendingInvites = [], canMana
       {hasRotation && (
         <div style={{ padding: '4px 16px 0', display: 'flex', alignItems: 'center', gap: '6px' }}>
           <span style={{ fontSize: '10px', fontWeight: 700, color: 'var(--t4)', textTransform: 'uppercase', letterSpacing: '0.6px' }}>
-            🔄 Turn order active
+            Turn order active
           </span>
         </div>
       )}
       <Card.Body style={{ overflow: 'visible' }}>
         {sortedMembers.length === 0 && pendingInvites.length === 0 ? (
           <div style={{ fontSize: '12px', color: 'var(--t3)', textAlign: 'center', padding: '16px' }}>
-            No members yet
+            Your first member will show up here.
           </div>
         ) : (
           <div style={{

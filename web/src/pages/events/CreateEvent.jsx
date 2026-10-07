@@ -99,7 +99,7 @@ export default function CreateEvent() {
     ]).then(([g, a]) => {
       setGroups(g || [])
       setActivities(a || [])
-    }).catch(() => toast.error('Failed to load form data.')).finally(() => setDataLoading(false))
+    }).catch(() => toast.error('We couldn\'t load the form. Refresh and try again.')).finally(() => setDataLoading(false))
   }, [user.id])
 
   const set = (key) => (e) => {
@@ -119,8 +119,8 @@ export default function CreateEvent() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
-    if (!form.group_id) { setError('Please select a club.'); return }
-    if (!form.title.trim()) { setError('Please enter a title.'); return }
+    if (!form.group_id) { setError('Please select a group.'); return }
+    if (!form.title.trim()) { setError('Give your event a title to continue.'); return }
     if (isRecurring && !recurrence.end_date) { setError('Please set an end date for the recurring series.'); return }
     setError('')
     setLoading(true)
@@ -148,12 +148,12 @@ export default function CreateEvent() {
 
       // Upload cover photo if provided
       if (coverFile) {
-        await uploadCover(event.id, coverFile).catch(() => toast.error('Event created, but cover photo failed to upload.'))
+        await uploadCover(event.id, coverFile).catch(() => toast.error('Your event is up. The cover photo didn\'t upload, so try it again from Edit event.'))
       }
 
       window.location.href = `/events/${event.id}`
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to create event.')
+      setError(err.response?.data?.detail || 'We couldn\'t create that event. Give it another go.')
     } finally {
       setLoading(false)
     }
@@ -188,9 +188,9 @@ export default function CreateEvent() {
         {/* Core details */}
         <FormSection title="Event Details">
           <FormRow>
-            <FormGroup label="Club" required>
+            <FormGroup label="Group" required>
               <FormSelect value={form.group_id} onChange={set('group_id')}>
-                <option value="">Select a club…</option>
+                <option value="">Select a group…</option>
                 {groups.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
               </FormSelect>
             </FormGroup>
@@ -313,7 +313,7 @@ export default function CreateEvent() {
               </FormRow>
 
               <div style={{ marginTop: '12px', padding: '10px 12px', background: 'var(--s2)', borderRadius: '8px', fontSize: '12px', color: 'var(--t2)' }}>
-                📅 &nbsp;The next occurrence will be automatically created after each event completes, and all group members will receive an email notification.
+                The next occurrence will be automatically created after each event completes, and all group members will receive an email notification.
               </div>
             </div>
           )}

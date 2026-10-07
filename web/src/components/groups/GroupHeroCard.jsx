@@ -190,7 +190,7 @@ export default function GroupHeroCard({ group, members = [], rotation, currentUs
                 boxShadow: isMyTurn ? `0 2px 8px rgba(${act.rgb},0.4)` : 'none',
               }}
             >
-              🔄 {isMyTurn ? 'Your Turn!' : `${turnerName}'s Turn`}
+              {isMyTurn ? 'Your Turn!' : `${turnerName}'s Turn`}
             </span>
           )}
         </div>

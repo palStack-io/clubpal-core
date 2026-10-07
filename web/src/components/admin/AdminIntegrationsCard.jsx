@@ -74,7 +74,7 @@ export default function AdminIntegrationsCard() {
         setLoading(false)
       })
       .catch(() => {
-        setError('Failed to load integrations.')
+        setError("We couldn't load integrations. Refresh and try again.")
         setLoading(false)
       })
   }, [])
@@ -195,7 +195,7 @@ export default function AdminIntegrationsCard() {
                       <span style={{ fontSize: '12px', color: '#22d3a0' }}>Saved successfully.</span>
                     )}
                     {keyResult === 'error' && (
-                      <span style={{ fontSize: '12px', color: '#f87171' }}>Failed to save. Please try again.</span>
+                      <span style={{ fontSize: '12px', color: '#f87171' }}>Hmm, that didn't save. Mind trying again?</span>
                     )}
                   </div>
                 </div>

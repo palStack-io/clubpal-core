@@ -83,7 +83,7 @@ export default function DiscoverShows() {
 
       <SearchHero
         eyebrow="Find something to binge"
-        headline="What's your club binge-watching?"
+        headline="What's your group binge-watching?"
         onSearch={doSearch}
         suggestions={['📺 Drama', '😂 Comedy', '🔬 Sci-Fi', '🕵️ Crime']}
       />
@@ -110,7 +110,7 @@ export default function DiscoverShows() {
         ) : results.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '64px 32px', color: 'var(--t3)' }}>
             <div style={{ fontSize: '48px', marginBottom: '12px' }}>📺</div>
-            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t2)' }}>No results found</div>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t2)' }}>Nothing matched. Try a different search.</div>
             <div style={{ fontSize: '13px', marginTop: '4px' }}>Try a different search or tab</div>
           </div>
         ) : (
@@ -141,7 +141,7 @@ export default function DiscoverShows() {
                     onClick={e => { e.stopPropagation(); setPollItem({ title: item.title, location: null }) }}
                     style={{ background: 'var(--s2)', border: '1px solid var(--glass)', borderRadius: '8px', padding: '5px 8px', fontSize: '11px', fontWeight: 700, color: 'var(--t2)', cursor: 'pointer' }}
                   >
-                    💬 Poll
+                    Poll
                   </button>
                   <button
                     onClick={e => { e.stopPropagation(); setPickItem({ title: item.title, location: null }) }}

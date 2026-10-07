@@ -119,7 +119,7 @@ export default function Dashboard() {
       // Activity feed: recent comments from each group (up to 5 groups)
       loadActivityFeed(g.slice(0, 5))
     } catch (err) {
-      toast.error('Failed to load dashboard data. Please refresh.')
+      toast.error('We couldn\'t load your dashboard. Refresh and try again.')
     } finally {
       setLoading(false)
     }
@@ -183,7 +183,7 @@ export default function Dashboard() {
     primaryGroupObj?.rotation_type !== 'none' && memberCount > 1
       ? {
           groupId: primaryGroupId,
-          groupName: primaryGroupObj?.name || 'Your Club',
+          groupName: primaryGroupObj?.name || 'Your Group',
           activityEmoji: rotation?.activity_emoji || primaryGroupObj?.activity_emoji || '🔄',
           activityType: rotation?.activity_type || primaryGroupObj?.activity_type || '',
           dueDate: rotation?.due_date || null,
@@ -197,12 +197,12 @@ export default function Dashboard() {
 
   const turnPosition = activeTurn ? '1st 🔄' : (rotation?.turn_index != null ? ordinal(rotation.turn_index + 1) : '—')
 
-  const greeting = `${getGreeting()}, ${user?.full_name?.split(' ')[0] || user?.username} 👋`
+  const greeting = `${getGreeting()}, ${user?.full_name?.split(' ')[0] || user?.username}`
 
-  const subtitle = `${activeGroups} club${activeGroups !== 1 ? 's' : ''} · ${events.length} upcoming`
+  const subtitle = `${activeGroups} group${activeGroups !== 1 ? 's' : ''} · ${events.length} upcoming`
 
   const stats = [
-    { label: 'Clubs',      value: loading ? '—' : activeGroups },
+    { label: 'Groups',      value: loading ? '—' : activeGroups },
     { label: 'Upcoming',   value: loading ? '—' : events.length },
     { label: 'This Month', value: loading ? '—' : monthEvents },
     { label: activeTurn ? 'Your Turn' : 'Turn', value: loading ? '—' : turnPosition, highlight: !!activeTurn },
@@ -220,7 +220,7 @@ export default function Dashboard() {
   if (heroSlides.length === 0) {
     heroSlides.push({
       kind: 'greeting',
-      title: "Let's plan something ✨",
+      title: "Let's plan something",
       subtitle: 'Your upcoming events and invites will headline here.',
       key: 'greet',
     })
@@ -230,7 +230,7 @@ export default function Dashboard() {
     <AppShell activeRoute="/dashboard" user={user} groupCount={groups.length}>
       <Topbar title={greeting}>
         <Button variant="ghost" size="sm" onClick={() => setShowCreateEvent(true)}>+ Event</Button>
-        <Button variant="primary" size="sm" onClick={() => setShowCreateGroup(true)}>+ Club</Button>
+        <Button variant="primary" size="sm" onClick={() => setShowCreateGroup(true)}>+ Group</Button>
       </Topbar>
 
       {/* Cinematic hero carousel */}

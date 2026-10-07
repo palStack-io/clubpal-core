@@ -275,7 +275,7 @@ function PickCard({ item, tabKey, tabColor, starred, onStar, onPick, onPoll, onN
             onMouseEnter={e => e.currentTarget.style.background = 'var(--s4)'}
             onMouseLeave={e => e.currentTarget.style.background = 'var(--s3)'}
           >
-            💬 Poll
+            Poll
           </button>
           <button
             onClick={e => { e.stopPropagation(); onPick(item) }}
@@ -723,14 +723,14 @@ export default function DiscoverExplore() {
       {isStarredView ? (
         <div style={{ padding: '28px 24px 40px', maxWidth: '1200px', position: 'relative', zIndex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '18px' }}>
-            <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t1)', margin: 0 }}>🔖 Bookmarks</h2>
+            <h2 style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t1)', margin: 0 }}>Bookmarks</h2>
             <span style={{ fontSize: '12px', color: 'var(--t4)' }}>{starredItemsList.length} bookmarked</span>
           </div>
           {starredItemsList.length === 0 ? (
             <div style={{ padding: '60px 24px', textAlign: 'center', background: 'var(--s1)', border: '1px solid var(--glass)', borderRadius: '16px' }}>
               <div style={{ fontSize: '40px', marginBottom: '10px' }}>🔖</div>
-              <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--t2)', marginBottom: '4px' }}>No bookmarks yet</div>
-              <div style={{ fontSize: '12px', color: 'var(--t3)' }}>Tap 🔖 on any card to bookmark it</div>
+              <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--t2)', marginBottom: '4px' }}>Bookmark anything that catches your eye and it will show up here.</div>
+              <div style={{ fontSize: '12px', color: 'var(--t3)' }}>Tap the bookmark on any card to save it</div>
             </div>
           ) : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(210px, 1fr))', gap: '14px' }}>
@@ -799,7 +799,7 @@ export default function DiscoverExplore() {
             <div style={{ padding: '48px 24px', textAlign: 'center', background: 'var(--s1)', border: '1px solid var(--glass)', borderRadius: '16px' }}>
               <div style={{ fontSize: '36px', marginBottom: '10px' }}>{activeTab?.emoji}</div>
               <div style={{ fontSize: '14px', fontWeight: 700, color: 'var(--t2)', marginBottom: '4px' }}>
-                {searchResults !== null ? 'No results found' : 'No picks yet'}
+                {searchResults !== null ? 'Nothing matched. Try a different search.' : 'Your picks will show up here.'}
               </div>
               <div style={{ fontSize: '12px', color: 'var(--t3)' }}>
                 {searchResults !== null ? 'Try a different search or location' : 'Try a search term or filter above'}

@@ -58,7 +58,7 @@ export default function EditGroup() {
         setInviteCode(ic)
         setJoinRequests(Array.isArray(jrs) ? jrs : [])
       })
-      .catch(() => setError('Failed to load club.'))
+      .catch(() => setError('We couldn\'t load your group. Refresh and try again.'))
       .finally(() => { setLoading(false); setInviteLoading(false) })
   }, [id])
 
@@ -81,14 +81,14 @@ export default function EditGroup() {
     try {
       await groupsApi.reorderRotation(id, memberOrder)
     } catch {
-      setError('Failed to save order.')
+      setError('Hmm, that didn\'t save. Mind trying again?')
     } finally {
       setReorderSaving(false)
     }
   }
 
   const handleSave = async () => {
-    if (!form.name.trim()) { setError('Club name is required.'); return }
+    if (!form.name.trim()) { setError('What should we call your group?'); return }
     setError('')
     setSaving(true)
     try {
@@ -101,7 +101,7 @@ export default function EditGroup() {
       })
       window.location.href = `/groups/${id}`
     } catch (e) {
-      setError(e.response?.data?.detail || 'Failed to save changes.')
+      setError(e.response?.data?.detail || 'Hmm, that didn\'t save. Mind trying again?')
     } finally {
       setSaving(false)
     }
@@ -119,7 +119,7 @@ export default function EditGroup() {
       setInviteCode(newCode)
       setShowRegenConfirm(false)
     } catch {
-      setError('Failed to regenerate code.')
+      setError('We couldn\'t make a new code. Give it another go.')
     } finally {
       setRegenerating(false)
     }
@@ -136,7 +136,7 @@ export default function EditGroup() {
       })
       setInviteCode(newCode)
     } catch {
-      setError('Failed to update invite settings.')
+      setError('We couldn\'t update those invite settings. Give it another go.')
     } finally {
       setRegenerating(false)
     }
@@ -148,7 +148,7 @@ export default function EditGroup() {
       await groupsApi.reviewJoinRequest(requestId, action)
       setJoinRequests(prev => prev.filter(r => r.id !== requestId))
     } catch {
-      setError('Failed to review request.')
+      setError('We couldn\'t review that request. Give it another go.')
     } finally {
       setReviewingId(null)
     }
@@ -160,7 +160,7 @@ export default function EditGroup() {
       await groupsApi.delete(id)
       navigate('/groups')
     } catch {
-      setError('Failed to delete club.')
+      setError('We couldn\'t delete that group. Give it another go.')
       setShowDelete(false)
       setDeleting(false)
     }
@@ -168,7 +168,7 @@ export default function EditGroup() {
 
   return (
     <AppShell activeRoute="/groups">
-      <Topbar title="Edit Club" onBack={() => navigate(`/groups/${id}`)}>
+      <Topbar title="Edit Group" onBack={() => navigate(`/groups/${id}`)}>
         <Button variant="ghost" onClick={() => navigate(`/groups/${id}`)}>Cancel</Button>
         <Button variant="primary" onClick={handleSave} loading={saving}>Save Changes</Button>
       </Topbar>
@@ -184,9 +184,9 @@ export default function EditGroup() {
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--t3)' }}>Loading…</div>
         ) : (
           <>
-            <FormSection title="Club Details">
+            <FormSection title="Group Details">
               <FormRow>
-                <FormGroup label="Club Name" required>
+                <FormGroup label="Group Name" required>
                   <FormInput value={form.name} onChange={e => set('name', e.target.value)} />
                 </FormGroup>
                 <FormGroup label="Description">
@@ -211,7 +211,7 @@ export default function EditGroup() {
             {form.rotation_mode === 'sequential' && memberOrder.length > 0 && (
               <FormSection title="Turn Order">
                 <div style={{ fontSize: '12px', color: 'var(--t3)', marginBottom: '10px' }}>
-                  ↕ Drag to reorder — person at top picks first
+                  Drag to reorder — person at top picks first
                 </div>
                 {memberOrder.map((userId, index) => {
                   const member = members.find(m => m.user_id === userId)
@@ -267,8 +267,8 @@ export default function EditGroup() {
                     <div style={{ position: 'absolute', top: '2px', left: form.email_reminders_enabled ? '20px' : '2px', width: '18px', height: '18px', borderRadius: '9px', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
                   </div>
                   <div>
-                    <div style={{ fontSize: '13px', fontWeight: 600, color: form.email_reminders_enabled ? 'var(--amber)' : 'var(--t2)' }}>✉️ Enable monthly email reminder for the next pick</div>
-                    <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '3px', lineHeight: 1.4 }}>When enabled, all club members will be emailed to vote on who picks next when rotation advances</div>
+                    <div style={{ fontSize: '13px', fontWeight: 600, color: form.email_reminders_enabled ? 'var(--amber)' : 'var(--t2)' }}>Enable monthly email reminder for the next pick</div>
+                    <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '3px', lineHeight: 1.4 }}>When enabled, all group members will be emailed to vote on who picks next when rotation advances</div>
                   </div>
                 </div>
               </FormSection>
@@ -326,8 +326,8 @@ export default function EditGroup() {
                         onChange={e => handleUpdateCodeSettings({ join_behavior: e.target.value })}
                         disabled={regenerating}
                       >
-                        <option value="instant">⚡ Instant join</option>
-                        <option value="approval">✋ Admin approval</option>
+                        <option value="instant">Instant join</option>
+                        <option value="approval">Admin approval</option>
                       </FormSelect>
                     </FormGroup>
                     <FormGroup label="Expires" style={{ flex: 1, minWidth: '140px' }}>
@@ -351,7 +351,7 @@ export default function EditGroup() {
                   {showRegenConfirm ? (
                     <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: '10px', padding: '12px 14px' }}>
                       <p style={{ fontSize: '13px', color: 'var(--t2)', marginBottom: '10px' }}>
-                        ⚠️ Old code stops working immediately. Anyone with the old link won't be able to join.
+                        Old code stops working immediately. Anyone with the old link won't be able to join.
                       </p>
                       <div style={{ display: 'flex', gap: '8px' }}>
                         <Button variant="primary" onClick={handleRegenerate} loading={regenerating}>Yes, regenerate</Button>
@@ -360,7 +360,7 @@ export default function EditGroup() {
                     </div>
                   ) : (
                     <Button variant="ghost" onClick={() => setShowRegenConfirm(true)}>
-                      🔄 Regenerate code
+                      Regenerate code
                     </Button>
                   )}
                 </div>
@@ -371,7 +371,7 @@ export default function EditGroup() {
             {inviteCode?.join_behavior === 'approval' && (
               <FormSection title={`Join Requests${joinRequests.length > 0 ? ` (${joinRequests.length})` : ''}`}>
                 {joinRequests.length === 0 ? (
-                  <div style={{ fontSize: '13px', color: 'var(--t3)', padding: '10px 0' }}>No pending requests</div>
+                  <div style={{ fontSize: '13px', color: 'var(--t3)', padding: '10px 0' }}>No requests waiting right now.</div>
                 ) : (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                     {joinRequests.map(req => (
@@ -420,9 +420,9 @@ export default function EditGroup() {
             <FormSection title="Danger Zone">
               <div style={{ background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.15)', borderRadius: '14px', padding: '20px' }}>
                 <p style={{ fontSize: '13px', color: 'var(--t2)', marginBottom: '12px' }}>
-                  Deleting this club is permanent. All events and ratings will be lost.
+                  Deleting this group is permanent. All events and ratings will be lost.
                 </p>
-                <Button variant="danger" onClick={() => setShowDelete(true)}>Delete Club</Button>
+                <Button variant="danger" onClick={() => setShowDelete(true)}>Delete Group</Button>
               </div>
             </FormSection>
           </>

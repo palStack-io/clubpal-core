@@ -143,7 +143,7 @@ export default function RateEventModal({ isOpen, onClose, event, currentUser, on
       setError(
         typeof detail === 'string' ? detail
         : Array.isArray(detail) ? detail.map(d => d?.msg ?? String(d)).join(', ')
-        : 'Failed to submit rating.'
+        : 'We couldn\'t submit your rating. Give it another go.'
       )
     } finally {
       setSubmitting(false)

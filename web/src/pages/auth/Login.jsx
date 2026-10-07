@@ -179,7 +179,7 @@ export default function Login() {
                     setError(result.error)
                   }
                 }}
-                onError={() => setError('Google sign-in failed. Please try again.')}
+                onError={() => setError('Google sign-in didn\'t work. Give it another go.')}
               />
             </div>
           </>

@@ -142,7 +142,7 @@ export default function CreatePollModal({ isOpen, onClose, groupId: preGroupId, 
       setError(
         typeof detail === 'string' ? detail
         : Array.isArray(detail) ? detail.map(d => d?.msg ?? String(d)).join(', ')
-        : 'Failed to create poll.'
+        : 'We couldn\'t create your poll. Give it another go.'
       )
     } finally {
       setLoading(false)
@@ -152,18 +152,18 @@ export default function CreatePollModal({ isOpen, onClose, groupId: preGroupId, 
   if (!isOpen) return null
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Poll Your Club" size="md">
+    <Modal isOpen={isOpen} onClose={onClose} title="Poll Your Group" size="md">
 
       {/* Group selector (only when not pre-selected) */}
       {!preGroupId && (
         <div style={sectionStyle}>
-          <label style={labelStyle}>Club *</label>
+          <label style={labelStyle}>Group *</label>
           <select
             value={groupId}
             onChange={e => setGroupId(e.target.value)}
             style={{ ...inputStyle, appearance: 'none' }}
           >
-            <option value="">Select a club…</option>
+            <option value="">Select a group…</option>
             {groups.map(g => (
               <option key={g.id} value={String(g.id)}>{g.name}</option>
             ))}

@@ -3,7 +3,7 @@ import Card from '../ui/Card'
 
 const ACHIEVEMENTS = [
   { id: 'first_pick',       icon: '🎯', name: 'First Pick',        desc: 'Host your first event' },
-  { id: 'social_butterfly', icon: '🦋', name: 'Social Butterfly',  desc: 'Join 3+ clubs' },
+  { id: 'social_butterfly', icon: '🦋', name: 'Social Butterfly',  desc: 'Join 3+ groups' },
   { id: 'critic',           icon: '⭐', name: 'Critic',            desc: 'Rate 10 events' },
   { id: 'globe_trotter',   icon: '🌍', name: 'Globetrotter',      desc: 'Try 5 activity types' },
   { id: 'streak_3',         icon: '🔥', name: 'On a Roll',         desc: '3 events in a row' },
@@ -32,7 +32,7 @@ function AchievementModal({ achievement, unlocked, onClose }) {
           </div>
         ) : (
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: 'var(--s3)', border: '1px solid var(--glass)', borderRadius: '100px', padding: '5px 14px', fontSize: '11px', fontWeight: 700, color: 'var(--t3)' }}>
-            🔒 Not yet unlocked
+            Not yet unlocked
           </div>
         )}
         <button

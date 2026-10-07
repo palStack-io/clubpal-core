@@ -192,7 +192,7 @@ export default function OnboardingWizard() {
           setLocationAddress(`${lat.toFixed(4)}, ${lng.toFixed(4)}`)
         }
       },
-      () => setGeoError('Could not get location. Please type your city.')
+      () => setGeoError('We couldn\'t get your location. Type your city and we\'ll take it from there.')
     )
   }
 

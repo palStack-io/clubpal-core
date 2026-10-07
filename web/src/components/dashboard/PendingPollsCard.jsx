@@ -33,7 +33,7 @@ function PendingPollRow({ poll, onRespond, groupName }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', marginBottom: '10px' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--t1)', marginBottom: '2px' }}>
-            🗳️ {poll.activity_name}
+            {poll.activity_name}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '10px', color: 'var(--t3)' }}>{groupName}</span>
@@ -112,7 +112,7 @@ function MyPollRow({ poll, groupName }) {
             </span>
           </div>
           <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--t1)', marginBottom: '2px' }}>
-            📊 {poll.activity_name}
+            {poll.activity_name}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
             <span style={{ fontSize: '10px', color: 'var(--t3)' }}>{groupName}</span>
@@ -169,7 +169,7 @@ export default function PendingPollsCard({ polls = [], myPolls = [], groups = []
       <Card.Header
         title={
           <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            💬 Group Polls
+            Group Polls
             {totalCount > 0 && (
               <span style={{
                 fontSize: '11px', fontWeight: 700, color: 'var(--rose-soft)',
@@ -194,7 +194,7 @@ export default function PendingPollsCard({ polls = [], myPolls = [], groups = []
         ) : totalCount === 0 ? (
           <div style={{ textAlign: 'center', padding: '20px 0' }}>
             <div style={{ fontSize: '28px', marginBottom: '6px' }}>💬</div>
-            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t3)' }}>No active polls</div>
+            <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--t3)' }}>No votes needed. Everyone's on the same page.</div>
             <div style={{ fontSize: '11px', color: 'var(--t4)', marginTop: '2px' }}>Polls from your groups will appear here</div>
           </div>
         ) : (

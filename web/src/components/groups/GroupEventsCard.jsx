@@ -208,7 +208,7 @@ export default function GroupEventsCard({ upcoming = [], past = [], groupId, isM
             <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--t3)' }}>
               <div style={{ fontSize: '32px', marginBottom: '10px' }}>📅</div>
               <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--t2)', marginBottom: '14px' }}>
-                No upcoming events
+                Your calendar's wide open. What should the crew do next?
               </div>
               {isMyTurn && (
                 <Button
@@ -224,7 +224,7 @@ export default function GroupEventsCard({ upcoming = [], past = [], groupId, isM
             <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--t3)' }}>
               <div style={{ fontSize: '32px', marginBottom: '10px' }}>📖</div>
               <div style={{ fontSize: '13px', fontWeight: 500, color: 'var(--t2)' }}>
-                No event history yet
+                Your first memory together will show up here.
               </div>
             </div>
           )

@@ -175,7 +175,7 @@ export default function RotationQueueCard({ rotation, currentUserId, isAdmin = f
       await groupsApi.skipRotation(groupId)
       onRotationChange?.()
     } catch {
-      setError('Failed to skip turn.')
+      setError('We couldn\'t skip that turn. Give it another go.')
     } finally {
       setActionLoading(null)
     }
@@ -188,7 +188,7 @@ export default function RotationQueueCard({ rotation, currentUserId, isAdmin = f
       await groupsApi.setRotation(groupId, userId)
       onRotationChange?.()
     } catch {
-      setError('Failed to set turn.')
+      setError('We couldn\'t set that turn. Give it another go.')
     } finally {
       setActionLoading(null)
     }
@@ -220,7 +220,7 @@ export default function RotationQueueCard({ rotation, currentUserId, isAdmin = f
 
         {members.length === 0 ? (
           <div style={{ fontSize: '12px', color: 'var(--t3)', textAlign: 'center', padding: '16px' }}>
-            No rotation set
+            No turn order yet. Set one up whenever you're ready.
           </div>
         ) : (
           <div>

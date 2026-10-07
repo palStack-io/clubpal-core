@@ -101,14 +101,14 @@ export default function PickModal({ title, location, activityId, activityType, o
       onClose()
       navigate(`/events/${event.id}`)
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to create event.')
+      setError(err?.response?.data?.detail || 'We couldn\'t create that event. Give it another go.')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <Modal isOpen={true} onClose={onClose} title="Pick for Your Club" size="md">
+    <Modal isOpen={true} onClose={onClose} title="Pick for Your Group" size="md">
       {/* Event preview chip */}
       <div style={{
         background: 'rgba(244,63,94,0.08)',
@@ -132,7 +132,7 @@ export default function PickModal({ title, location, activityId, activityType, o
 
       {/* Group selector */}
       <div style={sectionStyle}>
-        <label style={labelStyle}>Club *</label>
+        <label style={labelStyle}>Group *</label>
         <select
           value={groupId}
           onChange={e => setGroupId(e.target.value)}
@@ -140,7 +140,7 @@ export default function PickModal({ title, location, activityId, activityType, o
           onFocus={focusBorder}
           onBlur={blurBorder}
         >
-          <option value="">Select a club…</option>
+          <option value="">Select a group…</option>
           {groups.map(g => (
             <option key={g.id} value={String(g.id)}>{g.name}</option>
           ))}
@@ -194,8 +194,8 @@ export default function PickModal({ title, location, activityId, activityType, o
           <div style={{ position: 'absolute', top: '2px', left: pulseCheck ? '20px' : '2px', width: '18px', height: '18px', borderRadius: '9px', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
         </div>
         <div>
-          <div style={{ fontSize: '13px', fontWeight: 600, color: pulseCheck ? 'var(--rose-soft)' : 'var(--t2)' }}>💬 Send Pulse Check</div>
-          <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>Ask the club how they feel about this pick after creating the event</div>
+          <div style={{ fontSize: '13px', fontWeight: 600, color: pulseCheck ? 'var(--rose-soft)' : 'var(--t2)' }}>Send Pulse Check</div>
+          <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px' }}>Ask the group how they feel about this pick after creating the event</div>
         </div>
       </div>
 
@@ -205,7 +205,7 @@ export default function PickModal({ title, location, activityId, activityType, o
         <textarea
           value={notes}
           onChange={e => setNotes(e.target.value)}
-          placeholder="Any details for the club…"
+          placeholder="Any details for the group…"
           rows={2}
           style={{ ...inputStyle, resize: 'none', minHeight: '64px' }}
           onFocus={focusBorder}
@@ -239,7 +239,7 @@ export default function PickModal({ title, location, activityId, activityType, o
               onPollGroup({ title, activityType })
             }}
           >
-            💬 Poll Group First
+            Poll Group First
           </Button>
         )}
         <Button variant="primary" loading={loading} onClick={handleSubmit}>

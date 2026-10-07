@@ -32,7 +32,7 @@ export default function Profile() {
       setRatings((r || []).slice(0, 5))
       setGroupCount((Array.isArray(g) ? g : g?.groups || []).length)
       setHostCount((Array.isArray(h) ? h : h?.events || []).length)
-    }).catch(() => toast.error('Failed to load profile data.')).finally(() => setLoading(false))
+    }).catch(() => toast.error('We couldn\'t load your profile. Refresh and try again.')).finally(() => setLoading(false))
   }, [user.id])
 
   return (
@@ -84,7 +84,7 @@ export default function Profile() {
             {/* Stats row */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '10px' }}>
               {[
-                { label: 'Clubs', value: groupCount },
+                { label: 'Groups', value: groupCount },
                 { label: 'Events Hosted', value: hostCount },
                 { label: 'Avg Rating', value: stats?.average_score ? stats.average_score.toFixed(1) : '—' },
                 { label: 'Ratings', value: stats?.total_ratings || 0 },

@@ -87,7 +87,7 @@ function EditPollForm({ poll, onSaved, onCancel }) {
   }
 
   const handleSave = async () => {
-    if (!title.trim()) { setError('Title is required.'); return }
+    if (!title.trim()) { setError('Give your poll a title to continue.'); return }
     setSaving(true); setError('')
     try {
       const updated = await groupsApi.editPoll(poll.id, {
@@ -99,7 +99,7 @@ function EditPollForm({ poll, onSaved, onCancel }) {
       })
       onSaved(updated)
     } catch {
-      setError('Could not save changes.')
+      setError('Hmm, that didn\'t save. Mind trying again?')
     } finally {
       setSaving(false)
     }
@@ -187,7 +187,7 @@ function AddOptionRow({ poll, currentUserId, onUpdated }) {
       onUpdated(updated)
       setLabel(''); setEmoji('⭐'); setOpen(false)
     } catch {
-      setError('Could not add option.')
+      setError('We couldn\'t add that option. Give it another go.')
     } finally {
       setSaving(false)
     }
@@ -386,7 +386,7 @@ export default function PollCard({ poll: initialPoll, currentUserId, onUpdated, 
       const res = await groupsApi.notifyPoll(poll.id)
       setNotifyMsg(res.notified === 0 ? 'Everyone has already responded!' : `Reminded ${res.notified} member${res.notified !== 1 ? 's' : ''} 🔔`)
     } catch {
-      setNotifyMsg('Could not send reminder.')
+      setNotifyMsg('We couldn\'t send the reminder. Give it another go.')
     } finally {
       setNotifyLoading(false)
       setTimeout(() => setNotifyMsg(''), 4000)
@@ -605,7 +605,7 @@ export default function PollCard({ poll: initialPoll, currentUserId, onUpdated, 
           onClick={() => navigate(`/events/${poll.converted_event_id}`)}
           style={{ background: 'rgba(99,102,241,0.1)', border: '1px solid rgba(99,102,241,0.22)', borderRadius: '10px', padding: '8px 14px', fontSize: '12px', fontWeight: 700, color: 'var(--blue)', cursor: 'pointer', width: '100%', marginBottom: '8px', marginTop: '8px' }}
         >
-          🎉 View Created Event →
+          View Created Event →
         </button>
       )}
 
@@ -613,7 +613,7 @@ export default function PollCard({ poll: initialPoll, currentUserId, onUpdated, 
       {isCreator && poll.status === 'open' && (
         <div style={{ borderTop: '1px solid var(--glass)', paddingTop: '12px', marginTop: '8px' }}>
           <Button variant="primary" style={{ width: '100%' }} onClick={() => onConvertToEvent?.(poll)}>
-            🎯 Convert to Event
+            Convert to Event
           </Button>
         </div>
       )}

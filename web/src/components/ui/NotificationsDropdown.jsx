@@ -212,8 +212,7 @@ export default function NotificationsDropdown() {
           <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
             {notifications.length === 0 ? (
               <div style={{ padding: '32px 16px', textAlign: 'center' }}>
-                <div style={{ fontSize: '28px', marginBottom: '8px' }}>🔔</div>
-                <div style={{ fontSize: '13px', color: 'var(--t3)' }}>No notifications yet</div>
+                <div style={{ fontSize: '13px', color: 'var(--t3)' }}>Quiet for now. Good things are coming.</div>
               </div>
             ) : (
               notifications.map(notif => (

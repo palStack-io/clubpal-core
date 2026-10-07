@@ -214,7 +214,7 @@ export default function EventHero({ event, onRsvp, onEdit, currentUserId }) {
               fontWeight: 500,
             }}
           >
-            🎯 Picked by Host
+            Picked by Host
           </span>
         </div>
 
@@ -250,7 +250,7 @@ export default function EventHero({ event, onRsvp, onEdit, currentUserId }) {
             padding: '2px 7px', borderRadius: '100px',
             letterSpacing: '0.5px', textTransform: 'uppercase',
           }}>
-            📅 Event
+            Event
           </span>
           <StatusChip status={statusVariant} label={statusLabel} />
 
@@ -275,7 +275,7 @@ export default function EventHero({ event, onRsvp, onEdit, currentUserId }) {
           {/* Edit button — host only, scheduled */}
           {event.status === 'scheduled' && isHost && (
             <Button variant="ghost" size="sm" onClick={() => onEdit && onEdit()}>
-              ✏️ Edit Event
+              Edit Event
             </Button>
           )}
 
@@ -286,7 +286,7 @@ export default function EventHero({ event, onRsvp, onEdit, currentUserId }) {
               size="sm"
               onClick={() => onRsvp && onRsvp('rate')}
             >
-              ⭐ Rate This Event
+              Rate This Event
             </Button>
           )}
 

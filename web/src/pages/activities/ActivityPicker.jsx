@@ -33,7 +33,7 @@ export default function ActivityPicker() {
         setActivities(all || [])
         setPopular((pop || []).map(a => a.id))
       })
-      .catch(() => toast.error('Failed to load activities.'))
+      .catch(() => toast.error('We couldn\'t load activities. Refresh and try again.'))
       .finally(() => setLoading(false))
   }, [])
 
@@ -69,7 +69,7 @@ export default function ActivityPicker() {
         ) : filtered.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '64px 32px', color: 'var(--t3)' }}>
             <div style={{ fontSize: '48px', marginBottom: '12px' }}>✨</div>
-            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t2)' }}>No activities found</div>
+            <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t2)' }}>Nothing matched. Try a different search.</div>
             <div style={{ fontSize: '13px', marginTop: '4px' }}>Try a different search or category</div>
           </div>
         ) : (

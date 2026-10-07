@@ -139,7 +139,7 @@ export default function Leaderboard() {
           ) : entries.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '48px 32px', color: 'var(--t3)' }}>
               <div style={{ fontSize: '40px', marginBottom: '8px' }}>🏆</div>
-              <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t2)' }}>No ratings yet</div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t2)' }}>The first rating will show up here.</div>
               <div style={{ fontSize: '13px', marginTop: '4px' }}>Complete and rate events to appear here</div>
             </div>
           ) : (

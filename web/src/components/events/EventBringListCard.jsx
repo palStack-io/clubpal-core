@@ -66,7 +66,7 @@ export default function EventBringListCard({ event, attendees = [], currentUser,
       await refresh()
       onUpdated && onUpdated()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not update your claim.')
+      setError(err?.response?.data?.detail || "We couldn't update your claim. Give it another go.")
     } finally {
       setClaimingId(null)
     }
@@ -80,7 +80,7 @@ export default function EventBringListCard({ event, attendees = [], currentUser,
       await refresh()
       onUpdated && onUpdated()
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Could not save your note.')
+      setError(err?.response?.data?.detail || "Hmm, that didn't save. Mind trying again?")
     } finally {
       setSaving(false)
     }
@@ -96,7 +96,7 @@ export default function EventBringListCard({ event, attendees = [], currentUser,
       await refresh()
       onUpdated && onUpdated()
     } catch (err) {
-      setManageError(err?.response?.data?.detail || 'Could not add item.')
+      setManageError(err?.response?.data?.detail || 'We couldn\'t add that item. Give it another go.')
     } finally {
       setManaging(false)
     }
@@ -115,7 +115,7 @@ export default function EventBringListCard({ event, attendees = [], currentUser,
       await refresh()
       onUpdated && onUpdated()
     } catch (err) {
-      setManageError(err?.response?.data?.detail || 'Could not update item.')
+      setManageError(err?.response?.data?.detail || 'We couldn\'t update that item. Give it another go.')
     } finally {
       setManaging(false)
     }
@@ -129,7 +129,7 @@ export default function EventBringListCard({ event, attendees = [], currentUser,
       await refresh()
       onUpdated && onUpdated()
     } catch (err) {
-      setManageError(err?.response?.data?.detail || 'Could not remove item.')
+      setManageError(err?.response?.data?.detail || 'We couldn\'t remove that item. Give it another go.')
     } finally {
       setManaging(false)
     }

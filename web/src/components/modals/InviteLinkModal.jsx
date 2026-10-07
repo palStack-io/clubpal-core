@@ -133,7 +133,7 @@ export default function InviteLinkModal({ isOpen, onClose, groupId, groupName, i
       ) : !inviteCode ? (
         <div style={{ textAlign: 'center', padding: '24px 0' }}>
           <div style={{ fontSize: '32px', marginBottom: '10px' }}>🔗</div>
-          <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t2)', marginBottom: '6px' }}>No invite link yet</div>
+          <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--t2)', marginBottom: '6px' }}>No invite link yet. Create one to bring people in.</div>
           <div style={{ fontSize: '12px', color: 'var(--t3)', marginBottom: '20px' }}>
             {isAdmin ? 'Generate a link to share with people you want to invite.' : 'Ask an admin to generate an invite link.'}
           </div>
@@ -179,7 +179,7 @@ export default function InviteLinkModal({ isOpen, onClose, groupId, groupName, i
             {/* Status badges */}
             <div style={{ display: 'flex', gap: '6px', marginTop: '10px', flexWrap: 'wrap' }}>
               <span style={{ fontSize: '11px', color: 'var(--t3)', background: 'var(--s2)', borderRadius: '100px', padding: '3px 9px', border: '1px solid var(--glass)' }}>
-                {inviteCode.join_behavior === 'approval' ? '✋ Approval required' : '⚡ Instant join'}
+                {inviteCode.join_behavior === 'approval' ? 'Approval required' : 'Instant join'}
               </span>
               {expiryLabel && (
                 <span style={{
@@ -235,8 +235,8 @@ export default function InviteLinkModal({ isOpen, onClose, groupId, groupName, i
                   onChange={e => setPendingBehavior(e.target.value)}
                   style={{ ...inputStyle, appearance: 'none' }}
                 >
-                  <option value="instant">⚡ Instant join</option>
-                  <option value="approval">✋ Admin approval required</option>
+                  <option value="instant">Instant join</option>
+                  <option value="approval">Admin approval required</option>
                 </select>
               </div>
 
@@ -244,7 +244,7 @@ export default function InviteLinkModal({ isOpen, onClose, groupId, groupName, i
               {showRegenConfirm ? (
                 <div style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.25)', borderRadius: '12px', padding: '14px 16px', marginBottom: '12px' }}>
                   <p style={{ fontSize: '13px', color: 'var(--t2)', marginBottom: '12px' }}>
-                    ⚠️ The old link stops working immediately. Generate a new link with the settings above?
+                    The old link stops working immediately. Generate a new link with the settings above?
                   </p>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <Button variant="primary" onClick={handleRegenerate} loading={regenerating}>Generate new link</Button>
@@ -253,7 +253,7 @@ export default function InviteLinkModal({ isOpen, onClose, groupId, groupName, i
                 </div>
               ) : (
                 <Button variant="ghost" onClick={() => setShowRegenConfirm(true)} style={{ marginBottom: '12px' }}>
-                  🔄 Generate new link
+                  Generate new link
                 </Button>
               )}
             </>

@@ -5,7 +5,7 @@ export default function NotFound() {
     <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--bg)' }}>
       <div className="text-center">
         <p className="text-7xl font-bold mb-4" style={{ color: 'var(--rose)' }}>404</p>
-        <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--t1)' }}>Page not found</h1>
+        <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--t1)' }}>We couldn't find that page</h1>
         <p className="mb-8" style={{ color: 'var(--t2)' }}>
           The page you&apos;re looking for doesn&apos;t exist or has been moved.
         </p>

@@ -287,7 +287,7 @@ export default function CommentsCard({
           >
             <div style={{ fontSize: '32px', marginBottom: '6px' }}>💬</div>
             <div style={{ fontSize: '13px', color: 'var(--t3)', marginBottom: '4px' }}>
-              No comments yet
+              Quiet for now. Good things are coming.
             </div>
             <span
               style={{ fontSize: '12px', color: 'var(--rose-soft)', cursor: 'pointer' }}

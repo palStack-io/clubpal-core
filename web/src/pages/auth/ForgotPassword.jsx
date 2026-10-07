@@ -31,7 +31,7 @@ export default function ForgotPassword() {
       await authApi.forgotPassword(email)
       setSent(true)
     } catch (err) {
-      setError(err.response?.data?.detail || 'Something went wrong. Please try again.')
+      setError(err.response?.data?.detail || 'Something went wrong on our end. Give it another go.')
     } finally {
       setLoading(false)
     }

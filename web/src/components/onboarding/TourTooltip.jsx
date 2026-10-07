@@ -139,7 +139,7 @@ export default function TourTooltip({ step, total, spotRect, onNext, onPrev, onG
             color: isLast ? '#fff' : 'var(--bg)',
             fontSize: '11px', fontWeight: 800, cursor: 'pointer',
           }}>
-            {isLast ? "Let's go! 🎉" : 'Next →'}
+            {isLast ? "Let's go!" : 'Next →'}
           </button>
         </div>
       </div>

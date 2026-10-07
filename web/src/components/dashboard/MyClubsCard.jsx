@@ -13,11 +13,11 @@ export default function MyClubsCard({ groups = [], loading = false, onCreate }) 
         <Card.Body>
           <div style={{ textAlign: 'center', padding: '24px 16px' }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>👥</div>
-            <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--t1)', marginBottom: 4 }}>No clubs yet</div>
+            <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--t1)', marginBottom: 4 }}>Every great group starts with one person. Start yours.</div>
             <div style={{ fontSize: 12, color: 'var(--t3)', marginBottom: 14 }}>
-              Create a club to start planning outings with your people.
+              Create a group to start planning outings with your people.
             </div>
-            <Button variant="primary" size="sm" onClick={onCreate}>+ Create a Club</Button>
+            <Button variant="primary" size="sm" onClick={onCreate}>+ Create a Group</Button>
           </div>
         </Card.Body>
       </Card>
@@ -35,8 +35,8 @@ export default function MyClubsCard({ groups = [], loading = false, onCreate }) 
   return (
     <div>
       <div className="cp-section-head">
-        <div className="cp-section-title">My Clubs</div>
-        <Link to="/groups" className="cp-section-link">View All Clubs ›</Link>
+        <div className="cp-section-title">My Groups</div>
+        <Link to="/groups" className="cp-section-link">View All Groups ›</Link>
       </div>
       <div className="cp-clubs-grid">
         {loading

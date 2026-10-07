@@ -4,7 +4,7 @@ import Button from '../ui/Button'
 import { FormGroup, FormSelect, FormTextarea } from '../ui/Form'
 
 export default function SkipTurnModal({ isOpen, onClose, onConfirm, loading }) {
-  const [reason, setReason] = useState('No ideas yet')
+  const [reason, setReason] = useState('Ideas will show up here soon.')
   const [other, setOther] = useState('')
 
   return (
@@ -24,7 +24,7 @@ export default function SkipTurnModal({ isOpen, onClose, onConfirm, loading }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
         <FormGroup label="Reason (optional)">
           <FormSelect value={reason} onChange={e => setReason(e.target.value)}>
-            <option>No ideas yet</option>
+            <option>Ideas will show up here soon.</option>
             <option>Not available</option>
             <option>Other</option>
           </FormSelect>

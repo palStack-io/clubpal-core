@@ -132,7 +132,7 @@ export default function RateEvent() {
       }, { params: { user_id: user.id } })
       navigate(`/events/${id}`)
     } catch (e) {
-      setError(e.response?.data?.detail || 'Failed to submit rating.')
+      setError(e.response?.data?.detail || 'We couldn\'t submit your rating. Give it another go.')
     } finally {
       setSubmitting(false)
     }

@@ -39,7 +39,7 @@ export default function ResetPassword() {
       setTimeout(() => navigate('/login'), 3000)
     } catch (err) {
       const detail = err.response?.data?.detail
-      setError(Array.isArray(detail) ? (detail[0]?.msg || 'Password does not meet requirements') : (detail || 'Reset link is invalid or expired'))
+      setError(Array.isArray(detail) ? (detail[0]?.msg || 'Password does not meet requirements') : (detail || 'That reset link isn\'t working. Request a new one and we\'ll send it right over.'))
     } finally {
       setLoading(false)
     }

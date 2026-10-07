@@ -340,7 +340,7 @@ export default function EventsList() {
               color: 'var(--t2)',
               outline: 'none',
             }}
-            placeholder="🔍 Search events..."
+            placeholder="Search events..."
           />
           <div style={{ display: 'flex', gap: '4px', flexShrink: 0 }}>
             {STATUS_FILTERS.map(s => (
@@ -417,7 +417,7 @@ export default function EventsList() {
           ) : filtered.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '64px 32px', color: 'var(--t3)' }}>
               <div style={{ fontSize: '48px', marginBottom: '12px' }}>📅</div>
-              <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t2)', marginBottom: '6px' }}>No events found</div>
+              <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t2)', marginBottom: '6px' }}>Nothing matched. Try a different search.</div>
               <div style={{ fontSize: '13px' }}>Try a different filter or create a new event</div>
             </div>
           ) : statusFilter === 'Completed' ? (

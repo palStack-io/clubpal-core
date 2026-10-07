@@ -212,7 +212,7 @@ export default function EventHeroCard({ event, attendees = [], onBack, actions =
             padding: '2px 7px', borderRadius: '100px',
             letterSpacing: '0.5px', textTransform: 'uppercase',
           }}>
-            📅 Event
+            Event
           </span>
           <StatusChip status={statusVariant} label={statusLabel} />
           <span

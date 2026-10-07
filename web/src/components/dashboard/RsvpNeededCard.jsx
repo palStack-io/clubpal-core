@@ -112,7 +112,7 @@ export default function RsvpNeededCard({ events = [], userId, onResponded }) {
       <Card.Header
         title={
           <span style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            📬 RSVP Needed
+            RSVP Needed
             <span style={{
               fontSize: '11px', fontWeight: 700, color: 'var(--amber)',
               background: 'rgba(245,158,11,0.12)', borderRadius: '99px', padding: '2px 8px',

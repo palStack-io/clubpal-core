@@ -57,10 +57,10 @@ export default function Register() {
 
   const validate = () => {
     const errs = {}
-    if (!form.fullName.trim()) errs.fullName = 'Full name is required'
-    if (!form.email.trim()) errs.email = 'Email is required'
-    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = 'Invalid email address'
-    if (!form.username.trim()) errs.username = 'Username is required'
+    if (!form.fullName.trim()) errs.fullName = 'What\'s your name?'
+    if (!form.email.trim()) errs.email = 'What\'s your email?'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = 'That email doesn\'t look right. Mind checking it?'
+    if (!form.username.trim()) errs.username = 'Pick a username to continue.'
     else if (form.username.length < 3) errs.username = 'Must be at least 3 characters'
     if (form.password.length < 8) errs.password = 'Must be at least 8 characters'
     if (form.password !== form.confirmPassword) errs.confirmPassword = 'Passwords do not match'
@@ -223,7 +223,7 @@ export default function Register() {
                     setError(result.error)
                   }
                 }}
-                onError={() => setError('Google sign-up failed. Please try again.')}
+                onError={() => setError('Google sign-up didn\'t work. Give it another go.')}
               />
             </div>
           </>

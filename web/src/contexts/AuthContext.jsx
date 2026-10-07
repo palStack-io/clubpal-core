@@ -42,7 +42,7 @@ export function AuthProvider({ children }) {
       setUser(data.user)
       return { success: true }
     } catch (err) {
-      return { success: false, error: extractErrorMessage(err, 'Login failed') }
+      return { success: false, error: extractErrorMessage(err, 'That didn\'t work. Check your details and try again.') }
     }
   }
 
@@ -53,7 +53,7 @@ export function AuthProvider({ children }) {
       setUser(data.user)
       return { success: true }
     } catch (err) {
-      return { success: false, error: extractErrorMessage(err, 'Registration failed') }
+      return { success: false, error: extractErrorMessage(err, 'We couldn\'t create your account. Give it another go.') }
     }
   }
 
@@ -89,7 +89,7 @@ export function AuthProvider({ children }) {
           message: detail.message,
         }
       }
-      return { success: false, error: extractErrorMessage(err, 'Google sign-in failed') }
+      return { success: false, error: extractErrorMessage(err, 'Google sign-in didn\'t work. Give it another go.') }
     }
   }
 
@@ -100,7 +100,7 @@ export function AuthProvider({ children }) {
       setUser(data.user)
       return { success: true }
     } catch (err) {
-      return { success: false, error: extractErrorMessage(err, 'Failed to link account') }
+      return { success: false, error: extractErrorMessage(err, 'We couldn\'t link that account. Give it another go.') }
     }
   }
 

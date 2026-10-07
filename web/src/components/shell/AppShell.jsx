@@ -27,7 +27,7 @@ export default function AppShell({ children, activeRoute, user: userProp, groupC
       <div className="cp-main" id="main-content">
         {/* Beta banner */}
         <div className="cp-beta-banner">
-          🚧 ClubPal is in beta — for feedback or issues, email{' '}
+          ClubPal is in beta. For feedback or issues, email{' '}
           <a href="mailto:support@palstack.io" className="cp-beta-link">
             support@palstack.io
           </a>

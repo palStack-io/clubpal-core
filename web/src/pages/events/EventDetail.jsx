@@ -148,7 +148,7 @@ export default function EventDetail() {
       fetchAll()
       return true
     } catch (err) {
-      toast.error(err?.response?.data?.detail || `Couldn't update ${name}'s RSVP. Please try again.`)
+      toast.error(err?.response?.data?.detail || `We couldn't update ${name}'s RSVP. Give it another go.`)
       return false
     }
   }
@@ -214,7 +214,7 @@ export default function EventDetail() {
     return (
       <AppShell activeRoute="/events">
         <div style={{ padding: '40px', textAlign: 'center', color: 'var(--t3)', fontSize: '14px' }}>
-          Event not found.
+          We couldn't find that event. Double-check the link.
         </div>
       </AppShell>
     )
@@ -228,9 +228,9 @@ export default function EventDetail() {
     try {
       const res = await eventsApi.sendRsvpReminder(id)
       const count = res?.nudged ?? 0
-      setRemindToast(count > 0 ? `Reminder sent to ${count} member${count !== 1 ? 's' : ''}.` : 'Everyone has already RSVPed.')
+      setRemindToast(count > 0 ? `A gentle reminder went to ${count} ${count !== 1 ? "people who haven't" : "person who hasn't"} answered.` : 'Nothing to send. Everyone has answered, or a reminder already went out.')
     } catch {
-      setRemindToast('Could not send reminder. Try again.')
+      setRemindToast('We couldn\'t send the reminder. Give it another go.')
     }
     setTimeout(() => setRemindToast(null), 4000)
   }
@@ -240,7 +240,7 @@ export default function EventDetail() {
       const updated = await eventsApi.endEvent(id)
       setEvent(updated)
     } catch {
-      setRemindToast('Could not end event. Try again.')
+      setRemindToast('We couldn\'t end that event. Give it another go.')
       setTimeout(() => setRemindToast(null), 4000)
     }
     setShowEndConfirm(false)
@@ -266,13 +266,13 @@ export default function EventDetail() {
   ]
 
   const heroActions = [
-    ...(event.status === 'scheduled' && isHost ? [{ label: '✏️ Edit', onClick: () => setShowEditEvent(true) }] : []),
-    ...(isScheduled && (isHost || isCreator) ? [{ label: '➕ Add Attendees', onClick: () => setShowAddAttendees(true) }] : []),
-    ...(isScheduled && (isHost || isCreator) ? [{ label: '🏁 End Event', onClick: () => setShowEndConfirm(true) }] : []),
-    ...(isScheduled && isCreator && !!event.rsvp_deadline ? [{ label: '📣 Send Reminder', onClick: handleRsvpReminder }] : []),
-    ...(event.ratings_enabled !== false && (event.status === 'completed' || event.status === 'in_progress' || (event.scheduled_date && new Date(event.scheduled_date) < new Date())) ? [{ label: '⭐ Rate', onClick: () => setShowRateModal(true) }] : []),
+    ...(event.status === 'scheduled' && isHost ? [{ label: 'Edit', onClick: () => setShowEditEvent(true) }] : []),
+    ...(isScheduled && (isHost || isCreator) ? [{ label: 'Add Attendees', onClick: () => setShowAddAttendees(true) }] : []),
+    ...(isScheduled && (isHost || isCreator) ? [{ label: 'End Event', onClick: () => setShowEndConfirm(true) }] : []),
+    ...(isScheduled && isCreator && !!event.rsvp_deadline ? [{ label: 'Send Reminder', onClick: handleRsvpReminder }] : []),
+    ...(event.ratings_enabled !== false && (event.status === 'completed' || event.status === 'in_progress' || (event.scheduled_date && new Date(event.scheduled_date) < new Date())) ? [{ label: 'Rate', onClick: () => setShowRateModal(true) }] : []),
     ...(isScheduled && myAttendee?.status !== 'going' ? [{ label: '✓ RSVP Going', onClick: () => handleRsvp('going'), loading: rsvpLoading }] : []),
-    { label: isBookmarked ? '🔖 Bookmarked' : '🔖 Bookmark', onClick: toggleBookmark },
+    { label: isBookmarked ? 'Bookmarked' : 'Bookmark', onClick: toggleBookmark },
   ]
 
   return (

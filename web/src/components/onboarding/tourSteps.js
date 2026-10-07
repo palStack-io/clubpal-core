@@ -4,9 +4,9 @@ export const tourSteps = [
     zoneId: 'tour-nav-groups',
     place: 'right',
     arrow: 'left',
-    label: 'My Clubs',
-    title: 'Your clubs live here',
-    body: 'Create or join clubs with friends. Each club runs its own activity rotation so the picking stays fair.',
+    label: 'My Groups',
+    title: 'Your groups live here',
+    body: 'Create or join groups with friends. Each group runs its own activity rotation so the picking stays fair.',
   },
   {
     zoneId: 'tour-nav-events',
@@ -14,7 +14,7 @@ export const tourSteps = [
     arrow: 'left',
     label: 'Events',
     title: 'All your events',
-    body: 'Every outing your clubs plan ends up here — past, upcoming, and in-progress. Tap any event to see details, photos, and ratings.',
+    body: 'Every outing your groups plan ends up here — past, upcoming, and in-progress. Tap any event to see details, photos, and ratings.',
   },
   {
     zoneId: 'tour-nav-stats',
@@ -29,8 +29,8 @@ export const tourSteps = [
     place: 'right',
     arrow: 'left',
     label: 'Leaderboard',
-    title: 'Club leaderboard',
-    body: 'See who\'s racking up the best ratings in your clubs. A little friendly competition never hurts.',
+    title: 'Group leaderboard',
+    body: 'See who\'s racking up the best ratings in your groups. A little friendly competition never hurts.',
   },
   {
     zoneId: 'tour-nav-discover',
@@ -38,7 +38,7 @@ export const tourSteps = [
     arrow: 'left',
     label: 'Discover',
     title: 'Find something to do',
-    body: 'Browse restaurants, movies, hikes, games, and more. When you find something good, send it straight to your club as a poll.',
+    body: 'Browse restaurants, movies, hikes, games, and more. When you find something good, send it straight to your group as a poll.',
   },
   // ── Dashboard ────────────────────────────────────────────
   {
@@ -55,15 +55,15 @@ export const tourSteps = [
     arrow: 'top',
     label: 'Your turn',
     title: "When it's your turn",
-    body: 'This banner appears when your club is waiting on you. Tap "Browse" to find a spot or "Poll club" to let everyone weigh in first.',
+    body: 'This banner appears when your group is waiting on you. Tap "Browse" to find a spot or "Poll group" to let everyone weigh in first.',
   },
   {
     zoneId: 'tour-clubs',
     place: 'below',
     arrow: 'top',
-    label: 'Your clubs',
-    title: 'Jump into a club',
-    body: 'Each of your clubs shows up as a card. Tap one to open its page — members, rotation, and events.',
+    label: 'Your groups',
+    title: 'Jump into a group',
+    body: 'Each of your groups shows up as a card. Tap one to open its page — members, rotation, and events.',
   },
   {
     zoneId: 'tour-queue',
@@ -79,7 +79,7 @@ export const tourSteps = [
     arrow: 'left',
     label: 'Polls',
     title: 'Vote on polls',
-    body: 'Before committing to a spot, anyone can run a quick poll. Respond right here — no need to open the club page.',
+    body: 'Before committing to a spot, anyone can run a quick poll. Respond right here — no need to open the group page.',
   },
   {
     zoneId: 'tour-rsvp',
@@ -87,7 +87,7 @@ export const tourSteps = [
     arrow: 'left',
     label: 'RSVPs',
     title: 'RSVP to events',
-    body: "When an event is created your club needs to know if you're coming. Going or Can't — one tap and everyone sees your answer.",
+    body: "When an event is created your group needs to know if you're coming. Going or Can't — one tap and everyone sees your answer.",
   },
   {
     zoneId: 'tour-events',

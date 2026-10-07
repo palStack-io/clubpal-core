@@ -30,9 +30,9 @@ export default class ErrorBoundary extends Component {
         padding: '2rem',
         textAlign: 'center',
       }}>
-        <h1 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Something went wrong</h1>
+        <h1 style={{ fontSize: '1.5rem', fontWeight: 600 }}>Something went wrong on our end</h1>
         <p style={{ color: 'var(--t2, #9898b0)', maxWidth: '400px' }}>
-          An unexpected error occurred. Try refreshing the page.
+          Try refreshing the page, and we'll take it from there.
         </p>
         <button
           onClick={() => window.location.reload()}

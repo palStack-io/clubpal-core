@@ -110,7 +110,7 @@ export default function UpcomingEventsCard({ events = [], loading = false, onNew
               fontSize: '13px',
             }}
           >
-            No upcoming events.{' '}
+            Your calendar's wide open. What should the crew do next?{' '}
             <button
               onClick={() => onNewEvent ? onNewEvent() : navigate('/events/new')}
               style={{

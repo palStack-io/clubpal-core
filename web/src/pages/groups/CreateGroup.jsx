@@ -70,7 +70,7 @@ export default function CreateGroup() {
   }
 
   const handleSubmit = async () => {
-    if (!form.name.trim()) { setError('Club name is required.'); return }
+    if (!form.name.trim()) { setError('What should we call your group?'); return }
     if (!form.join_behavior) { setError('Please select how new members can join.'); return }
     setError('')
     setLoading(true)
@@ -86,7 +86,7 @@ export default function CreateGroup() {
 
       // Upload banner if provided
       if (bannerFile) {
-        await uploadBanner(group.id, bannerFile).catch(() => toast.error('Club created, but banner failed to upload.'))
+        await uploadBanner(group.id, bannerFile).catch(() => toast.error('Your group is up. The banner didn\'t upload, so try it again from Edit group.'))
       }
 
       // Send invites
@@ -98,7 +98,7 @@ export default function CreateGroup() {
 
       window.location.href = `/groups/${group.id}`
     } catch (e) {
-      setError(e.response?.data?.detail || 'Failed to create club.')
+      setError(e.response?.data?.detail || 'Hmm, your group didn\'t save. Mind trying again?')
     } finally {
       setLoading(false)
     }
@@ -106,9 +106,9 @@ export default function CreateGroup() {
 
   return (
     <AppShell activeRoute="/groups">
-      <Topbar title="Create New Club" onBack={() => navigate('/groups')}>
+      <Topbar title="Create New Group" onBack={() => navigate('/groups')}>
         <Button variant="ghost" onClick={() => navigate('/groups')}>Cancel</Button>
-        <Button variant="primary" onClick={handleSubmit} loading={loading}>Create Club</Button>
+        <Button variant="primary" onClick={handleSubmit} loading={loading}>Create Group</Button>
       </Topbar>
 
       <div style={{ padding: '20px 24px', maxWidth: '720px' }}>
@@ -118,18 +118,18 @@ export default function CreateGroup() {
           </div>
         )}
 
-        <FormSection title="Club Banner">
+        <FormSection title="Group Banner">
           <BannerUpload
             value={bannerPreview}
             onChange={handleBannerChange}
-            label="Club Banner Photo"
+            label="Group Banner Photo"
             aspectRatio="16/5"
           />
         </FormSection>
 
-        <FormSection title="Club Details">
+        <FormSection title="Group Details">
           <FormRow>
-            <FormGroup label="Club Name" required>
+            <FormGroup label="Group Name" required>
               <FormInput
                 placeholder="e.g. Friday Foodies"
                 value={form.name}
@@ -203,7 +203,7 @@ export default function CreateGroup() {
           </div>
           {form.rotation_mode === 'sequential' && invites.length > 1 && (
             <div style={{ fontSize: '11px', color: 'var(--t3)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-              ↕ Drag to set turn order — first in list picks first
+              Drag to set turn order — first in list picks first
             </div>
           )}
           {form.rotation_mode === 'manual' && (
@@ -215,8 +215,8 @@ export default function CreateGroup() {
                 <div style={{ position: 'absolute', top: '2px', left: form.email_reminders_enabled ? '18px' : '2px', width: '16px', height: '16px', borderRadius: '8px', background: '#fff', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.25)' }} />
               </div>
               <div>
-                <div style={{ fontSize: '12px', fontWeight: 600, color: form.email_reminders_enabled ? 'var(--amber)' : 'var(--t2)' }}>✉️ Enable monthly email reminder for the next pick</div>
-                <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px', lineHeight: 1.4 }}>When enabled, all club members will be emailed to vote on who picks next when rotation advances</div>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: form.email_reminders_enabled ? 'var(--amber)' : 'var(--t2)' }}>Enable monthly email reminder for the next pick</div>
+                <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '2px', lineHeight: 1.4 }}>When enabled, all group members will be emailed to vote on who picks next when rotation advances</div>
               </div>
             </div>
           )}

@@ -203,13 +203,13 @@ export default function GroupDetail() {
 
   if (loading) return (
     <AppShell activeRoute="/groups">
-      <div style={{ padding: '40px', textAlign: 'center', color: 'var(--t3)' }}>Loading club…</div>
+      <div style={{ padding: '40px', textAlign: 'center', color: 'var(--t3)' }}>Loading group…</div>
     </AppShell>
   )
 
   if (!group) return (
     <AppShell activeRoute="/groups">
-      <div style={{ padding: '40px', textAlign: 'center', color: 'var(--t3)' }}>Club not found.</div>
+      <div style={{ padding: '40px', textAlign: 'center', color: 'var(--t3)' }}>We couldn't find that group. Double-check the link.</div>
     </AppShell>
   )
 
@@ -224,19 +224,19 @@ export default function GroupDetail() {
   ]
 
   const handleLeaveGroup = async () => {
-    if (!window.confirm(`Leave ${group?.name || 'this club'}? You will lose access.`)) return
+    if (!window.confirm(`Leave ${group?.name || 'this group'}? You will lose access.`)) return
     try {
       await groupsApi.removeMember(id, user?.id)
       navigate('/groups')
     } catch (e) {
-      alert(e?.response?.data?.detail || 'Could not leave club.')
+      alert(e?.response?.data?.detail || "We couldn't get you out of that group. Give it another go.")
     }
   }
 
   const heroActions = [
-    { label: '🔗 Invite Link', onClick: () => setShowInviteLink(true) },
-    ...(isAdmin ? [{ label: '⚙️ Edit', onClick: () => setShowEdit(true) }] : []),
-    ...(myRole !== 'owner' ? [{ label: '🚪 Leave Club', onClick: handleLeaveGroup, danger: true }] : []),
+    { label: 'Invite Link', onClick: () => setShowInviteLink(true) },
+    ...(isAdmin ? [{ label: 'Edit', onClick: () => setShowEdit(true) }] : []),
+    ...(myRole !== 'owner' ? [{ label: 'Leave Group', onClick: handleLeaveGroup, danger: true }] : []),
   ]
 
   return (
@@ -280,7 +280,7 @@ export default function GroupDetail() {
                 <div style={{ background: 'var(--s2)', border: '1px solid var(--glass)', borderRadius: '16px', padding: '16px' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                     <span style={{ fontSize: '14px', fontWeight: 800, color: 'var(--t1)' }}>
-                      💬 Group Pulse {openPolls.length > 0 && <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--rose-soft)', background: 'var(--rose-glow)', borderRadius: '99px', padding: '2px 8px', marginLeft: '6px' }}>{openPolls.length} open</span>}
+                      Group Pulse {openPolls.length > 0 && <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--rose-soft)', background: 'var(--rose-glow)', borderRadius: '99px', padding: '2px 8px', marginLeft: '6px' }}>{openPolls.length} open</span>}
                     </span>
                     <button
                       onClick={() => setShowCreatePoll(true)}
@@ -293,7 +293,7 @@ export default function GroupDetail() {
                   {/* Open polls */}
                   {openPolls.length === 0 && (
                     <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--t3)', fontSize: '13px' }}>
-                      No active polls · <button onClick={() => setShowCreatePoll(true)} style={{ color: 'var(--rose-soft)', background: 'none', border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '13px' }}>Start one →</button>
+                      No votes needed. Everyone's on the same page. · <button onClick={() => setShowCreatePoll(true)} style={{ color: 'var(--rose-soft)', background: 'none', border: 'none', fontWeight: 700, cursor: 'pointer', fontSize: '13px' }}>Start one →</button>
                     </div>
                   )}
                   {(showAllPolls ? openPolls : openPolls.slice(0, 3)).map(poll => (
@@ -358,7 +358,7 @@ export default function GroupDetail() {
             {isAdmin && pendingRequests.length > 0 && (
               <div style={{ background: 'var(--s3)', border: '1px solid var(--rose-border)', borderRadius: '16px', padding: '18px' }}>
                 <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--t1)', marginBottom: '14px' }}>
-                  ✋ Join Requests ({pendingRequests.length})
+                  Join Requests ({pendingRequests.length})
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                   {pendingRequests.map(req => (

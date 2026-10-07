@@ -78,12 +78,12 @@ function FeedItem({ item, index, total }) {
           )}
           {item.type === 'poll' && (
             <span style={{ color: 'var(--t3)' }}>
-              {' · '}🗳️ New poll: <em style={{ fontStyle: 'normal', color: 'var(--rose-soft)' }}>{item.content}</em>
+              {' · '}New poll: <em style={{ fontStyle: 'normal', color: 'var(--rose-soft)' }}>{item.content}</em>
             </span>
           )}
           {item.type === 'event' && (
             <span style={{ color: 'var(--t3)' }}>
-              {' · '}📅 {item.content}
+              {' · '}{item.content}
             </span>
           )}
         </div>
@@ -136,7 +136,7 @@ export default function ActivityFeedCard({ items = [], loading = false }) {
             textAlign: 'center', padding: '20px 0',
             color: 'var(--t3)', fontSize: '12px',
           }}>
-            No recent activity yet
+            Your story starts here.
           </div>
         ) : (
           <div>

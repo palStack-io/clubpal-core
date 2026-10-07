@@ -269,7 +269,7 @@ function ProfileSection({ user }) {
     } catch (err) {
       setPhotoPreview(null)
       URL.revokeObjectURL(localUrl)
-      alert(err?.response?.data?.detail || 'Failed to upload photo. Please try again.')
+      alert(err?.response?.data?.detail || 'We couldn\'t upload that photo. Give it another go.')
     } finally {
       setUploading(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -309,7 +309,7 @@ function ProfileSection({ user }) {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (e) {
-      alert(e?.response?.data?.detail || 'Failed to save changes.')
+      alert(e?.response?.data?.detail || 'Hmm, that didn\'t save. Mind trying again?')
     }
     finally { setSaving(false) }
   }
@@ -514,9 +514,9 @@ function AppearanceSection() {
       <FormSection title="Color Scheme">
         <div style={{ display: 'flex', gap: '10px' }}>
           {[
-            { value: 'light', label: '☀️ Light' },
-            { value: 'dark',  label: '🌙 Dark' },
-            { value: 'system', label: '💻 System' },
+            { value: 'light', label: 'Light' },
+            { value: 'dark',  label: 'Dark' },
+            { value: 'system', label: 'System' },
           ].map(opt => (
             <button
               key={opt.value}
@@ -692,7 +692,7 @@ function IntegrationsSection({ user }) {
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
     } catch (e) {
-      setError(e?.response?.data?.detail || 'Failed to save — check your permissions.')
+      setError(e?.response?.data?.detail || "Hmm, that didn't save. Check your permissions and try again.")
     } finally {
       setSaving(false)
     }
@@ -714,7 +714,7 @@ function IntegrationsSection({ user }) {
           color: 'var(--rose)', background: 'var(--rose-glow)', border: '1px solid var(--rose-border)',
           borderRadius: '6px', padding: '2px 8px',
         }}>
-          🛡️ Admin
+          Admin
         </span>
         {Object.keys(status).length > 0 && (() => {
           const allKeys = INTEGRATION_FIELDS.flatMap(g => g.fields.map(f => f.key))
@@ -848,7 +848,7 @@ function IntegrationsSection({ user }) {
               onClick={() => setUsageOpen(o => !o)}
               style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t2)', fontSize: '13px', fontWeight: 600 }}
             >
-              <span>📊 API Usage & Daily Limits</span>
+              <span>API Usage & Daily Limits</span>
               <span style={{ fontSize: '10px', color: 'var(--t4)' }}>{usageOpen ? '▲' : '▼'}</span>
             </button>
             {usageOpen && (
@@ -1080,13 +1080,13 @@ function NotificationsSection() {
           <FormSection title="Email Notifications">
             <NotificationRow
               label="Rotation alerts"
-              description="Email when it's your turn to pick an activity in a club."
+              description="Email when it's your turn to pick an activity in a group."
               checked={prefs.notify_rotation}
               onChange={() => toggle('notify_rotation')}
             />
             <NotificationRow
               label="New events &amp; cancellations"
-              description="Email when someone creates or cancels an event in one of your clubs."
+              description="Email when someone creates or cancels an event in one of your groups."
               checked={prefs.notify_events}
               onChange={() => toggle('notify_events')}
             />
@@ -1098,8 +1098,8 @@ function NotificationsSection() {
             />
             <div style={{ paddingTop: '14px' }}>
               <NotificationRow
-                label="Club membership"
-                description="Email when you are added to a club, or when your join request is approved or declined."
+                label="Group membership"
+                description="Email when you are added to a group, or when your join request is approved or declined."
                 checked={prefs.notify_invites}
                 onChange={() => toggle('notify_invites')}
               />
@@ -1139,7 +1139,7 @@ function SecuritySection() {
       setLinkSuccess('Google account linked successfully!')
       setTimeout(() => setLinkSuccess(''), 3000)
     } catch (e) {
-      setLinkError(e?.response?.data?.detail || 'Failed to link Google account.')
+      setLinkError(e?.response?.data?.detail || 'We couldn\'t link your Google account. Give it another go.')
     }
   }
 
@@ -1151,7 +1151,7 @@ function SecuritySection() {
       setLinkSuccess(`${provider.charAt(0).toUpperCase() + provider.slice(1)} account unlinked.`)
       setTimeout(() => setLinkSuccess(''), 3000)
     } catch (e) {
-      setLinkError(e?.response?.data?.detail || 'Failed to unlink account.')
+      setLinkError(e?.response?.data?.detail || 'We couldn\'t unlink your account. Give it another go.')
     }
   }
 
@@ -1181,7 +1181,7 @@ function SecuritySection() {
       setTimeout(() => setPwSaved(false), 2500)
       updateUser({ password_changed: true })
     } catch (e) {
-      setPwError(e?.response?.data?.detail || 'Failed to change password.')
+      setPwError(e?.response?.data?.detail || 'We couldn\'t change your password. Give it another go.')
     } finally {
       setPwSaving(false)
     }
@@ -1269,7 +1269,7 @@ function SecuritySection() {
           ) : (
             <GoogleLogin
               onSuccess={r => handleLinkGoogle(r.credential)}
-              onError={() => setLinkError('Google sign-in failed.')}
+              onError={() => setLinkError('Google sign-in didn\'t work. Give it another go.')}
               text="signin_with"
               shape="pill"
               size="small"
@@ -1507,7 +1507,7 @@ function DiscoverSection({ user }) {
       setSaved(true)
       setTimeout(() => setSaved(false), 2500)
     } catch (e) {
-      setError(e?.response?.data?.detail || 'Failed to save preferences.')
+      setError(e?.response?.data?.detail || 'Hmm, that didn\'t save. Mind trying again?')
     } finally {
       setSaving(false)
     }
@@ -1734,7 +1734,7 @@ function DiscoverSection({ user }) {
           disabled={!prefs?.onboarding_complete}
           title={prefs?.onboarding_complete ? 'Re-fetch all content with current preferences' : 'Complete onboarding first'}
         >
-          {refreshed ? '✓ Refreshed!' : '🔄 Refresh Now'}
+          {refreshed ? '✓ Refreshed!' : 'Refresh Now'}
         </Button>
         <Button variant="primary" onClick={handleSave} loading={saving}>
           {saved ? '✓ Saved!' : 'Save & Reload Feed'}

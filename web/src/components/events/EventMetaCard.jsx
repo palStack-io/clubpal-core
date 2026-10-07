@@ -192,7 +192,7 @@ export default function EventMetaCard({ event, groupName, hostName }) {
   if (groupName) {
     rows.push({
       icon: '👥',
-      label: 'Club',
+      label: 'Group',
       content: (
         <span style={{ color: 'var(--rose-soft)', cursor: 'pointer' }}>
           {groupName}

@@ -102,12 +102,12 @@ export default function GroupsList() {
   return (
     <AppShell activeRoute="/groups">
       <PageHero
-        label="My Clubs"
-        title={loading ? 'My Clubs' : `${groups.length} Club${groups.length !== 1 ? 's' : ''}`}
-        subtitle="Manage your clubs and rotations"
+        label="My Groups"
+        title={loading ? 'My Groups' : `${groups.length} Group${groups.length !== 1 ? 's' : ''}`}
+        subtitle="Manage your groups and rotations"
         hasStats
       >
-        <Button variant="ghost" size="sm" onClick={() => { setShowJoin(true); setTimeout(() => joinInputRef.current?.focus(), 80) }}>🔗 Join</Button>
+        <Button variant="ghost" size="sm" onClick={() => { setShowJoin(true); setTimeout(() => joinInputRef.current?.focus(), 80) }}>Join</Button>
         <Button variant="primary" size="sm" onClick={() => setShowCreate(true)}>+ New</Button>
       </PageHero>
 
@@ -156,13 +156,13 @@ export default function GroupsList() {
           <div style={{ textAlign: 'center', padding: '64px 32px', color: 'var(--t3)' }}>
             <div style={{ fontSize: '48px', marginBottom: '12px' }}>👥</div>
             <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t2)', marginBottom: '6px' }}>
-              {groups.length === 0 ? 'No clubs yet' : 'No clubs in this category'}
+              {groups.length === 0 ? 'Every great group starts with one person. Start yours.' : 'No groups in this category yet. Try another one.'}
             </div>
             <div style={{ fontSize: '13px', marginBottom: '16px' }}>
-              {groups.length === 0 ? 'Create your first club to get started!' : 'Try a different filter'}
+              {groups.length === 0 ? 'Every great group starts with one person. Start yours.' : 'Try a different filter'}
             </div>
             {groups.length === 0 && (
-              <Button variant="primary" onClick={() => setShowCreate(true)}>Create a Club</Button>
+              <Button variant="primary" onClick={() => setShowCreate(true)}>Create a Group</Button>
             )}
           </div>
         ) : (
@@ -188,9 +188,9 @@ export default function GroupsList() {
             style={{ width: '100%', maxWidth: '360px', background: 'var(--s2)', border: '1px solid var(--s4)', borderRadius: '20px', padding: '28px 24px', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }}
             onClick={e => e.stopPropagation()}
           >
-            <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--t1)', marginBottom: '6px' }}>Join a Club</div>
+            <div style={{ fontSize: '18px', fontWeight: 800, color: 'var(--t1)', marginBottom: '6px' }}>Join a Group</div>
             <div style={{ fontSize: '13px', color: 'var(--t3)', marginBottom: '20px', lineHeight: 1.5 }}>
-              Enter the invite code shared by your club admin.
+              Enter the invite code shared by your group admin.
             </div>
             <input
               ref={joinInputRef}

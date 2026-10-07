@@ -33,7 +33,7 @@ export default function PickCTACard({ turn, groupId, onSkip, onAlreadyPicked }) 
     try {
       await action()
     } catch (err) {
-      const msg = err?.response?.data?.detail || err?.message || 'Something went wrong'
+      const msg = err?.response?.data?.detail || err?.message || 'Something went wrong on our end. Give it another go.'
       setError(msg)
       setBusy(null)
     }
@@ -77,7 +77,7 @@ export default function PickCTACard({ turn, groupId, onSkip, onAlreadyPicked }) 
           fontSize: '10px', fontWeight: 700, color: 'var(--rose-soft)',
           textTransform: 'uppercase', letterSpacing: '1.2px', marginBottom: '3px',
         }}>
-          🔄 Your turn — {turn.groupName}
+          Your turn: {turn.groupName}
         </div>
         <div style={{
           fontSize: '15px', fontWeight: 800, color: 'var(--t1)',
@@ -127,7 +127,7 @@ export default function PickCTACard({ turn, groupId, onSkip, onAlreadyPicked }) 
               border: '1px solid var(--rose-border)', cursor: 'pointer', whiteSpace: 'nowrap',
             }}
           >
-            💬 Poll group
+            Poll group
           </button>
           {onSkip && (
             <button

@@ -20,7 +20,7 @@ function SetupBanner({ onNavigate }) {
     }}>
       <div>
         <div style={{ fontSize: '13px', fontWeight: 700, color: 'var(--t1)', marginBottom: '2px' }}>
-          No personalized feed yet
+          Your personal feed will fill in as you pick things you like.
         </div>
         <div style={{ fontSize: '12px', color: 'var(--t3)' }}>
           Complete your discover setup to see books curated for your tastes.
@@ -104,7 +104,7 @@ export default function DiscoverBooks() {
             cursor: 'pointer', opacity: refreshing ? 0.6 : 1,
           }}
         >
-          {refreshing ? '⏳' : '🔄'} Refresh
+          Refresh
         </button>
       </Topbar>
 
@@ -134,7 +134,7 @@ export default function DiscoverBooks() {
           <div style={{ textAlign: 'center', padding: '64px 32px', color: 'var(--t3)' }}>
             <div style={{ fontSize: '48px', marginBottom: '12px' }}>{searched ? '📖' : '📚'}</div>
             <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--t2)' }}>
-              {searched ? 'No results found' : 'Search for a book'}
+              {searched ? 'Nothing matched. Try a different search.' : 'Search for a book'}
             </div>
             <div style={{ fontSize: '13px', marginTop: '4px' }}>
               {searched ? 'Try a different title or author' : 'Enter a title, author, or ISBN to get started'}
@@ -159,7 +159,7 @@ export default function DiscoverBooks() {
                     onClick={e => { e.stopPropagation(); setPollItem({ title: item.title, location: null }) }}
                     style={{ background: 'var(--s2)', border: '1px solid var(--glass)', borderRadius: '8px', padding: '5px 8px', fontSize: '11px', fontWeight: 700, color: 'var(--t2)', cursor: 'pointer' }}
                   >
-                    💬 Poll
+                    Poll
                   </button>
                   <button
                     onClick={e => { e.stopPropagation(); setPickItem({ title: item.title, location: null }) }}

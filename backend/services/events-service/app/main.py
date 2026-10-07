@@ -225,8 +225,10 @@ def _next_occurrence(rule: str, day_of_week: Optional[int], from_date: date) -> 
 async def _notify_group_members(group_id: int, event_id: int, event_title: str,
                                  event_date: str, event_type: str = 'event',
                                  deadline: str = None, creator_id: int = None,
-                                 has_rsvp: bool = True, hours_until: int = None):
-    """Hit the internal gateway notify endpoint for all group members."""
+                                 has_rsvp: bool = True, hours_until: int = None,
+                                 user_ids: List[int] = None):
+    """Hit the internal gateway notify endpoint for all group members, or only for
+    ``user_ids`` when given (RSVP reminders go to people who haven't answered)."""
     try:
         payload = {
             "group_id": group_id,
@@ -240,6 +242,8 @@ async def _notify_group_members(group_id: int, event_id: int, event_title: str,
             payload["deadline"] = deadline
         if creator_id:
             payload["creator_id"] = creator_id
+        if user_ids is not None:
+            payload["user_ids"] = user_ids
         if hours_until is not None:
             payload["hours_until"] = hours_until
         async with httpx.AsyncClient(timeout=10) as client:
@@ -252,8 +256,17 @@ async def _notify_group_members(group_id: int, event_id: int, event_title: str,
         logger.warning(f"Failed to notify members for event {event_id}: {e}")
 
 
+def _unanswered_member_ids(event_id: int, exclude: tuple = ()) -> List[int]:
+    """Members who haven't answered: their attendee row is still 'pending'. Anyone who
+    said going, maybe or not_going — and anyone the host removed — is left alone."""
+    return [a["user_id"] for a in get_attendees(event_id)
+            if a.get("status") == "pending" and a["user_id"] not in exclude]
+
+
 async def send_rsvp_deadline_reminders():
-    """Hourly job: send reminder emails for events whose RSVP deadline is within 25 hours."""
+    """Hourly job: the last call. Within 25 hours of the RSVP deadline, ask only the
+    people who haven't answered yet. Last of three
+    touches: the invite, one honest reminder, this."""
     logger.info("Running RSVP deadline reminder job")
     conn = get_db()
     cursor = conn.cursor()
@@ -273,14 +286,17 @@ async def send_rsvp_deadline_reminders():
             deadline_str = deadline.strftime('%A, %b %-d at %-I:%M %p') if deadline else ''
             sched = event.get('scheduled_date')
             event_date_str = sched.strftime('%A, %b %-d at %-I:%M %p') if sched else ''
-            await _notify_group_members(
-                group_id=event['group_id'],
-                event_id=event['id'],
-                event_title=event['title'],
-                event_date=event_date_str,
-                event_type='rsvp_reminder',
-                deadline=deadline_str,
-            )
+            pending_ids = _unanswered_member_ids(event['id'], exclude=(event.get('created_by'),))
+            if pending_ids:
+                await _notify_group_members(
+                    group_id=event['group_id'],
+                    event_id=event['id'],
+                    event_title=event['title'],
+                    event_date=event_date_str,
+                    event_type='rsvp_reminder',
+                    deadline=deadline_str,
+                    user_ids=pending_ids,
+                )
             conn2 = get_db()
             cur2 = conn2.cursor()
             cur2.execute("UPDATE events SET rsvp_reminder_sent = TRUE WHERE id = %s", (event['id'],))
@@ -288,6 +304,51 @@ async def send_rsvp_deadline_reminders():
             conn2.close()
         except Exception as e:
             logger.error(f"Failed to send RSVP reminder for event {event['id']}: {e}")
+
+
+async def send_rsvp_asks():
+    """Hourly job: the one honest reminder. Sent once per event, halfway between the
+    invite (event creation) and the RSVP deadline, only to people who haven't answered.
+
+    Skipped when the halfway point falls inside the last-call window (deadline within
+    25 hours): the last call covers those events, so nobody is asked twice in a row.
+    A host's manual nudge counts as this reminder (same flag)."""
+    logger.info("Running RSVP honest-reminder job")
+    conn = get_db()
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT * FROM events
+        WHERE rsvp_deadline > NOW() + INTERVAL '25 hours'
+          AND status = 'scheduled'
+          AND (rsvp_ask_sent IS NULL OR rsvp_ask_sent = FALSE)
+          AND created_at + (rsvp_deadline - created_at) / 2 <= NOW()
+    """)
+    events = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    for event in events:
+        try:
+            host_id = event.get('created_by')
+            pending_ids = _unanswered_member_ids(event['id'], exclude=(host_id,))
+            sched = event.get('scheduled_date')
+            event_date_str = sched.strftime('%A, %b %-d at %-I:%M %p') if sched else ''
+            if pending_ids:
+                await _notify_group_members(
+                    group_id=event['group_id'],
+                    event_id=event['id'],
+                    event_title=event['title'],
+                    event_date=event_date_str,
+                    event_type='rsvp_nudge',
+                    creator_id=host_id,
+                    user_ids=pending_ids,
+                )
+            conn2 = get_db()
+            cur2 = conn2.cursor()
+            cur2.execute("UPDATE events SET rsvp_ask_sent = TRUE WHERE id = %s", (event['id'],))
+            conn2.commit()
+            conn2.close()
+        except Exception as e:
+            logger.error(f"Failed to send RSVP honest reminder for event {event['id']}: {e}")
 
 
 async def send_rsvp_deadline_final_counts():
@@ -572,6 +633,9 @@ async def startup():
     # Schedule hourly RSVP deadline reminders
     scheduler.add_job(send_rsvp_deadline_reminders, 'cron', minute=0,
                       id='rsvp_deadline_reminders', replace_existing=True)
+    # Schedule hourly honest RSVP reminder (once per event, halfway to the deadline)
+    scheduler.add_job(send_rsvp_asks, 'cron', minute=10,
+                      id='rsvp_asks', replace_existing=True)
     # Schedule hourly final headcount notifications after RSVP deadline
     scheduler.add_job(send_rsvp_deadline_final_counts, 'cron', minute=5,
                       id='rsvp_deadline_final_counts', replace_existing=True)
@@ -1033,12 +1097,15 @@ async def delete_event_endpoint(event_id: int, user_id: int = Depends(get_curren
 
 @app.post("/events/{event_id}/rsvp-reminder", status_code=202)
 async def send_rsvp_reminder(event_id: int, user_id: int = Depends(get_current_user_id)):
-    """Event creator nudges all group members who haven't RSVPed 'going'."""
+    """Creator nudges the members who haven't answered yet. Once per event: this is the
+    one honest reminder (the automatic one is skipped once it has gone out)."""
     event = get_event(event_id)
     if not event:
         raise HTTPException(status_code=404, detail="Event not found")
     if event["created_by"] != user_id:
         raise HTTPException(status_code=403, detail="Only the event creator can send reminders")
+    if event.get("rsvp_ask_sent"):
+        return {"nudged": 0, "message": "A reminder already went out for this event. Everyone who hasn't answered has had their nudge."}
 
     # Get group members
     group_member_ids: List[int] = []
@@ -1053,12 +1120,12 @@ async def send_rsvp_reminder(event_id: int, user_id: int = Depends(get_current_u
     except Exception:
         pass
 
-    # Exclude those already going + the creator
-    going_ids = {a["user_id"] for a in get_attendees(event_id) if a["status"] == "going"}
-    target_ids = [uid for uid in group_member_ids if uid != user_id and uid not in going_ids]
+    # Only people who haven't answered (still 'pending'): not going, maybe, can't, or the sender
+    unanswered = set(_unanswered_member_ids(event_id, exclude=(user_id,)))
+    target_ids = [uid for uid in group_member_ids if uid in unanswered]
 
     if not target_ids:
-        return {"nudged": 0, "message": "Everyone has already RSVPed going."}
+        return {"nudged": 0, "message": "Everyone has answered."}
 
     sched = event.get("scheduled_date")
     event_date_str = sched.strftime("%A, %b %-d at %-I:%M %p") if sched else ""
@@ -1082,6 +1149,14 @@ async def send_rsvp_reminder(event_id: int, user_id: int = Depends(get_current_u
             logger.warning(f"RSVP nudge gateway returned {resp.status_code} for event {event_id}: {resp.text[:200]}")
         else:
             logger.info(f"RSVP nudge sent for event {event_id} to {len(target_ids)} user(s)")
+            try:
+                conn = get_db()
+                cur = conn.cursor()
+                cur.execute("UPDATE events SET rsvp_ask_sent = TRUE WHERE id = %s", (event_id,))
+                conn.commit()
+                conn.close()
+            except Exception as e:
+                logger.warning(f"Could not mark RSVP reminder sent for event {event_id}: {e}")
     except Exception as e:
         logger.warning(f"Failed to send RSVP nudge for event {event_id}: {e}")
 
@@ -1162,8 +1237,8 @@ async def rsvp_event(event_id: int, rsvp_data: AttendeeRSVP, user_id: int = Depe
                             f"{GATEWAY_URL}/internal/notify/push",
                             json={
                                 "user_id": host_id,
-                                "title": f"🎉 {event['title']} is full!",
-                                "body": f"All {event['max_attendees']} spots are taken",
+                                "title": f"{event['title']} is full",
+                                "body": f"All {event['max_attendees']} spots are taken. Nice turnout.",
                                 "link_type": "event",
                                 "link_id": event_id,
                             },
@@ -1364,13 +1439,13 @@ async def _get_first_name(user_id: int) -> str:
 def _rsvp_set_for_you_copy(setter: str, event_title: str, status: str) -> tuple:
     """Push/in-app copy for a member whose RSVP someone else updated."""
     if status == "going":
-        return (f"You're in for {event_title} 🎉",
+        return (f"You're in for {event_title}",
                 f"{setter} saved you a spot. If your plans change, you can update your RSVP anytime.")
     if status == "maybe":
         return (f"{setter} penciled you in for {event_title}",
                 "You're down as a maybe for now. Update your RSVP whenever you know more.")
-    return (f"We'll miss you at {event_title}",
-            f"{setter} let everyone know you can't make it. If plans change, you're always welcome back.")
+    return ("Next time, then",
+            f"{setter} let everyone know you can't make {event_title}. If plans change, we'll save you a seat.")
 
 
 @app.patch("/events/{event_id}/attendees/{user_id}", response_model=AttendeeResponse)

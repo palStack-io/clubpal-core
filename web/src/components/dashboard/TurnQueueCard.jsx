@@ -51,7 +51,7 @@ export default function TurnQueueCard({ groups = [], rotations = [], currentUser
       <Card.Body>
         {rows.length === 0 ? (
           <div style={{ color: 'var(--t3)', fontSize: '12px', textAlign: 'center', padding: '16px 0' }}>
-            No rotation data.
+            No turn order yet.
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>

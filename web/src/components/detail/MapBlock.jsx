@@ -75,7 +75,7 @@ export default function MapBlock({ lat, lng, address }) {
               color: 'var(--blue)',
             }}
           >
-            Open in Maps ↗
+            Open in Maps
           </div>
         </a>
       )}

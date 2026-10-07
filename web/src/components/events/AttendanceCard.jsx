@@ -124,7 +124,7 @@ export default function AttendanceCard({
           </span>
           {spotsLeft !== null && (
             <span style={{ fontSize: '12px', fontWeight: 600, color: spotsLeft === 0 ? '#f87171' : 'var(--blue)' }}>
-              {spotsLeft === 0 ? '🔴 Full' : `${spotsLeft} spot${spotsLeft === 1 ? '' : 's'} left`}
+              {spotsLeft === 0 ? 'Full' : `${spotsLeft} spot${spotsLeft === 1 ? '' : 's'} left`}
             </span>
           )}
         </div>
@@ -138,7 +138,7 @@ export default function AttendanceCard({
               fontSize: '13px',
             }}
           >
-            No RSVPs yet
+            Quiet for now. Good things are coming.
           </div>
         ) : (
           <div>

@@ -45,10 +45,10 @@ export default function StatsHero({ user, year = new Date().getFullYear(), total
         Your {year} in Review
       </div>
       <div style={{ fontSize: '24px', fontWeight: 900, color: 'var(--t1)', letterSpacing: '-1px', marginBottom: '4px' }}>
-        {totalEvents} Group Adventures 🎉
+        {totalEvents} Group Adventures
       </div>
       <div style={{ fontSize: '12px', color: 'var(--t3)' }}>
-        Across {groupCount} club{groupCount !== 1 ? 's' : ''} · Jan–Dec {year}
+        Across {groupCount} group{groupCount !== 1 ? 's' : ''} · Jan–Dec {year}
       </div>
     </div>
   )

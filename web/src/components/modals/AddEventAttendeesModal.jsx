@@ -45,7 +45,7 @@ export default function AddEventAttendeesModal({ isOpen, onClose, eventId, group
       onAdded?.()
       onClose?.()
     } catch {
-      setError('Could not add some attendees. Please try again.')
+      setError('We couldn\'t add some attendees. Give it another go.')
     } finally {
       setSaving(false)
     }

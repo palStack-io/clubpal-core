@@ -15,7 +15,7 @@ export default function AdminUsersCard() {
   useEffect(() => {
     authApi.adminListUsers()
       .then(data => { setUsers(data); setLoading(false) })
-      .catch(() => { setError('Failed to load users.'); setLoading(false) })
+      .catch(() => { setError("We couldn't load users. Refresh and try again."); setLoading(false) })
   }, [])
 
   const handleDelete = async (userId) => {
@@ -24,7 +24,7 @@ export default function AdminUsersCard() {
       await authApi.adminDeleteUser(userId)
       setUsers(u => u.filter(x => x.id !== userId))
     } catch {
-      setError('Failed to remove user.')
+      setError("We couldn't remove that user. Give it another go.")
     } finally {
       setDeletingId(null)
       setConfirmId(null)

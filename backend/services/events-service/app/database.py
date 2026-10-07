@@ -209,6 +209,11 @@ def init_db():
     except Exception:
         pass
 
+    try:
+        cursor.execute("ALTER TABLE events ADD COLUMN IF NOT EXISTS rsvp_ask_sent BOOLEAN DEFAULT FALSE")
+    except Exception:
+        pass
+
     # group_id is nullable for group-less (link-only) events
     try:
         cursor.execute("ALTER TABLE events ALTER COLUMN group_id DROP NOT NULL")

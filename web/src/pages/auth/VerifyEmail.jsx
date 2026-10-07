@@ -58,7 +58,7 @@ export default function VerifyEmail() {
             <div style={{ fontSize: '42px', marginBottom: '12px' }}>❌</div>
             <h2 style={{ fontSize: '20px', fontWeight: 800, color: 'var(--t1)', marginBottom: '6px' }}>Link expired</h2>
             <p style={{ fontSize: '13px', color: 'var(--t3)', marginBottom: '16px' }}>
-              This verification link is invalid or has expired.
+              That verification link isn't working. Request a new one and we'll send it right over.
             </p>
             <Link to="/dashboard" style={{ fontSize: '13px', color: 'var(--rose-soft)', fontWeight: 600, textDecoration: 'none' }}>
               Go to dashboard to resend →

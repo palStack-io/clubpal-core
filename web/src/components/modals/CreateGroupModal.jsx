@@ -52,8 +52,8 @@ const sectionTitleStyle = {
 const GROUP_ONBOARD_STEPS = [
   {
     icon: '🎉',
-    title: 'Your club is ready!',
-    body: 'Share your club with friends — they can join via invite link or email invitation.',
+    title: 'Your group is ready!',
+    body: 'Share your group with friends — they can join via invite link or email invitation.',
   },
   {
     icon: '🔄',
@@ -109,7 +109,7 @@ export default function CreateGroupModal({ isOpen, onClose, onCreated }) {
   const handleSubmit = async () => {
     setError('')
     if (!form.name.trim()) {
-      setError('Club name is required.')
+      setError('What should we call your group?')
       return
     }
     setLoading(true)
@@ -140,7 +140,7 @@ export default function CreateGroupModal({ isOpen, onClose, onCreated }) {
         onClose && onClose()
       }
     } catch (err) {
-      setError(err?.response?.data?.detail || 'Failed to create club. Please try again.')
+      setError(err?.response?.data?.detail || 'Hmm, your group didn\'t save. Mind trying again?')
     } finally {
       setLoading(false)
     }
@@ -206,10 +206,10 @@ export default function CreateGroupModal({ isOpen, onClose, onCreated }) {
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Create Club" size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title="Create Group" size="lg">
       {/* Section 1: Club Details */}
       <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>Club Details</div>
+        <div style={sectionTitleStyle}>Group Details</div>
         <div
           style={{
             display: 'grid',
@@ -233,7 +233,7 @@ export default function CreateGroupModal({ isOpen, onClose, onCreated }) {
             <input
               value={form.description}
               onChange={(e) => setField('description', e.target.value)}
-              placeholder="What's this club about?"
+              placeholder="What's this group about?"
               style={inputStyle}
               onFocus={(e) => (e.target.style.borderColor = 'var(--rose-border)')}
               onBlur={(e) => (e.target.style.borderColor = 'var(--glass)')}
@@ -283,8 +283,8 @@ export default function CreateGroupModal({ isOpen, onClose, onCreated }) {
           <label style={labelStyle}>Join Behavior</label>
           <div style={{ display: 'flex', background: 'var(--s4)', borderRadius: '10px', padding: '3px' }}>
             {[
-              { value: 'instant', label: '⚡ Instant Join' },
-              { value: 'approval', label: '✋ Approval Required' },
+              { value: 'instant', label: 'Instant Join' },
+              { value: 'approval', label: 'Approval Required' },
             ].map((opt) => {
               const isActive = form.join_behavior === opt.value
               return (
@@ -308,7 +308,7 @@ export default function CreateGroupModal({ isOpen, onClose, onCreated }) {
           <div style={{ fontSize: '11px', color: 'var(--t3)', marginTop: '5px' }}>
             {form.join_behavior === 'instant'
               ? 'Anyone with the invite code joins automatically.'
-              : 'You approve each join request before they can access the club.'}
+              : 'You approve each join request before they can access the group.'}
           </div>
         </div>
       </div>
@@ -475,7 +475,7 @@ export default function CreateGroupModal({ isOpen, onClose, onCreated }) {
           Cancel
         </Button>
         <Button variant="primary" loading={loading} onClick={handleSubmit}>
-          Create Club
+          Create Group
         </Button>
       </div>
     </Modal>

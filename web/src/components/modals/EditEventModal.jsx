@@ -153,7 +153,7 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
       })
     } catch (err) {
       const detail = err?.response?.data?.detail
-      setError(typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map(d => d.msg || String(d)).join('; ') : 'Failed to save changes. Please try again.')
+      setError(typeof detail === 'string' ? detail : Array.isArray(detail) ? detail.map(d => d.msg || String(d)).join('; ') : 'Hmm, that didn\'t save. Mind trying again?')
     } finally {
       setLoading(false)
     }
@@ -244,7 +244,7 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
             marginTop: '8px',
           }}
         >
-          🔒 The venue/activity can't be changed after creation. Cancel and create a new
+          The venue/activity can't be changed after creation. Cancel and create a new
           event if needed.
         </div>
       </div>
@@ -300,7 +300,7 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
           </div>
           {rsvpDeadlineDate && (
             <div style={{ fontSize: '11px', color: 'var(--amber)', marginTop: '6px' }}>
-              ⏰ Members will be reminded as the deadline approaches.
+              People who haven't answered get one gentle reminder, then a last call the day before the RSVP deadline.
             </div>
           )}
         </div>
@@ -358,13 +358,13 @@ export default function EditEventModal({ isOpen, onClose, event, onSaved, onCanc
       <ToggleRow
         value={ratingsEnabled}
         onChange={() => setRatingsEnabled(v => !v)}
-        label="⭐ Enable Ratings"
+        label="Enable Ratings"
         description="Allow members to rate and review this event after it ends"
       />
       <ToggleRow
         value={bringListEnabled}
         onChange={() => setBringListEnabled(v => !v)}
-        label="🧺 Enable Bring List"
+        label="Enable Bring List"
         description="Coordinate what everyone brings; manage items from the event page"
       />
 

@@ -16,7 +16,7 @@ export default function ConfirmDeleteModal({ isOpen, onClose, onConfirm, itemNam
       }
     >
       <p style={{ fontSize: 'var(--text-base)', color: 'var(--t2)', lineHeight: 1.6 }}>
-        This action is permanent and cannot be undone. All associated data will be lost.
+        This is permanent and can't be undone. All associated data will be lost.
       </p>
     </Modal>
   )

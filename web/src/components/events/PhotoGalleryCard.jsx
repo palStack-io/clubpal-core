@@ -46,7 +46,7 @@ export default function PhotoGalleryCard({ photos = [], currentUserId, onUpload,
         title={`Photos (${photos.length})`}
         action={
           <Button variant="primary" size="sm" onClick={() => fileRef.current?.click()}>
-            📷 Add Photos
+            Add Photos
           </Button>
         }
       />
@@ -74,7 +74,7 @@ export default function PhotoGalleryCard({ photos = [], currentUserId, onUpload,
           >
             <div style={{ fontSize: '32px', marginBottom: '8px' }}>📷</div>
             <div style={{ fontSize: '13px', color: 'var(--t3)', marginBottom: '4px' }}>
-              No photos yet
+              Your first photo will show up here.
             </div>
             <span style={{ fontSize: '12px', color: 'var(--rose-soft)' }}>
               Add the first one

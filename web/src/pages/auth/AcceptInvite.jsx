@@ -36,7 +36,7 @@ export default function AcceptInvite() {
   useEffect(() => {
     authApi.getInvite(token)
       .then(setInvite)
-      .catch(() => setLoadError('This invitation is invalid or has expired.'))
+      .catch(() => setLoadError('That invitation isn\'t working. Double-check it with whoever sent it.'))
   }, [token])
 
   const handleJoin = async () => {
@@ -48,7 +48,7 @@ export default function AcceptInvite() {
       localStorage.setItem('user', JSON.stringify(data.user))
       navigate('/dashboard')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to join group')
+      setError(err.response?.data?.detail || 'We couldn\'t join that group. Give it another go.')
     } finally {
       setLoading(false)
     }
@@ -65,7 +65,7 @@ export default function AcceptInvite() {
       localStorage.setItem('user', JSON.stringify(data.user))
       navigate('/dashboard')
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to create account')
+      setError(err.response?.data?.detail || 'We couldn\'t create your account. Give it another go.')
     } finally {
       setLoading(false)
     }

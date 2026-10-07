@@ -4,10 +4,10 @@ import Avatar from './Avatar'
 import { ratingsClient } from '../../api/client'
 
 function vibeLabel(avg) {
-  if (avg >= 9) return { label: '🔥 Tough critic', color: 'var(--rose)' }
-  if (avg >= 7) return { label: '👍 High standards', color: 'var(--green)' }
-  if (avg >= 5) return { label: '⚖️ Balanced', color: 'var(--blue)' }
-  return { label: '😌 Easy going', color: 'var(--amber)' }
+  if (avg >= 9) return { label: 'Tough critic', color: 'var(--rose)' }
+  if (avg >= 7) return { label: 'High standards', color: 'var(--green)' }
+  if (avg >= 5) return { label: 'Balanced', color: 'var(--blue)' }
+  return { label: 'Easy going', color: 'var(--amber)' }
 }
 
 const RSVP_OPTIONS = [
@@ -156,7 +156,7 @@ export default function UserStatsModal({ member, canManage, onRoleChange, onRemo
               {vibe ? (
                 <span style={{ fontSize: '11px', fontWeight: 800, color: vibe.color, textAlign: 'center', lineHeight: 1.3 }}>{vibe.label}</span>
               ) : (
-                <span style={{ fontSize: '11px', color: 'var(--t4)', textAlign: 'center' }}>No ratings yet</span>
+                <span style={{ fontSize: '11px', color: 'var(--t4)', textAlign: 'center' }}>The first rating will show up here.</span>
               )}
             </div>
           </div>
@@ -200,7 +200,7 @@ export default function UserStatsModal({ member, canManage, onRoleChange, onRemo
                   onClick={() => { onRemove(member.user_id); onClose() }}
                   style={{ width: '100%', padding: '11px', borderRadius: '12px', background: 'rgba(248,113,113,0.06)', border: '1px solid rgba(248,113,113,0.2)', color: '#f87171', fontWeight: 700, fontSize: '13px', cursor: 'pointer' }}
                 >
-                  Remove from Club
+                  Remove from Group
                 </button>
               </>
             )}

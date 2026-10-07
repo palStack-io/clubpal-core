@@ -238,8 +238,8 @@ async def _send_reengagement_notifications():
             if tokens and prefs.get("push_enabled", True):
                 await _send_push(
                     tokens,
-                    title="We miss you! 👋",
-                    body="Your clubs have new activity — come check what you've missed.",
+                    title="It's been a while",
+                    body="Your groups are still here whenever you want them.",
                     data={"link_type": "home"},
                 )
             if prefs.get("notify_reminders", True):
@@ -1529,6 +1529,8 @@ class EventNotifyRequest(BaseModel):
     deadline: Optional[str] = None
     going_count: Optional[int] = None
     has_rsvp: bool = True   # False when event has no RSVP deadline — changes email framing
+    body_text: Optional[str] = None      # for invite: the notification body (defaults to the group name)
+    member_facing: Optional[bool] = None # for invite: True = also email the member (added / approved / declined)
     maybe_count: Optional[int] = None
     not_going_count: Optional[int] = None
     winner_text: Optional[str] = None   # for poll_result
@@ -1550,16 +1552,16 @@ async def notify_rotation(req: RotationNotifyRequest, x_internal_secret: Optiona
     # Always create in-app notification
     create_notification(
         req.user_id, "rotation",
-        f"🎯 Your turn in {req.group_name}",
-        "It's your turn to pick the next activity!",
+        f"Your turn in {req.group_name}",
+        "The next meetup is yours to pick, whenever you're ready.",
         link_type="group", link_id=req.group_id,
     )
 
     # Push notification (respects push_enabled pref)
     if prefs.get("push_enabled", True):
         tokens = get_push_tokens_for_users([req.user_id])
-        await _send_push(tokens, f"🎯 Your turn in {req.group_name}",
-                         "It's your turn to pick the next activity!",
+        await _send_push(tokens, f"Your turn in {req.group_name}",
+                         "The next meetup is yours to pick, whenever you're ready.",
                          {"link_type": "group", "link_id": req.group_id})
 
     if not prefs["notify_rotation"]:
@@ -1589,7 +1591,7 @@ async def notify_mention(req: MentionNotifyRequest, current_user: dict = Depends
     raw_preview = (req.comment_preview or "").strip()
     # Strip HTML tags from user-supplied comment preview before sending in notifications
     safe_preview = _re.sub(r"<[^>]+>", "", raw_preview)
-    title = f"💬 {sender_name} mentioned you"
+    title = f"{sender_name} mentioned you"
     body = safe_preview[:80] if safe_preview else "You were mentioned in a comment"
     notified = 0
     for uid in req.mentioned_user_ids:
@@ -1690,8 +1692,8 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                 # In-app notification (always)
                 create_notification(
                     uid, "poll",
-                    f"🗳️ Vote: {req.event_title}",
-                    f"{creator_name} wants your opinion in {group_name}",
+                    f"Vote: {req.event_title}",
+                    f"{creator_name} would love your vote in {group_name}",
                     link_type="group", link_id=req.group_id,
                 )
                 # Email (if opted in)
@@ -1706,7 +1708,7 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                 winner_line = req.winner_text or "No responses yet"
                 create_notification(
                     uid, "poll",
-                    f"📊 Poll result: {req.event_title}",
+                    f"Poll result: {req.event_title}",
                     f"Winner: {winner_line}",
                     link_type="group", link_id=req.group_id,
                 )
@@ -1718,8 +1720,8 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                     )
 
             elif req.type == "rsvp_deadline_final":
-                create_notification(uid, "event", f"📊 Final RSVP: {req.event_title}",
-                                    f"{req.going_count or 0} going · {req.maybe_count or 0} maybe",
+                create_notification(uid, "event", f"Final count for {req.event_title}",
+                                    f"{req.going_count or 0} going, {req.maybe_count or 0} maybe",
                                     link_type="event", link_id=req.event_id)
                 if prefs["notify_events"] and user.get("email"):
                     email_service.send_rsvp_deadline_final_count(
@@ -1729,8 +1731,8 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                     )
 
             elif req.type == "rsvp_nudge":
-                create_notification(uid, "reminder", f"📅 RSVP needed: {req.event_title}",
-                                    f"{creator_name} is asking — are you in?",
+                create_notification(uid, "reminder", f"{creator_name} is planning {req.event_title}",
+                                    f"Running a friend group isn't easy. A quick answer makes it easier for {creator_name}, even if it's a no.",
                                     link_type="event", link_id=req.event_id)
                 if prefs["notify_reminders"] and user.get("email"):
                     email_service.send_rsvp_nudge(
@@ -1739,8 +1741,8 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                     )
 
             elif req.type == "rsvp_reminder":
-                create_notification(uid, "reminder", f"⏰ RSVP closes soon: {req.event_title}",
-                                    f"Deadline: {req.deadline or 'soon'}",
+                create_notification(uid, "reminder", f"Last call for {req.event_title}",
+                                    f"Are you in? Answers close {req.deadline or 'soon'}.",
                                     link_type="event", link_id=req.event_id)
                 if prefs["notify_reminders"] and user.get("email"):
                     email_service.send_rsvp_deadline_reminder(
@@ -1749,7 +1751,7 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                     )
 
             elif req.type == "reminder":
-                create_notification(uid, "reminder", f"⏰ Coming up: {req.event_title}",
+                create_notification(uid, "reminder", f"Coming up: {req.event_title}",
                                     f"Starting in {req.hours_until or 24} hours",
                                     link_type="event", link_id=req.event_id)
                 if prefs["notify_reminders"] and user.get("email"):
@@ -1759,8 +1761,8 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                     )
 
             elif req.type == "recurring":
-                create_notification(uid, "event", f"🔁 {req.event_title}",
-                                    f"Recurring event scheduled in {group_name}",
+                create_notification(uid, "event", f"{req.event_title}",
+                                    f"The next one is on the calendar for {group_name}",
                                     link_type="event", link_id=req.event_id)
                 if prefs["notify_events"] and user.get("email"):
                     email_service.send_recurring_event_created(
@@ -1773,14 +1775,15 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                 create_notification(
                     uid, "invite",
                     req.event_title,
-                    req.group_name or "your group",
+                    req.body_text or req.group_name or "your group",
                     link_type="group", link_id=req.group_id,
                 )
                 # Email for member-facing invite notifications (added, approved, declined)
                 if prefs.get("notify_invites", True) and user.get("email") and req.group_id:
                     invite_title = req.event_title or ""
                     # Only send email for notifications directed at the member (not admin alerts)
-                    is_member_facing = any(kw in invite_title for kw in ("added", "in!", "Welcome", "declined", "Your request"))
+                    is_member_facing = (req.member_facing if req.member_facing is not None else
+                                        any(kw in invite_title for kw in ("added", "in!", "Welcome", "declined", "Your request")))
                     if is_member_facing:
                         email_service.send_group_membership(
                             user["email"], name,
@@ -1793,8 +1796,8 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                 # Event cancellation — always in-app + push; email respects notify_events pref
                 create_notification(
                     uid, "event",
-                    f"❌ Cancelled: {req.event_title}",
-                    f"This event has been cancelled",
+                    f"Change of plans: {req.event_title} is off",
+                    "Hopefully next time.",
                     link_type="group", link_id=req.group_id,
                 )
                 if prefs.get("notify_events", True) and user.get("email") and req.group_id:
@@ -1807,8 +1810,8 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                 # Date/location change alert — always in-app + push
                 create_notification(
                     uid, "event",
-                    f"✏️ Updated: {req.event_title}",
-                    f"Date or location has changed — check the details",
+                    f"Update to {req.event_title}",
+                    "The date or location has changed. Take a look when you can.",
                     link_type="event", link_id=req.event_id,
                 )
 
@@ -1816,8 +1819,8 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                 # Someone RSVPed going — in-app only, no push
                 create_notification(
                     uid, "event",
-                    f"👋 {creator_name} is going!",
-                    f"Check who's attending {req.event_title}",
+                    f"{creator_name} is going",
+                    f"See who else is in for {req.event_title}",
                     link_type="event", link_id=req.event_id,
                 )
                 # Note: social_rsvp intentionally skips push (high-volume, low-priority)
@@ -1828,8 +1831,8 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                 # Post-event rating prompt — push + in-app
                 create_notification(
                     uid, "event",
-                    f"⭐ How was {req.event_title}?",
-                    "Leave a rating for this event",
+                    f"How was {req.event_title}?",
+                    "Leave a quick rating for the crew.",
                     link_type="event", link_id=req.event_id,
                 )
 
@@ -1838,10 +1841,10 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                 if req.creator_id and uid == req.creator_id:
                     continue
                 if req.has_rsvp:
-                    notif_body = f"{creator_name} scheduled an event in {group_name} — RSVP now"
+                    notif_body = f"{creator_name} is planning this one in {group_name}. Want in?"
                 else:
                     notif_body = f"{creator_name} scheduled an event in {group_name}"
-                create_notification(uid, "event", f"📅 New event: {req.event_title}",
+                create_notification(uid, "event", f"New event: {req.event_title}",
                                     notif_body,
                                     link_type="event", link_id=req.event_id)
                 if prefs["notify_events"] and user.get("email"):
@@ -1861,48 +1864,48 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
         push_uids = {uid for uid in results if push_prefs.get(uid, True)}
         push_tokens = get_push_tokens_for_users(list(push_uids))
         if req.type == "poll":
-            await _send_push(push_tokens, f"🗳️ Vote in {group_name}",
+            await _send_push(push_tokens, f"Vote in {group_name}",
                              f"{creator_name}: {req.event_title}?",
                              {"link_type": "group", "link_id": req.group_id})
         elif req.type == "poll_result":
-            await _send_push(push_tokens, f"📊 Poll result: {req.event_title}",
+            await _send_push(push_tokens, f"Poll result: {req.event_title}",
                              f"Winner: {req.winner_text or 'No responses yet'}",
                              {"link_type": "group", "link_id": req.group_id})
         elif req.type in ("created", "recurring"):
-            await _send_push(push_tokens, f"📅 {group_name}",
+            await _send_push(push_tokens, f"{group_name}",
                              f"New event: {req.event_title}",
                              {"link_type": "event", "link_id": req.event_id})
         elif req.type == "rsvp_reminder":
-            await _send_push(push_tokens, f"⏰ RSVP closes soon: {req.event_title}",
-                             f"Deadline: {req.deadline or 'soon'}",
+            await _send_push(push_tokens, f"Last call for {req.event_title}",
+                             f"Are you in? Answers close {req.deadline or 'soon'}.",
                              {"link_type": "event", "link_id": req.event_id})
         elif req.type == "rsvp_deadline_final":
-            await _send_push(push_tokens, f"📊 Final RSVP: {req.event_title}",
-                             f"{req.going_count or 0} going · {req.maybe_count or 0} maybe",
+            await _send_push(push_tokens, f"Final count for {req.event_title}",
+                             f"{req.going_count or 0} going, {req.maybe_count or 0} maybe",
                              {"link_type": "event", "link_id": req.event_id})
         elif req.type == "rsvp_nudge":
-            await _send_push(push_tokens, f"📅 RSVP needed: {req.event_title}",
-                             f"{creator_name} is asking — are you in?",
+            await _send_push(push_tokens, f"{creator_name} is planning {req.event_title}",
+                             f"Running a friend group isn't easy. A quick answer makes it easier for {creator_name}, even if it's a no.",
                              {"link_type": "event", "link_id": req.event_id})
         elif req.type == "reminder":
-            await _send_push(push_tokens, f"⏰ {req.event_title}",
-                             f"Starting in {req.hours_until or 24}h — {group_name}",
+            await _send_push(push_tokens, f"{req.event_title}",
+                             f"Starting in {req.hours_until or 24}h in {group_name}",
                              {"link_type": "event", "link_id": req.event_id})
         elif req.type == "invite":
             await _send_push(push_tokens, req.event_title,
-                             req.group_name or "your group",
+                             req.body_text or req.group_name or "your group",
                              {"link_type": "group", "link_id": req.group_id})
         elif req.type == "event_cancelled":
-            await _send_push(push_tokens, f"❌ Cancelled: {req.event_title}",
-                             "This event has been cancelled",
+            await _send_push(push_tokens, f"Change of plans: {req.event_title} is off",
+                             "Hopefully next time.",
                              {"link_type": "group", "link_id": req.group_id})
         elif req.type == "event_edit":
-            await _send_push(push_tokens, f"✏️ Updated: {req.event_title}",
-                             "Date or location has changed",
+            await _send_push(push_tokens, f"Update to {req.event_title}",
+                             "The date or location has changed. Take a look when you can.",
                              {"link_type": "event", "link_id": req.event_id})
         elif req.type == "rating_prompt":
-            await _send_push(push_tokens, f"⭐ How was {req.event_title}?",
-                             "Leave a rating for this event",
+            await _send_push(push_tokens, f"How was {req.event_title}?",
+                             "Leave a quick rating for the crew.",
                              {"link_type": "event", "link_id": req.event_id})
 
     return {"notified": results}

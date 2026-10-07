@@ -229,7 +229,9 @@ async def update_group_endpoint(group_id: int, group_data: GroupUpdate, user_id:
                             json={
                                 "user_ids": [req["user_id"]],
                                 "group_id": group_id,
-                                "event_title": f"🎉 You're in! Welcome to {group_name}",
+                                "event_title": f"You're in. Welcome to {group_name}.",
+                                "body_text": "Glad you're here. Say hi to the crew.",
+                                "member_facing": True,
                                 "group_name": group_name,
                                 "type": "invite",
                             },
@@ -307,7 +309,9 @@ async def add_member_endpoint(group_id: int, member_data: MemberAdd):
                 json={
                     "user_ids": [member_data.user_id],
                     "group_id": group_id,
-                    "event_title": f"🤝 You've been added to {group_name}",
+                    "event_title": f"You've been added to {group_name}",
+                    "body_text": "Glad you're here. Say hi to the crew.",
+                    "member_facing": True,
                     "group_name": group_name,
                     "type": "invite",
                 },
@@ -461,7 +465,7 @@ async def advance_rotation_endpoint(group_id: int, user_id: int = Depends(get_cu
                     json={
                         "group_id": group_id,
                         "user_ids": member_ids,
-                        "event_title": f"🗳️ Vote: Who picks next in {group_name}?",
+                        "event_title": f"Vote: Who picks next in {group_name}?",
                         "group_name": group_name,
                         "event_date": "",
                         "type": "poll",
@@ -1218,8 +1222,10 @@ async def preview_invite_code(code: str):
 
 
 @app.post("/invite-codes/{code}/join")
-async def join_via_invite_code(code: str, user_id: int = Depends(get_current_user_id)):
+async def join_via_invite_code(code: str, user: dict = Depends(get_current_user)):
     """Join a group via invite code. Instant or approval depending on join_behavior."""
+    user_id = user["id"]
+    member_name = user.get("full_name") or user.get("username") or "Someone"
     result = validate_invite_code(code)
     if not result["valid"]:
         raise HTTPException(status_code=400, detail=result["error"])
@@ -1252,7 +1258,9 @@ async def join_via_invite_code(code: str, user_id: int = Depends(get_current_use
                     json={
                         "user_ids": admin_ids,
                         "group_id": group_id,
-                        "event_title": f"🤝 New member joined {group_name}",
+                        "event_title": f"{member_name} just joined {group_name}",
+                        "body_text": "Your group is growing.",
+                        "member_facing": False,
                         "group_name": group_name,
                         "type": "invite",
                     },
@@ -1281,7 +1289,9 @@ async def join_via_invite_code(code: str, user_id: int = Depends(get_current_use
                     json={
                         "user_ids": admin_ids,
                         "group_id": group_id,
-                        "event_title": f"✋ Join request for {group_name}",
+                        "event_title": f"{member_name} would love to join {group_name}",
+                        "body_text": "Tap to welcome them in.",
+                        "member_facing": False,
                         "group_name": group_name,
                         "type": "invite",
                     },
@@ -1312,8 +1322,9 @@ async def join_requests_count(group_id: int, user_id: int = Depends(get_current_
 
 
 @app.post("/groups/{group_id}/notify-join-request", status_code=200)
-async def notify_join_request(group_id: int, user_id: int = Depends(get_current_user_id)):
+async def notify_join_request(group_id: int, user: dict = Depends(get_current_user)):
     """Notify group admins that a join request was submitted. Best-effort."""
+    requester = user.get("full_name") or user.get("username") or "Someone"
     group = get_group(group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Group not found")
@@ -1325,8 +1336,8 @@ async def notify_join_request(group_id: int, user_id: int = Depends(get_current_
                     f"{GATEWAY_SERVICE_URL}/internal/notify/push",
                     json={
                         "user_id": admin['user_id'],
-                        "title": f"New join request — {group['name']}",
-                        "body": "Someone wants to join your club. Tap to review.",
+                        "title": f"{requester} would love to join {group['name']}",
+                        "body": "Tap to welcome them in.",
                         "link_type": "group",
                         "link_id": group_id,
                     },
@@ -1364,10 +1375,12 @@ async def review_join_request(
     group = get_group(req["group_id"])
     group_name = group["name"] if group else f"Group {req['group_id']}"
     if data.action == "approve":
-        notif_title = f"You're in! Welcome to {group_name}"
+        notif_title = f"You're in. Welcome to {group_name}."
+        notif_body = "Glad you're here. Say hi to the crew."
         link_type = "group"
     else:
-        notif_title = f"Your request to join {group_name} was declined"
+        notif_title = f"{group_name} isn't taking new members right now. Want to start your own?"
+        notif_body = None
         link_type = "group"
 
     internal_secret = os.getenv("INTERNAL_API_SECRET", "")
@@ -1379,6 +1392,8 @@ async def review_join_request(
                     "user_ids": [req["user_id"]],
                     "group_id": req["group_id"],
                     "event_title": notif_title,
+                    "body_text": notif_body,
+                    "member_facing": True,
                     "group_name": group_name,
                     "type": "invite",
                 },

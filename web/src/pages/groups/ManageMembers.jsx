@@ -80,7 +80,7 @@ export default function ManageMembers() {
 
   return (
     <AppShell activeRoute="/groups">
-      <Topbar title={`${group?.name || 'Club'} · Members`} onBack={() => navigate(`/groups/${id}`)}>
+      <Topbar title={`${group?.name || 'Group'} · Members`} onBack={() => navigate(`/groups/${id}`)}>
         <Button variant="primary" onClick={() => setShowInvite(true)}>+ Invite Member</Button>
       </Topbar>
 
@@ -94,7 +94,7 @@ export default function ManageMembers() {
           <Card.Body>
             {sortedMembers.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '20px', color: 'var(--t3)', fontSize: '13px' }}>
-                {loading ? 'Loading…' : 'No members yet'}
+                {loading ? 'Loading…' : 'Your first member will show up here.'}
               </div>
             ) : sortedMembers.map((m, i) => (
               <div key={m.user_id} style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>

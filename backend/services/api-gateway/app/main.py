@@ -1742,7 +1742,7 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
 
             elif req.type == "rsvp_reminder":
                 create_notification(uid, "reminder", f"Last call for {req.event_title}",
-                                    f"Are you in? Answers close {req.deadline or 'soon'}.",
+                                    (f"Are you in? Answers close {req.deadline}." if req.deadline else "Are you in? It's coming up soon."),
                                     link_type="event", link_id=req.event_id)
                 if prefs["notify_reminders"] and user.get("email"):
                     email_service.send_rsvp_deadline_reminder(
@@ -1877,7 +1877,7 @@ async def notify_event(req: EventNotifyRequest, x_internal_secret: Optional[str]
                              {"link_type": "event", "link_id": req.event_id})
         elif req.type == "rsvp_reminder":
             await _send_push(push_tokens, f"Last call for {req.event_title}",
-                             f"Are you in? Answers close {req.deadline or 'soon'}.",
+                             (f"Are you in? Answers close {req.deadline}." if req.deadline else "Are you in? It's coming up soon."),
                              {"link_type": "event", "link_id": req.event_id})
         elif req.type == "rsvp_deadline_final":
             await _send_push(push_tokens, f"Final count for {req.event_title}",

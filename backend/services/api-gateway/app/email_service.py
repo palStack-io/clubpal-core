@@ -314,17 +314,19 @@ class EmailService:
         safe_event_title = _esc(event_title)
         safe_group_name = _esc(group_name)
         subject = f"Last call for {_clean(event_title)}"
+        deadline_line = ('<p style="margin:4px 0 0;font-size:12px;color:#f43f5e;font-weight:600;">Answers close ' + _esc(deadline_str) + '</p>') if deadline_str else ""
         content = (
             _h1("Last call")
             + _p(f"Hey <strong>{_esc(username)}</strong>,")
             + _p(f"Are you in for <strong>{safe_event_title}</strong> in "
-                 f"<strong>{safe_group_name}</strong>? Answers close soon.")
+                 f"<strong>{safe_group_name}</strong>? "
+                 + (f"Answers close {_esc(deadline_str)}." if deadline_str else "It's coming up soon."))
             + f"""
 <div style="background:#f9f9fb;border-left:3px solid #f43f5e;border-radius:0 8px 8px 0;
             padding:14px 18px;margin:20px 0;">
   <p style="margin:0;font-size:14px;font-weight:700;color:#111;">{safe_event_title}</p>
   <p style="margin:4px 0 0;font-size:13px;color:#666;">{_esc(event_date)}</p>
-  <p style="margin:4px 0 0;font-size:12px;color:#f43f5e;font-weight:600;">Answers close {_esc(deadline_str)}</p>
+  {deadline_line}
 </div>"""
             + _btn("RSVP Now", url, "#f43f5e")
             + _note("You're receiving this because you're a member of "

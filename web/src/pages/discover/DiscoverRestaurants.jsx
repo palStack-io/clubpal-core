@@ -134,7 +134,7 @@ export default function DiscoverRestaurants() {
           onClick={handleRefresh} disabled={refreshing}
           style={{ background: 'var(--s3)', border: '1px solid var(--glass)', borderRadius: '20px', padding: '5px 12px', fontSize: '11px', fontWeight: 600, color: 'var(--t2)', cursor: 'pointer', opacity: refreshing ? 0.6 : 1 }}
         >
-          {refreshing ? '⏳' : '🔄'} Refresh
+          Refresh
         </button>
       </Topbar>
 

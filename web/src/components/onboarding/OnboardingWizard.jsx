@@ -328,7 +328,6 @@ export default function OnboardingWizard() {
   if (step === 1) return (
     <div style={overlay} onClick={handleSkip}>
       <div style={card} onClick={stopProp}>
-        <div style={{ fontSize: '48px', marginBottom: '16px' }}>👋</div>
         <div style={h2}>Welcome to clubPal, {user?.full_name?.split(' ')[0] || user?.username}!</div>
         <div style={sub}>
           Set up your profile so you can create groups, plan events, and coordinate with your friends — all in one place.

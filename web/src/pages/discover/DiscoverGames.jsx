@@ -127,7 +127,7 @@ export default function DiscoverGames() {
             cursor: 'pointer', opacity: refreshing ? 0.6 : 1,
           }}
         >
-          {refreshing ? '⏳' : '🔄'} Refresh
+          Refresh
         </button>
       </Topbar>
 

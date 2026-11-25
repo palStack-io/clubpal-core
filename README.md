@@ -187,7 +187,7 @@ docker compose down -v     # stop AND delete all databases, uploads and local ba
 | Groups, hosting rotation, events and invites, ratings, activities | Yes | Yes |
 | Security fixes from 2026-11 (see the caution above) | Coming | Yes |
 | Newer design, bill splitting and other recent features | No | Yes |
-| Phone app | No | In testing |
+| Phone app (iOS and Android) | One-time purchase, from January 2027 | Included |
 | Where your data lives | Your server | palStack's servers |
 
 ## Contributing

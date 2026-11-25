@@ -27,6 +27,6 @@
   },
   "overrides": {
     "picomatch": ">=4.0.4",
-    "follow-redirects": ">=1.16.0"
+    "follow-redirects": ">=1.16.3"
   }
 }

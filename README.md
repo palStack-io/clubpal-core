@@ -1,74 +1,60 @@
-# clubPal Core
+<div align="center">
+  <img width="120" height="120" alt="gatherPal" src="web/public/clubPal.png" />
+  <h1>gatherPal Core</h1>
+  <p><strong>Your friend group, without the admin.</strong></p>
+  <p>
+    <a href="#quick-start">Quick start</a> ·
+    <a href="https://palstack.io/gatherpal">Website</a> ·
+    <a href="https://clubdemo.palstack.io">Live demo (hosted)</a> ·
+    <a href="https://discord.gg/mcgcp7RdYs">Discord</a>
+  </p>
+  <p><a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a></p>
+</div>
 
-> ⚠️ **clubPal is under active development — run it at your own risk.** Expect breaking changes between releases, and back up your data before you upgrade.
+> [!CAUTION]
+> **Known security issues: do not expose gatherPal Core to the internet yet.**
+> Some routes in this version do not check who is calling. In particular, any request that can reach the server can
+> add an account to a group, and the enrichment service (`/api/enrich/`, used for place, book and film lookups) has no
+> authentication. These are fixed in the hosted edition and **we are working on bringing the fixes to Core**.
+> Until then, run Core only on a private network you trust (your home network or a VPN such as Tailscale or
+> WireGuard), and do not put it behind a public domain. Watch this repository for the fix.
 
-**clubPal** is a social events app for recurring friend groups: track whose turn it is to host, schedule outings, rate them afterwards, and keep everyone in the loop.
+gatherPal (formerly clubPal) is a social app for recurring friend groups: whose turn it is to host, plans and
+invites, rotations, ratings afterwards, and keeping everyone in the loop.
 
-This repository is **clubPal Core**, the free self-hosted edition. It runs as six FastAPI microservices plus a React web UI, PostgreSQL, local-filesystem object storage, a backup service and Nginx, all under Docker Compose and all on **one host port (`9000`)**.
+This repository is **gatherPal Core**, the free self-hosted edition. The code, image names and folders still say
+`clubpal`; the product is called gatherPal. It runs as six FastAPI services, a React web UI, PostgreSQL, local file
+storage, a backup service and nginx under Docker Compose, all on one port (`9000`).
 
-| | Status |
-|---|---|
-| **Web app** (this repo) | ✅ Ready to self-host |
-| **Mobile app** (iOS + Android) | 🧪 **Under testing.** It is not in the App Store or Google Play yet |
-| **Hosted Premium edition** | 🌐 Try the live demo at **<https://clubdemo.palstack.io>**. No sign-up is needed: pick a demo persona. The data resets nightly |
-
----
+> [!NOTE]
+> Core is behind the hosted edition, which has a newer design and more features. The
+> [live demo](https://clubdemo.palstack.io) shows the hosted edition.
 
 ## Quick start
 
-### Prerequisites
-
-- Docker ≥ 24 and Docker Compose ≥ 2.20
-- (optional) Node 20 and npm, for frontend development with hot reload
-
-### 1. Clone and configure
+You need Docker 24+ with the Compose plugin. The production compose file pulls prebuilt images from GHCR.
 
 ```bash
-git clone https://github.com/palStack-io/clubpal-core.git
-cd clubpal-core
+git clone https://github.com/palStack-io/clubpal-core.git && cd clubpal-core
 cp .env.example .env
+
+# Generate your own secrets
+for key in POSTGRES_PASSWORD INTERNAL_API_SECRET; do
+  sed -i.bak "s|^$key=[^ ]*|$key=$(openssl rand -hex 32)|" .env
+done && rm .env.bak
+
+docker compose -f docker-compose.prod.yml up -d
 ```
 
-Edit `.env`. For anything beyond a local trial, set at least these:
+Give it about 30 seconds on first start (it creates six databases). Open **http://localhost:9000** and register.
+**The first account becomes the admin**, so register yourself before you share the address.
 
-| Variable | Why |
-|---|---|
-| `POSTGRES_PASSWORD` | The database password (defaults to `clubpal` in dev) |
-| `INTERNAL_API_SECRET` | Protects service-to-service calls. Generate one with `openssl rand -hex 32` |
-| `STORAGE_PUBLIC_URL` | Public URL for uploaded images, e.g. `https://clubs.example.com/storage` |
-| `FRONTEND_URL` | Public URL of the app. Links in emails point here |
-
-All other settings are optional (see [Configuration](#configuration)).
-
-### 2. Start the stack
-
-Pick **one** of the three compose files:
-
-| File | Use it when | Command |
-|---|---|---|
-| `docker-compose.yml` | You want to build from source (development, or trying it out) | `docker compose up --build -d` |
-| `docker-compose.prod.yml` | You want pre-built images from GHCR (production) | `docker compose -f docker-compose.prod.yml pull && docker compose -f docker-compose.prod.yml up -d` |
-| `docker-compose.portainer.yml` | You deploy through Portainer | Paste it into **Portainer → Stacks → Add stack**, then replace every `CHANGEME` and set `x-app-host` |
-
-`docker-compose.prod.yml` **refuses to start** until `POSTGRES_PASSWORD`, `INTERNAL_API_SECRET` and `STORAGE_PUBLIC_URL` are set. To pin a release instead of `latest`, run `IMAGE_TAG=<git-sha> docker compose -f docker-compose.prod.yml up -d`.
-
-> While the GHCR packages are private, log in before you pull:
-> `echo $GITHUB_TOKEN | docker login ghcr.io -u <your-github-user> --password-stdin`
-
-On first boot the stack creates all six databases and the storage directories. Give it about 30 seconds.
-
-### 3. Create your admin account
-
-Open **<http://localhost:9000>** and register. **The first account registered becomes the admin** and is marked email-verified automatically, so register yourself before you share the URL.
-
-### 4. Check it works
-
-```bash
-./scripts/smoke_test.sh                     # defaults to http://localhost:9000
-./scripts/smoke_test.sh https://clubs.example.com
-```
-
----
+- Another port: set `APP_PORT` in `.env`.
+- Images and email links: set `STORAGE_PUBLIC_URL` and `FRONTEND_URL` in `.env` to the address people use.
+- Build from source instead: `docker compose up --build -d` (uses `docker-compose.yml`).
+- Portainer: paste `docker-compose.portainer.yml` into **Stacks → Add stack** and replace every `CHANGEME`.
+- Pin a release: `IMAGE_TAG=<git-sha> docker compose -f docker-compose.prod.yml up -d`.
+- Check it: `./scripts/smoke_test.sh` (defaults to http://localhost:9000).
 
 ## What's inside
 
@@ -120,7 +106,7 @@ Everything is set in `.env`, and `.env.example` documents every variable.
 
 ### Email (optional — leave blank to disable)
 
-Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `FROM_EMAIL` and `FROM_NAME`. Without them, clubPal sends no invite or password-reset emails.
+Set `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `FROM_EMAIL` and `FROM_NAME`. Without them, gatherPal sends no invite or password-reset emails.
 
 ### External APIs (all optional)
 
@@ -194,8 +180,35 @@ docker compose down        # stop; keeps your data
 docker compose down -v     # stop AND delete all databases, uploads and local backups
 ```
 
+## Core and hosted
+
+| | Core (this repository) | Hosted |
+|---|---|---|
+| Groups, hosting rotation, events and invites, ratings, activities | Yes | Yes |
+| Security fixes from 2026-11 (see the caution above) | Coming | Yes |
+| Newer design, bill splitting and other recent features | No | Yes |
+| Phone app | No | In testing |
+| Where your data lives | Your server | palStack's servers |
+
+## Contributing
+
+We have paused code contributions while we work out how to review AI-assisted changes well. Bug reports, ideas and
+questions are very welcome: open an [issue](https://github.com/palStack-io/clubpal-core/issues) or join us on
+[Discord](https://discord.gg/mcgcp7RdYs).
+
+Found a security problem? Please report it privately; see [SECURITY.md](https://github.com/palStack-io/.github/blob/main/SECURITY.md).
+
+## License
+
+gatherPal Core is licensed under the [GNU Affero General Public License v3.0](LICENSE). You can use, change and
+self-host it freely. If you run a modified version as a network service, you must publish your changes under the
+same licence.
+
+gatherPal is built for personal use with your family and friends. To run it commercially, or as a service without
+the AGPL's obligations, contact **support@palstack.io** about a commercial licence.
+
 ---
 
-## Core vs Premium
-
-This repository is the open, self-hosted **Core** edition. **clubPal Premium** is the hosted edition, with extra features on top (bill splitting, among others). To see it without installing anything, open the demo at **<https://clubdemo.palstack.io>**.
+<div align="center">
+  <sub>Part of <a href="https://palstack.io">palStack.io</a>: everyday tools for food, money, home and friends.</sub>
+</div>
